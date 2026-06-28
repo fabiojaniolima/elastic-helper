@@ -4,8 +4,76 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Elastic Helper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-  <h1>Elastic Helper</h1>
+
+<!-- ═══════════════════ CONNECTION MODAL ═══════════════════ -->
+<div class="modal-overlay" id="connectModal">
+  <div class="connect-card">
+    <div class="connect-header">
+      <div class="connect-logo">
+        <i class="fas fa-database"></i>
+        <span>Elastic Helper</span>
+      </div>
+      <p class="connect-subtitle">Pré-análise de cluster Elasticsearch &ge; v8.x</p>
+    </div>
+    <div class="connect-body">
+
+      <!-- Formulário (coluna direita) -->
+      <div class="connect-form">
+      <div class="form-group">
+        <label>Host</label>
+        <input type="text" id="esHost" placeholder="localhost ou IP do cluster" onblur="normalizeHostField()">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Porta</label>
+          <input type="number" id="esPort" placeholder="9200">
+        </div>
+        <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:2px">
+          <label class="checkbox-label">
+            <input type="checkbox" id="esSsl" checked>
+            <span>Usar HTTPS</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Usuário</label>
+        <input type="text" id="esUser" placeholder="elastic" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Senha <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>
+        <input type="password" id="esPassword" placeholder="••••••••" autocomplete="current-password"
+          onkeydown="if(event.key==='Enter') connect()">
+      </div>
+
+      <div class="error-msg" id="connectError"></div>
+
+      <!-- Padrão: conectar / testar -->
+      <div id="defaultActions">
+        <div class="btn-row">
+          <button class="btn btn-primary" id="connectBtn" onclick="connect()">
+            <i class="fas fa-plug"></i> Conectar
+          </button>
+          <button class="btn btn-ghost" id="testBtn" onclick="testConnection()">
+            <i class="fas fa-vial"></i> Testar Conexão
+          </button>
+        </div>
+      </div>
+      </div><!-- /.connect-form -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ MAIN APP ═══════════════════════════ -->
+<div class="app" id="app" style="display:none">
+</div>
+
+<script src="/static/js/app.js"></script>
 </body>
 </html>
