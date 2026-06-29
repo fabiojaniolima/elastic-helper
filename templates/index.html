@@ -72,6 +72,91 @@
 
 <!-- ═══════════════════ MAIN APP ═══════════════════════════ -->
 <div class="app" id="app" style="display:none">
+
+  <!-- ─────────────── SIDEBAR ─────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-icon"><i class="fas fa-layer-group"></i></div>
+      <span class="sidebar-brand-text">Elastic Helper</span>
+    </div>
+
+    <div class="sidebar-cluster" id="sidebarCluster"></div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-group-label">Monitoramento</div>
+      <div class="nav-item active" id="nav-overview" onclick="showPage('overview')">
+        <span class="nav-item-bar"></span>
+        <i class="fas fa-heart-pulse nav-item-icon"></i>
+        <span class="nav-item-text">Sinais Vitais</span>
+      </div>
+      <div class="nav-item" id="nav-capacity" onclick="showPage('capacity')">
+        <span class="nav-item-bar"></span>
+        <i class="fas fa-boxes-stacked nav-item-icon"></i>
+        <span class="nav-item-text">Inventário</span>
+      </div>
+      <div class="nav-item" id="nav-insights" onclick="showPage('insights')">
+        <span class="nav-item-bar"></span>
+        <i class="fas fa-lightbulb nav-item-icon"></i>
+        <span class="nav-item-text">Diagnóstico<span class="nav-badge" id="insightsBadge" hidden></span></span>
+      </div>
+
+      <div class="nav-group-label">Suporte</div>
+      <div class="nav-item" id="nav-config" onclick="showPage('config')">
+        <span class="nav-item-bar"></span>
+        <i class="fas fa-sliders nav-item-icon"></i>
+        <span class="nav-item-text">Configuração</span>
+      </div>
+      <div class="nav-item" id="nav-help" onclick="showPage('help')">
+        <span class="nav-item-bar"></span>
+        <i class="fas fa-circle-question nav-item-icon"></i>
+        <span class="nav-item-text">Ajuda</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-collapse" onclick="toggleSidebar()" title="Recolher/expandir">
+        <i class="fas fa-chevron-left" id="collapseIcon"></i>
+        <span class="nav-item-text">Recolher</span>
+      </div>
+      <button class="sidebar-disconnect" onclick="disconnect()">
+        <i class="fas fa-power-off"></i>
+        <span class="nav-item-text">Desconectar</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ─────────────── MAIN AREA ─────────────── -->
+  <main class="main-area">
+    <header class="topbar">
+      <div class="topbar-titles">
+        <div class="topbar-title" id="topbarTitle">Sinais Vitais do Cluster</div>
+        <div class="topbar-subtitle" id="topbarSubtitle">Está tudo funcionando agora? Saúde, recursos e disponibilidade ao vivo</div>
+      </div>
+      <div class="topbar-actions" id="topbarActions">
+        <span class="last-updated" id="lastUpdated"></span>
+      </div>
+    </header>
+
+    <div class="page-scroll">
+
+      <!-- ========== SINAIS VITAIS (id interno: overview) ========== -->
+      <section class="page page-overview" id="page-overview"></section>
+
+      <!-- ========== INVENTÁRIO (id interno: capacity) ========== -->
+      <section class="page page-capacity" id="page-capacity" hidden></section>
+
+      <!-- ========== DIAGNÓSTICO (id interno: insights) ========== -->
+      <section class="page page-insights" id="page-insights" hidden></section>
+
+      <!-- ========== CONFIGURAÇÃO ========== -->
+      <section class="page page-config" id="page-config" hidden></section>
+
+      <!-- ========== AJUDA (documentação) ========== -->
+      <section class="page page-help" id="page-help" hidden></section>
+
+    </div>
+  </main>
+
 </div>
 
 <script src="/static/js/app.js"></script>

@@ -1,5 +1,15 @@
 'use strict';
 
+// ─── Utilities ───────────────────────────────────────────
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ─── Connection ───────────────────────────────────────────
 // Conexão atualmente em edição (null = nova/ad-hoc)
 let editingConnId = null;
@@ -92,6 +102,8 @@ async function doConnect(payload, btn) {
     if (data.success) {
       document.getElementById('connectModal').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
+      setClusterInfo(data);
+      showPage(pageFromHash());
       return true;
     }
     showMsg(errEl, data.error || 'Falha na conexão.', 'error');
@@ -148,6 +160,99 @@ async function testConnection() {
   }
 }
 
+async function disconnect() {
+  await fetch('/api/disconnect', { method: 'POST' });
+  location.reload();
+}
+
+function setClusterInfo(info) {
+  const el = document.getElementById('sidebarCluster');
+  if (!el) return;
+  const deployment = info.cluster_name || info.host;
+  const name = deployment;
+  const tooltip = `Clique para copiar · Cluster: ${deployment}`;
+  el.innerHTML = `
+    <div class="sidebar-cluster-name-row">
+      <span class="sidebar-cluster-dot"></span>
+      <span class="sidebar-cluster-name" title="${escHtml(tooltip)}" data-alias="${escHtml(name)}" data-cluster="${escHtml(deployment)}" onclick="copyAlias(this)">${escHtml(name)}</span>
+    </div>`;
+}
+
+function copyAlias(el) {
+  const alias = el.dataset.alias;
+  const cluster = el.dataset.cluster;
+  if (!alias) return;
+  const text = `Alias: ${alias}\nCluster Name: ${cluster}`;
+  navigator.clipboard.writeText(text).then(() => {
+    if (el.classList.contains('sidebar-cluster-name--copied')) return;
+    const original = el.innerHTML;
+    const originalTitle = el.title;
+    el.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+    el.title = 'Copiado!';
+    el.classList.add('sidebar-cluster-name--copied');
+    setTimeout(() => {
+      el.innerHTML = original;
+      el.title = originalTitle;
+      el.classList.remove('sidebar-cluster-name--copied');
+    }, 3000);
+  });
+}
+
+// ─── Navegação entre páginas / sidebar ────────────────────
+let currentPage = 'overview';
+// O id 'overview' é mantido por compatibilidade (hash #overview, page-overview,
+// sectionCardsHealth, refreshSection('health')…); o rótulo é "Sinais Vitais".
+const PAGE_META = {
+  overview: { title: 'Sinais Vitais do Cluster', subtitle: 'Está tudo funcionando agora? Saúde, recursos e disponibilidade ao vivo' },
+  capacity: { title: 'Inventário', subtitle: 'Nós, volume de dados e higiene de configuração dos índices' },
+  insights: { title: 'Diagnóstico', subtitle: 'Leitura interpretada dos dados do cluster — o que merece atenção' },
+  config:   { title: 'Configuração', subtitle: 'Integrações e preferências desta conexão' },
+  help:     { title: 'Ajuda', subtitle: 'O que cada métrica significa e como agir' },
+};
+
+const PAGES = ['overview', 'capacity', 'insights', 'config', 'help'];
+// Páginas com dados ao vivo: ganham timestamp e botão de refresh na topbar.
+const REFRESHABLE_PAGES = new Set(['overview', 'capacity']);
+
+function showPage(page) {
+  if (!PAGE_META[page]) return;
+  currentPage = page;
+  for (const p of PAGES) {
+    const sec = document.getElementById('page-' + p);
+    if (sec) sec.hidden = p !== page;
+    const nav = document.getElementById('nav-' + p);
+    if (nav) nav.classList.toggle('active', p === page);
+  }
+  document.getElementById('topbarTitle').textContent = PAGE_META[page].title;
+  document.getElementById('topbarSubtitle').textContent = PAGE_META[page].subtitle;
+  // O timestamp / refresh só fazem sentido onde há dado ao vivo para recarregar.
+  document.getElementById('topbarActions').style.visibility =
+    REFRESHABLE_PAGES.has(page) ? 'visible' : 'hidden';
+  // Reflete a página na URL (hash) para preservar no refresh e permitir compartilhar o link.
+  if (location.hash.slice(1) !== page) {
+    history.replaceState(null, '', '#' + page);
+  }
+}
+
+// Página inicial a partir do hash da URL (#insights, #help…); default Sinais Vitais (overview).
+function pageFromHash() {
+  const page = location.hash.slice(1);
+  return PAGE_META[page] ? page : 'overview';
+}
+
+// Navegação pelo histórico do navegador (voltar/avançar) também troca de página.
+window.addEventListener('hashchange', () => {
+  const page = pageFromHash();
+  if (page !== currentPage) showPage(page);
+});
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const collapsed = sb.classList.toggle('collapsed');
+  document.getElementById('collapseIcon').className =
+    collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
+}
+
 // ─── Init ─────────────────────────────────────────────────
 (async () => {
   try {
@@ -157,6 +262,8 @@ async function testConnection() {
     if (data.connected) {
       document.getElementById('connectModal').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
+      setClusterInfo(data.info);
+      showPage(pageFromHash());
     }
   } catch (e) {
   }
