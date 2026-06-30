@@ -53,6 +53,7 @@ def connect(params):
     _info = {
         'host': params['host'],
         'port': params['port'],
+        'alias': params.get('alias', ''),
         'cluster_name': info['cluster_name'],
         'version': info['version']['number'],
     }

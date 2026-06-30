@@ -2,8 +2,10 @@ from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv
 import logging
 import re
+import sqlite3
 import os
 
+import db
 import es_service
 
 load_dotenv()
@@ -20,6 +22,8 @@ logging.basicConfig(
 logging.getLogger('werkzeug').setLevel(_log_level)
 logger = logging.getLogger('elastic-helper')
 logger.info('Nível de log definido para %s', logging.getLevelName(_log_level))
+
+db.init_db()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -46,16 +50,25 @@ def api_status():
 
 
 def _resolve_params(data):
-    """Valida e normaliza os campos de conexão recebidos do formulário.
+    """Mescla os campos enviados com uma conexão salva (connection_id como base).
     Retorna (params, None) se válido ou (None, (response, status)) em caso de erro."""
-    host = (data.get('host') or '').strip()
+    saved = {}
+    conn_id = data.get('connection_id')
+    if conn_id:
+        saved = db.get_connection_full(conn_id) or {}
+
+    host = (data.get('host') or saved.get('host') or '').strip()
     # Salvaguarda: o front já normaliza o Host, mas remove protocolo/caminho
     # remanescente para nunca montar uma URL quebrada (https://https://...).
     host = re.sub(r'^https?://', '', host, flags=re.I).split('/')[0]
-    port_raw = data.get('port')
-    username = (data.get('username') or '').strip()
-    password = (data.get('password') or '').strip()
-    use_ssl = data.get('use_ssl', False)
+    port_raw = data.get('port') or saved.get('port')
+    username = (data.get('username') or saved.get('username') or '').strip()
+    # Senha: prioriza a digitada agora; senão a salva
+    password = (data.get('password') or '').strip() or saved.get('password') or ''
+    if 'use_ssl' in data:
+        use_ssl = data.get('use_ssl')
+    else:
+        use_ssl = saved.get('use_ssl', False)
 
     missing = [n for n, v in (('host', host), ('porta', port_raw), ('usuário', username)) if not v]
     if missing:
@@ -65,8 +78,11 @@ def _resolve_params(data):
     except (ValueError, TypeError):
         return None, (jsonify({'success': False, 'error': 'Porta inválida'}), 400)
 
+    # Alias da conexão salva (via connection_id ou casando host+porta+usuário)
+    alias = (saved.get('alias') or '').strip() or (db.find_duplicate(host, port, username) or '')
+
     return {'host': host, 'port': port, 'username': username,
-            'password': password, 'use_ssl': use_ssl}, None
+            'password': password, 'use_ssl': use_ssl, 'alias': alias}, None
 
 
 @app.route('/api/connect', methods=['POST'])
@@ -97,6 +113,73 @@ def api_test_connection():
 def api_disconnect():
     es_service.disconnect()
     return jsonify({'success': True})
+
+
+# ─── Conexões salvas (SQLite) ─────────────────────────────
+DUP_MSG = 'Já existe uma conexão ("{alias}") cadastrada para esse host, porta e usuário'
+
+
+def _validate_connection_payload(data):
+    """Retorna (None) se válido ou uma mensagem de erro."""
+    if not (data.get('alias') or '').strip():
+        return 'O alias/nome da conexão é obrigatório'
+    if not (data.get('host') or '').strip():
+        return 'O host é obrigatório'
+    if not str(data.get('port') or '').strip():
+        return 'A porta é obrigatória'
+    if not (data.get('username') or '').strip():
+        return 'O usuário é obrigatório'
+    try:
+        int(data['port'])
+    except (ValueError, TypeError):
+        return 'A porta deve ser um número'
+    return None
+
+
+@app.route('/api/connections', methods=['GET'])
+def api_connections_list():
+    return jsonify(db.list_connections())
+
+
+@app.route('/api/connections', methods=['POST'])
+def api_connections_create():
+    data = request.get_json() or {}
+    err = _validate_connection_payload(data)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    dup = db.find_duplicate(data['host'], data['port'], data.get('username'))
+    if dup:
+        return jsonify({'success': False, 'error': DUP_MSG.format(alias=dup)}), 409
+    try:
+        conn = db.create_connection(data)
+    except sqlite3.IntegrityError:
+        return jsonify({'success': False, 'error': 'Já existe uma conexão com esse alias'}), 409
+    return jsonify({'success': True, 'connection': conn})
+
+
+@app.route('/api/connections/<int:conn_id>', methods=['PUT'])
+def api_connections_update(conn_id):
+    data = request.get_json() or {}
+    err = _validate_connection_payload(data)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    dup = db.find_duplicate(data['host'], data['port'], data.get('username'), exclude_id=conn_id)
+    if dup:
+        return jsonify({'success': False, 'error': DUP_MSG.format(alias=dup)}), 409
+    try:
+        conn = db.update_connection(conn_id, data)
+    except sqlite3.IntegrityError:
+        return jsonify({'success': False, 'error': 'Já existe uma conexão com esse alias'}), 409
+    if conn is None:
+        return jsonify({'success': False, 'error': 'Conexão não encontrada'}), 404
+    return jsonify({'success': True, 'connection': conn})
+
+
+@app.route('/api/connections/<int:conn_id>', methods=['DELETE'])
+def api_connections_delete(conn_id):
+    if db.delete_connection(conn_id):
+        return jsonify({'success': True})
+    return jsonify({'success': False, 'error': 'Conexão não encontrada'}), 404
 
 
 if __name__ == '__main__':
