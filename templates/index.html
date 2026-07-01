@@ -24,8 +24,27 @@
     </div>
     <div class="connect-body">
 
+      <!-- Conexões salvas (coluna esquerda) -->
+      <div class="conn-saved" id="connSaved" style="display:none">
+        <div class="conn-saved-header">
+          <span>Conexões salvas</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="newConnBtn" onclick="startNewConnection()">
+            <i class="fas fa-plus"></i> Nova
+          </button>
+        </div>
+        <div class="conn-list" id="connList"></div>
+      </div>
+
       <!-- Formulário (coluna direita) -->
       <div class="connect-form">
+      <!-- Cabeçalho de edição (só em modo de edição) -->
+      <div class="edit-header" id="editHeader" style="display:none">
+        <span class="edit-header-title">Editando conexão</span>
+        <button class="btn-icon edit-delete-btn" id="deleteEditBtn" title="Excluir conexão"
+          onclick="deleteCurrentConnection()">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
       <div class="form-group">
         <label>Host</label>
         <input type="text" id="esHost" placeholder="localhost ou IP do cluster" onblur="normalizeHostField()">
@@ -48,13 +67,37 @@
       </div>
       <div class="form-group">
         <label>Senha <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>
+        <button type="button" class="btn btn-ghost btn-full" id="changePasswordBtn" style="display:none" onclick="enablePasswordChange()">
+          <i class="fas fa-key"></i> Alterar senha
+        </button>
         <input type="password" id="esPassword" placeholder="••••••••" autocomplete="current-password"
           onkeydown="if(event.key==='Enter') connect()">
+      </div>
+      <!-- Campo alias (aparece ao salvar) -->
+      <div class="form-group" id="aliasGroup" style="display:none">
+        <label>Alias / Nome da conexão</label>
+        <input type="text" id="esAlias" placeholder="ex: Produção, Cluster Logs..."
+          onkeydown="if(event.key==='Enter') saveConnection()">
       </div>
 
       <div class="error-msg" id="connectError"></div>
 
-      <!-- Padrão: conectar / testar -->
+      <!-- Edição: salvar / testar / cancelar -->
+      <div id="editActions" style="display:none">
+        <div class="btn-row">
+          <button class="btn btn-primary" id="saveEditBtn" onclick="saveEdit()">
+            <i class="fas fa-floppy-disk"></i> Salvar
+          </button>
+          <button class="btn btn-ghost" id="testEditBtn" onclick="testConnection()">
+            <i class="fas fa-vial"></i> Testar Conexão
+          </button>
+        </div>
+        <button class="btn btn-ghost btn-full btn-row-below" id="cancelEditBtn" onclick="startNewConnection()">
+          <i class="fas fa-xmark"></i> Cancelar
+        </button>
+      </div>
+
+      <!-- Padrão: conectar / testar / salvar -->
       <div id="defaultActions">
         <div class="btn-row">
           <button class="btn btn-primary" id="connectBtn" onclick="connect()">
@@ -64,8 +107,54 @@
             <i class="fas fa-vial"></i> Testar Conexão
           </button>
         </div>
+        <button class="btn btn-ghost btn-full btn-row-below" id="saveToggleBtn" onclick="saveConnection()">
+          <i class="fas fa-floppy-disk"></i> Salvar
+        </button>
       </div>
       </div><!-- /.connect-form -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ ALIAS MODAL ═════════════════════════ -->
+<div class="modal-overlay" id="aliasModal" style="display:none" onclick="if(event.target===this)closeAliasModal()">
+  <div class="alias-card">
+    <div class="alias-header">
+      <h2 class="alias-title">Alias / Nome da conexão</h2>
+      <button class="btn-icon" onclick="closeAliasModal()" title="Fechar (Esc)">
+        <i class="fas fa-xmark" style="font-size:17px"></i>
+      </button>
+    </div>
+    <div class="alias-body">
+      <input type="text" id="aliasModalInput" placeholder="ex: Produção, Cluster Logs..."
+        onkeydown="if(event.key==='Enter') confirmAlias()">
+      <div class="error-msg" id="aliasModalError"></div>
+      <div class="alias-actions">
+        <button class="btn btn-ghost" onclick="closeAliasModal()">Cancelar</button>
+        <button class="btn btn-primary" id="aliasModalConfirm" onclick="confirmAlias()">
+          <i class="fas fa-floppy-disk"></i>
+          Salvar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ CONFIRM MODAL ═══════════════════════ -->
+<div class="modal-overlay" id="confirmModal" style="display:none" onclick="if(event.target===this)closeConfirmModal()">
+  <div class="alias-card">
+    <div class="alias-header">
+      <h2 class="alias-title" id="confirmTitle">Confirmar</h2>
+      <button class="btn-icon" onclick="closeConfirmModal()" title="Fechar (Esc)">
+        <i class="fas fa-xmark" style="font-size:17px"></i>
+      </button>
+    </div>
+    <div class="alias-body">
+      <p class="confirm-message" id="confirmMessage"></p>
+      <div class="alias-actions">
+        <button class="btn btn-ghost" onclick="closeConfirmModal()">Cancelar</button>
+        <button class="btn btn-danger-solid" id="confirmOkBtn" onclick="closeConfirmModal(true)">Excluir</button>
+      </div>
     </div>
   </div>
 </div>

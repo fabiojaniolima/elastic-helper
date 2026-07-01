@@ -66,6 +66,15 @@ function showMsg(el, text, type) {
   el.style.display = 'block';
 }
 
+// Como showMsg, mas some sozinha após `ms`
+function showTempMsg(el, text, type, ms = 3000) {
+  showMsg(el, text, type);
+  el._dismissTimer = setTimeout(() => {
+    el.style.display = 'none';
+    el._dismissTimer = null;
+  }, ms);
+}
+
 // Host, Porta e Usuário são obrigatórios. Mostra erro em `errEl` e retorna false se faltar algo.
 function validateForm(errEl) {
   const missing = [];
@@ -160,6 +169,276 @@ async function testConnection() {
   }
 }
 
+// ─── Conexões salvas ──────────────────────────────────────
+async function loadConnections() {
+  try {
+    const res = await fetch('/api/connections');
+    const conns = await res.json();
+    renderConnList(Array.isArray(conns) ? conns : []);
+  } catch (e) { /* lista vazia em caso de erro */ }
+}
+
+function renderConnList(conns) {
+  const wrap = document.getElementById('connSaved');
+  const list = document.getElementById('connList');
+  const card = document.querySelector('.connect-card');
+  if (!conns.length) {
+    wrap.style.display = 'none';
+    list.innerHTML = '';
+    card.classList.remove('has-saved');
+    return;
+  }
+  wrap.style.display = 'flex';
+  card.classList.add('has-saved');
+  list.innerHTML = conns.map(c => `
+    <div class="conn-item" onclick="selectConnection(${c.id})">
+      <div class="conn-item-info">
+        <span class="conn-item-alias">${escHtml(c.alias)}</span>
+      </div>
+      <button class="conn-item-gear" title="Configurar"
+        onclick="event.stopPropagation(); editConnection(${c.id})">
+        <i class="fas fa-gear"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+// Busca a lista de conexões salvas (usada ao selecionar/editar/checar duplicidade)
+async function fetchConnections() {
+  const res = await fetch('/api/connections');
+  return res.json();
+}
+
+function fillForm(c) {
+  document.getElementById('esHost').value = c.host || '';
+  document.getElementById('esPort').value = c.port || 9200;
+  document.getElementById('esUser').value = c.username || '';
+  document.getElementById('esSsl').checked = !!c.use_ssl;
+  const pwd = document.getElementById('esPassword');
+  pwd.value = '';
+  pwd.placeholder = '••••••••';
+}
+
+// Em edição de conexão com senha salva, o campo fica oculto atrás do botão
+// "Alterar senha"; só revelamos (e enviamos) ao clicar. `locked=false` deixa
+// o campo de senha visível normalmente (nova conexão / troca de senha).
+function setPasswordEditMode(locked) {
+  document.getElementById('esPassword').style.display = locked ? 'none' : '';
+  document.getElementById('changePasswordBtn').style.display = locked ? 'block' : 'none';
+}
+
+function enablePasswordChange() {
+  setPasswordEditMode(false);
+  const pwd = document.getElementById('esPassword');
+  pwd.value = '';
+  pwd.placeholder = 'Digite a nova senha';
+  pwd.focus();
+}
+
+async function selectConnection(id) {
+  const conns = await fetchConnections();
+  const c = conns.find(x => x.id === id);
+  if (!c) return;
+  fillForm(c);
+  setPasswordEditMode(false);
+  if (c.has_password) {
+    // Conecta direto usando a senha armazenada no backend
+    await doConnect({ connection_id: id }, document.getElementById('connectBtn'));
+  } else {
+    document.getElementById('esPassword').focus();
+  }
+}
+
+async function editConnection(id) {
+  const conns = await fetchConnections();
+  const c = conns.find(x => x.id === id);
+  if (!c) return;
+  editingConnId = id;
+  fillForm(c);
+  // Se há senha salva, oculta o campo atrás do botão "Alterar senha"
+  setPasswordEditMode(c.has_password);
+  document.getElementById('editHeader').style.display = 'flex';
+  document.getElementById('esAlias').value = c.alias;
+  document.getElementById('aliasGroup').style.display = 'block';
+  document.getElementById('defaultActions').style.display = 'none';
+  document.getElementById('editActions').style.display = 'block';
+  document.getElementById('connectError').style.display = 'none';
+  document.getElementById('esAlias').focus();
+}
+
+function startNewConnection() {
+  editingConnId = null;
+  document.getElementById('esAlias').value = '';
+  document.getElementById('aliasGroup').style.display = 'none';
+  document.getElementById('editHeader').style.display = 'none';
+  document.getElementById('defaultActions').style.display = 'block';
+  document.getElementById('editActions').style.display = 'none';
+  document.getElementById('connectError').style.display = 'none';
+  document.getElementById('esHost').value = '';
+  document.getElementById('esPort').value = '';
+  document.getElementById('esUser').value = '';
+  document.getElementById('esSsl').checked = true;
+  const pwd = document.getElementById('esPassword');
+  pwd.value = '';
+  pwd.placeholder = '••••••••';
+  setPasswordEditMode(false);
+  document.getElementById('esHost').focus();
+}
+
+// ─── Modal de confirmação (tema do app) ──────────────────
+let _confirmResolve = null;
+
+function showConfirm({ title = 'Confirmar', message = '', confirmLabel = 'Confirmar', danger = false }) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+  const okBtn = document.getElementById('confirmOkBtn');
+  okBtn.textContent = confirmLabel;
+  okBtn.className = 'btn ' + (danger ? 'btn-danger-solid' : 'btn-primary');
+  document.getElementById('confirmModal').style.display = 'flex';
+  return new Promise(resolve => { _confirmResolve = resolve; });
+}
+
+function closeConfirmModal(result = false) {
+  document.getElementById('confirmModal').style.display = 'none';
+  if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
+}
+
+async function deleteConnection(id, alias) {
+  const ok = await showConfirm({
+    title: 'Excluir conexão',
+    message: `Tem certeza que deseja excluir a conexão "${alias}"?`,
+    confirmLabel: 'Excluir',
+    danger: true,
+  });
+  if (!ok) return;
+  await fetch('/api/connections/' + id, { method: 'DELETE' });
+  if (editingConnId === id) startNewConnection();
+  loadConnections();
+}
+
+// Exclui a conexão atualmente em edição (botão na tela de edição)
+function deleteCurrentConnection() {
+  if (editingConnId === null) return;
+  deleteConnection(editingConnId, document.getElementById('esAlias').value);
+}
+
+// Retorna o alias de uma conexão já cadastrada com mesmo host+porta+usuário, ou null.
+// `excludeId` ignora a própria conexão (edição).
+async function duplicateAlias(excludeId) {
+  const host = document.getElementById('esHost').value.trim();
+  const port = document.getElementById('esPort').value.trim();
+  const user = document.getElementById('esUser').value.trim();
+  const conns = await fetchConnections();
+  const dup = conns.find(c =>
+    c.host === host &&
+    String(c.port) === String(port) &&
+    (c.username || '') === user &&
+    c.id !== excludeId
+  );
+  return dup ? dup.alias : null;
+}
+
+// Fluxo de NOVA conexão: valida, checa duplicidade e abre o modal de alias
+async function saveConnection() {
+  normalizeHostField();
+  const errEl = document.getElementById('connectError');
+  if (!validateForm(errEl)) return;
+  const dup = await duplicateAlias(editingConnId);
+  if (dup) {
+    showMsg(errEl, `Já existe uma conexão ("${dup}") cadastrada para esse host, porta e usuário.`, 'error');
+    return;
+  }
+  const input = document.getElementById('aliasModalInput');
+  input.value = '';
+  document.getElementById('aliasModalError').style.display = 'none';
+  document.getElementById('aliasModal').style.display = 'flex';
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeAliasModal() {
+  document.getElementById('aliasModal').style.display = 'none';
+}
+
+// Confirma o alias do modal → apenas salva a conexão (não conecta)
+async function confirmAlias() {
+  const input = document.getElementById('aliasModalInput');
+  const errEl = document.getElementById('aliasModalError');
+  const alias = input.value.trim();
+  if (!alias) {
+    showMsg(errEl, 'Informe um alias/nome para a conexão.', 'error');
+    input.focus();
+    return;
+  }
+  errEl.style.display = 'none';
+  const ok = await persistConnection(alias, document.getElementById('aliasModalConfirm'), errEl);
+  if (ok) {
+    closeAliasModal();
+    showTempMsg(document.getElementById('connectError'), 'Conexão salva com sucesso.', 'success');
+  }
+}
+
+// Fluxo de EDIÇÃO: usa o campo alias inline do formulário
+async function saveEdit() {
+  normalizeHostField();
+  const errEl = document.getElementById('connectError');
+  if (!validateForm(errEl)) return;
+  const aliasInput = document.getElementById('esAlias');
+  const alias = aliasInput.value.trim();
+  if (!alias) {
+    showMsg(errEl, 'Informe um alias/nome para a conexão.', 'error');
+    aliasInput.focus();
+    return;
+  }
+  const dup = await duplicateAlias(editingConnId);
+  if (dup) {
+    showMsg(errEl, `Já existe uma conexão ("${dup}") cadastrada para esse host, porta e usuário.`, 'error');
+    return;
+  }
+  errEl.style.display = 'none';
+  const ok = await persistConnection(alias, document.getElementById('saveEditBtn'), errEl);
+  if (ok) {
+    startNewConnection();
+    showTempMsg(document.getElementById('connectError'), 'Conexão salva com sucesso.', 'success');
+  }
+}
+
+// POST/PUT da conexão (apenas salva — não conecta). `errEl` recebe erros de salvamento.
+// Retorna true se a conexão foi salva.
+async function persistConnection(alias, btn, errEl) {
+  const payload = { alias, ...formPayload() };
+  // Só envia a senha quando digitada; em edição, vazio preserva a salva
+  if (!payload.password) delete payload.password;
+
+  const editing = editingConnId !== null;
+  const url = editing ? '/api/connections/' + editingConnId : '/api/connections';
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+
+  try {
+    const res = await fetch(url, {
+      method: editing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showMsg(errEl, data.error || 'Falha ao salvar a conexão.', 'error');
+      return false;
+    }
+  } catch (e) {
+    showMsg(errEl, 'Erro de rede: ' + e.message, 'error');
+    return false;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+
+  editingConnId = null;
+  await loadConnections();
+  return true;
+}
+
 async function disconnect() {
   await fetch('/api/disconnect', { method: 'POST' });
   location.reload();
@@ -169,7 +448,9 @@ function setClusterInfo(info) {
   const el = document.getElementById('sidebarCluster');
   if (!el) return;
   const deployment = info.cluster_name || info.host;
-  const name = deployment;
+  // Mostra o ALIAS cadastrado como nome principal; sem alias (conexão ad-hoc),
+  // cai no nome do deployment. O tooltip sempre revela o deployment/cluster name.
+  const name = info.alias || deployment;
   const tooltip = `Clique para copiar · Cluster: ${deployment}`;
   el.innerHTML = `
     <div class="sidebar-cluster-name-row">
@@ -264,7 +545,10 @@ function toggleSidebar() {
       document.getElementById('app').style.display = 'flex';
       setClusterInfo(data.info);
       showPage(pageFromHash());
+    } else {
+      loadConnections();
     }
   } catch (e) {
+    loadConnections();
   }
 })();

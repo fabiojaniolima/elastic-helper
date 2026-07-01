@@ -66,6 +66,8 @@ body {
   overflow: hidden;
   transition: max-width var(--transition);
 }
+/* Duas colunas quando há conexões salvas */
+.connect-card.has-saved { max-width: 760px; }
 
 .connect-header {
   padding: 28px 28px 0;
@@ -99,6 +101,114 @@ body {
 .connect-body { padding: 20px 28px 28px; display: flex; gap: 24px; }
 .connect-form { flex: 1; min-width: 0; }
 
+/* ─── Conexões salvas (coluna esquerda) ─── */
+.conn-saved {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+  padding-right: 24px;
+}
+
+.conn-saved-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 10px;
+}
+
+.conn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 340px;
+}
+
+.conn-item {
+  display: flex;
+  align-items: stretch;              /* engrenagem ocupa a altura total do item */
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;                  /* recorta o realce da fatia aos cantos arredondados */
+  transition: all var(--transition);
+}
+.conn-item:hover { border-color: var(--blue); background: var(--surface-hover); }
+
+.conn-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 12px;
+}
+.conn-item-alias { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* Engrenagem como "fatia" integrada à direita (estilo split button) */
+.conn-item-gear {
+  width: 40px;
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition), background var(--transition), color var(--transition);
+}
+.conn-item:hover .conn-item-gear {
+  opacity: 1;
+  border-left-color: var(--border);
+}
+.conn-item-gear:hover,
+.conn-item-gear:focus-visible {
+  opacity: 1;
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+
+/* Cabeçalho do modo de edição, com a lixeira no canto */
+.edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.edit-header-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.btn-icon.edit-delete-btn {
+  color: var(--red);
+  border: 1px solid var(--border);
+}
+.btn-icon.edit-delete-btn:hover {
+  color: var(--red);
+  background: var(--red-bg);
+  border-color: var(--red-dim);
+}
+
 /* Linha com dois botões lado a lado + botão abaixo ocupando a largura total */
 .btn-row {
   display: grid;
@@ -107,6 +217,62 @@ body {
 }
 .btn-row .btn { width: 100%; }
 .btn-row-below { margin-top: 10px; }
+
+/* ─── Modal de alias ─── */
+.alias-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 420px;
+  overflow: hidden;
+}
+.alias-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.alias-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.alias-body { padding: 18px 20px 20px; }
+.alias-body input { margin-bottom: 14px; }
+.alias-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.confirm-message {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+.btn-danger-solid {
+  background: var(--red-dim);
+  color: #fff;
+  border-color: var(--red-dim);
+}
+.btn-danger-solid:hover { background: var(--red); border-color: var(--red); }
+
+/* Empilha as colunas em telas estreitas */
+@media (max-width: 620px) {
+  .connect-body { flex-direction: column; gap: 18px; }
+  .conn-saved {
+    width: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-right: 0;
+    padding-bottom: 18px;
+  }
+  .conn-list { max-height: 180px; }
+}
 
 .form-group { margin-bottom: 14px; }
 
@@ -214,6 +380,13 @@ input[type="checkbox"] {
   border-color: var(--border);
 }
 .btn-ghost:hover { background: var(--surface-hover); color: var(--text); }
+
+.btn-danger {
+  background: transparent;
+  color: var(--red);
+  border-color: var(--border);
+}
+.btn-danger:hover { background: var(--red-bg); border-color: var(--red-dim); }
 
 .btn-icon {
   background: transparent;
