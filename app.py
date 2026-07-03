@@ -182,6 +182,32 @@ def api_connections_delete(conn_id):
     return jsonify({'success': False, 'error': 'Conexão não encontrada'}), 404
 
 
+# ─── Dados do cluster (exigem conexão ativa) ──────────────
+@app.route('/api/dashboard')
+def api_dashboard():
+    """Métricas do dashboard, sempre coletadas na hora (não há cache).
+
+    `?sections=a,b` limita a coleta às seções pedidas — é o que faz o refresh de
+    uma seção consultar no ES apenas o que aquela seção mostra. Sem o parâmetro,
+    coleta tudo (carga inicial e refresh global).
+    """
+    err = require_es()
+    if err:
+        return err
+
+    raw = (request.args.get('sections') or '').strip()
+    sections = [s for s in (p.strip() for p in raw.split(',')) if s] if raw else None
+    if sections is not None:
+        unknown = [s for s in sections if s not in es_service.DASHBOARD_SECTIONS]
+        if unknown:
+            return jsonify({'error': 'Seção desconhecida: ' + ', '.join(unknown)}), 400
+
+    try:
+        return jsonify(es_service.dashboard(sections))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
     # Debugger/reloader do Flask só quando LOG_LEVEL=DEBUG.
