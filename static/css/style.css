@@ -649,5 +649,299 @@ input[type="checkbox"] {
 .page { max-width: 1400px; margin: 0 auto; }
 .page[hidden] { display: none; }
 
+/* ─── Grid ─── */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.grid-section {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.grid-section:first-child { padding-top: 0; }
+
+.grid-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+}
+
+.grid-section-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.metric-card.card-full { grid-column: 1 / -1; }
+
+.section-health-cards {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+/* ─── Cards ─── */
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  z-index: 1;
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--card-accent, var(--blue-dim));
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.metric-card:hover {
+  border-color: var(--surface-hover);
+  background: var(--surface-2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+}
+
+.metric-card:hover::before { opacity: 1; }
+
+.metric-card-static { cursor: default; }
+
+.metric-card.status-green { --card-accent: var(--green); }
+.metric-card.status-yellow { --card-accent: var(--yellow); }
+.metric-card.status-red { --card-accent: var(--red); }
+.metric-card.status-blue { --card-accent: var(--blue); }
+.metric-card.status-muted { --card-accent: var(--text-dim); }
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-icon-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+  background: var(--card-icon-bg, var(--blue-bg));
+  color: var(--card-icon-color, var(--blue));
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.3;
+}
+
+/* ─── Tooltip ─── */
+.tooltip-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tooltip-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.tooltip-box {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: 400px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  white-space: normal;
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+/* Em cards de coluna esquerda o tooltip transbordaria sob a sidebar; ao detectar
+   falta de espaço à esquerda (ver app.js) ele inverte e abre para a direita. */
+.tooltip-box.flip-left { right: auto; left: 0; }
+
+.tooltip-wrap:hover .tooltip-box { opacity: 1; }
+
+/* "?" clicável: abre a ajuda detalhada do card */
+.tooltip-btn-link {
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.tooltip-btn-link:hover {
+  background: var(--blue-bg);
+  border-color: var(--blue-dim);
+  color: var(--blue);
+}
+.tooltip-help-hint {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--blue);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─── Card Values ─── */
+.card-value-wrap { margin-bottom: 14px; }
+
+.card-value {
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.card-value.value-green { color: var(--green); }
+.card-value.value-yellow { color: var(--yellow); }
+.card-value.value-red { color: var(--red); }
+.card-value.value-muted { color: var(--text-dim); }
+
+.card-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ─── Health Badge ─── */
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.health-badge.green {
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid var(--green-dim);
+}
+.health-badge.yellow {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+  border: 1px solid var(--yellow-dim);
+}
+.health-badge.red {
+  background: var(--red-bg);
+  color: var(--red);
+  border: 1px solid var(--red-dim);
+}
+
+.health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.card-footer {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.footer-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.footer-stat-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.footer-stat-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.metric-card:hover .resource-table thead th {
+  background: var(--surface-2);
+}
+
+/* ─── Loading / Error ─── */
+.loading-state,
+.error-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+
+.loading-state i { font-size: 28px; color: var(--blue); }
+.error-state i { font-size: 28px; color: var(--red); }
+.error-state p { font-size: 14px; }
+
 /* ─── App container (casca: sidebar + main) ─── */
 .app { display: flex; height: 100vh; overflow: hidden; }

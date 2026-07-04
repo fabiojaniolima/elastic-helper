@@ -223,13 +223,23 @@
       </div>
       <div class="topbar-actions" id="topbarActions">
         <span class="last-updated" id="lastUpdated"></span>
+        <button class="topbar-refresh" onclick="loadDashboard()" title="Atualizar">
+          <i class="fas fa-rotate-right" id="refreshIcon"></i>
+        </button>
       </div>
     </header>
 
     <div class="page-scroll">
 
       <!-- ========== SINAIS VITAIS (id interno: overview) ========== -->
-      <section class="page page-overview" id="page-overview"></section>
+      <section class="page page-overview" id="page-overview">
+        <div class="metrics-grid" id="metricsGrid">
+          <div class="loading-state">
+            <i class="fas fa-circle-notch fa-spin"></i>
+            <span>Carregando métricas...</span>
+          </div>
+        </div>
+      </section>
 
       <!-- ========== INVENTÁRIO (id interno: capacity) ========== -->
       <section class="page page-capacity" id="page-capacity" hidden></section>

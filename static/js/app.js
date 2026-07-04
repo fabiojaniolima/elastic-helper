@@ -1,6 +1,21 @@
 'use strict';
 
+// ─── State ───────────────────────────────────────────────
+let dashboardData = null;
+
 // ─── Utilities ───────────────────────────────────────────
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+}
+
+function fmtNum(n) {
+  if (n == null || n === '') return '-';
+  return Number(n).toLocaleString('pt-BR');
+}
+
 function escHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -8,6 +23,31 @@ function escHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function pctColor(pct) {
+  if (pct >= 80) return 'red';
+  if (pct >= 65) return 'yellow';
+  return 'green';
+}
+
+function healthColor(status) {
+  return { green: 'green', yellow: 'yellow', red: 'red' }[status] || 'gray';
+}
+
+// `topic` (opcional) torna o "?" clicável: o hover continua mostrando o resumo,
+// mas o clique leva à página de Ajuda, direto na explicação detalhada do card.
+function tooltip(text, topic) {
+  if (topic) {
+    return `<div class="tooltip-wrap">
+    <div class="tooltip-btn tooltip-btn-link" onclick="event.stopPropagation();goToHelp('${topic}')">?</div>
+    <div class="tooltip-box">${text}<div class="tooltip-help-hint"><i class="fas fa-circle-question"></i> Clique no <strong>?</strong> para abrir a ajuda detalhada</div></div>
+  </div>`;
+  }
+  return `<div class="tooltip-wrap">
+    <div class="tooltip-btn">?</div>
+    <div class="tooltip-box">${text}</div>
+  </div>`;
 }
 
 // ─── Connection ───────────────────────────────────────────
@@ -112,6 +152,7 @@ async function doConnect(payload, btn) {
       document.getElementById('connectModal').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       setClusterInfo(data);
+      loadDashboard();
       showPage(pageFromHash());
       return true;
     }
@@ -534,6 +575,183 @@ function toggleSidebar() {
     collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
 }
 
+// ─── Dashboard ────────────────────────────────────────────
+// Não há cache: toda carga e todo refresh consultam o cluster de novo. O que
+// varia é o ESCOPO — o refresh global pede o dashboard inteiro e o de uma seção
+// pede só aquela seção (?sections=), que o backend traduz nas chamadas ao ES
+// estritamente necessárias (ver DASHBOARD_SECTIONS em es_service.py).
+// A única coalescência é de requisições EM VOO: duas chamadas idênticas
+// simultâneas dividem a mesma promise em vez de coletar duas vezes.
+const dashboardInFlight = new Map();
+
+// sections: array de ids de seção, ou omitido para o dashboard completo.
+// Uma resposta parcial é MESCLADA sobre o dashboardData atual, para as seções
+// não pedidas continuarem renderizáveis a partir do mesmo objeto.
+async function fetchDashboard(sections) {
+  const key = sections ? [...sections].sort().join(',') : '';
+  if (dashboardInFlight.has(key)) return dashboardInFlight.get(key);
+
+  const promise = (async () => {
+    const url = key ? `/api/dashboard?sections=${encodeURIComponent(key)}` : '/api/dashboard';
+    const res = await fetch(url);
+    if (res.status === 401) { location.reload(); throw new Error('unauthorized'); }
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    dashboardData = key ? { ...(dashboardData || {}), ...data } : data;
+    return dashboardData;
+  })();
+
+  dashboardInFlight.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    dashboardInFlight.delete(key);
+  }
+}
+
+async function loadDashboard() {
+  const grid = document.getElementById('metricsGrid');
+  const icon = document.getElementById('refreshIcon');
+  icon.classList.add('spin');
+
+  grid.innerHTML = `<div class="loading-state">
+    <i class="fas fa-circle-notch fa-spin"></i>
+    <span>Carregando métricas...</span>
+  </div>`;
+
+  try {
+    // Refresh global: coleta completa, que também realimenta Inventário e Diagnóstico.
+    const data = await fetchDashboard();
+    renderCards(data);
+
+    document.getElementById('lastUpdated').textContent =
+      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) {
+    if (e.message === 'unauthorized') return;  // página já está recarregando
+    grid.innerHTML = `<div class="error-state">
+      <i class="fas fa-triangle-exclamation"></i>
+      <p>${e.message}</p>
+    </div>`;
+  } finally {
+    icon.classList.remove('spin');
+  }
+}
+
+// ─── Card Definitions ─────────────────────────────────────
+function section(label, sectionId) {
+  return `<div class="grid-section">
+    <span class="grid-section-label">${label}</span>
+    <span class="grid-section-line"></span>
+  </div>`;
+}
+
+function sectionCardsHealth(d) {
+  const h = d.cluster_health;
+  const totalShards = d.total_shards || 0;
+  return [
+    cardHealth(h, d.es_version, d.license),
+    cardStat('openShardsDetail()', 'Total de Shards', 'fa-cubes', fmtNum(totalShards), 'shards (primários + réplicas)', 'blue',
+      'Número total de shards configurados (primários + réplicas). Muitos shards por nó pressionam a memória do master; a regra prática é manter abaixo de ~20 shards por GB de heap.',
+      [
+        // % de shards ativos só aparece quando < 100% (cluster com shards não
+        // alocados/em movimento); mesma convenção de cor/formato do modal openShardsDetail.
+        ...((h.active_shards_percent ?? 100) < 100 ? [{
+          label: 'Ativos',
+          val: `${Math.min(99.9, Math.round((h.active_shards_percent ?? 100) * 10) / 10)}%`,
+          color: (h.active_shards_percent ?? 100) >= 90 ? 'yellow' : 'red',
+        }] : []),
+        { label: 'Não Alocados',  val: fmtNum(h.unassigned_shards),   color: h.unassigned_shards > 0   ? 'red'    : null },
+        ...(h.delayed_unassigned_shards > 0 ? [{ label: 'Atraso (timeout)', val: fmtNum(h.delayed_unassigned_shards), color: 'yellow' }] : []),
+        { label: 'Realocando',    val: fmtNum(h.relocating_shards),   color: h.relocating_shards > 0   ? 'yellow' : null },
+        { label: 'Inicializando', val: fmtNum(h.initializing_shards), color: h.initializing_shards > 0 ? 'yellow' : null },
+      ],
+      'help-total-shards'),
+  ].join('');
+}
+
+// Página "Sinais Vitais" (id interno: overview) — só o que responde "está
+// funcionando agora?". Nós, volume/inventário e configuração de índices ficam na
+// página "Inventário" (renderCapacity).
+function renderCards(d) {
+  const grid = document.getElementById('metricsGrid');
+
+  grid.innerHTML = [
+    section('Saúde do Cluster', 'health'),
+    `<div id="section-cards-health" class="section-health-cards">${sectionCardsHealth(d)}</div>`,
+  ].join('');
+}
+
+function cardHealth(h, version, license) {
+  const status = h.status;
+  const color = healthColor(status);
+  const tip = '<strong style="color:var(--green)">GREEN</strong>: Todos os shards primários e réplicas estão alocados e operacionais — cluster saudável.<br>' +
+    '<strong style="color:var(--yellow)">YELLOW</strong>: Todos os shards primários estão alocados, mas há réplicas não alocadas. Se um nó falhar, parte dos dados pode ficar temporariamente indisponível.<br>' +
+    '<strong style="color:var(--red)">RED</strong>: Um ou mais shards primários não estão alocados. Parte dos dados pode estar inacessível ou em risco de perda permanente.';
+
+  const stats = [
+    { label: 'Versão do Cluster', val: version ? `v${escHtml(version)}` : '-', color: 'text' },
+  ];
+
+  return `<div class="metric-card card-health-hero status-${color}" onclick="openDetail('cluster_health','Saúde por Índice','Status e shards por índice')">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon" style="--card-icon-bg:var(--${color}-bg);--card-icon-color:var(--${color})"><i class="fas fa-heart-pulse"></i></div>
+        <div class="card-title">Saúde do Cluster</div>
+      </div>
+      ${tooltip(tip, 'help-cluster-health')}
+    </div>
+    <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="health-badge ${status}">
+        <span class="health-dot"></span>
+        ${status.toUpperCase()}
+      </div>
+    </div>
+    <div class="card-footer" style="flex-wrap:wrap;gap:14px 20px">
+      ${stats.map(s => `<div class="footer-stat">
+        <span class="footer-stat-label">${s.label}</span>
+        <span class="footer-stat-val" style="color:${s.color !== 'text' ? `var(--${s.color})` : 'var(--text)'}">${s.val}</span>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+// Card de valor genérico (aceita HTML já formatado no valor, ex.: formatBytes).
+function cardStat(metric, title, icon, valueHtml, unit, color, tip, footerStats, topic) {
+  const iconBg = `--card-icon-bg:var(--${color}-bg);--card-icon-color:var(--${color})`;
+  const click = metric
+    ? ` onclick="${metric.includes('(') ? metric : `openDetail('${metric}','${title}','')`}"`
+    : '';
+  const staticCls = metric ? '' : ' metric-card-static';
+  return `<div class="metric-card status-${color}${staticCls}"${click}>
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon" style="${iconBg}"><i class="fas ${icon}"></i></div>
+        <div class="card-title">${title}</div>
+      </div>
+      ${tip ? tooltip(tip, topic) : ''}
+    </div>
+    <div class="card-value-wrap">
+      <div class="card-value value-${color}">${valueHtml}</div>
+      <div class="card-label">${unit}</div>
+    </div>
+    ${footerStats && footerStats.length ? `<div class="card-footer" style="flex-wrap:wrap;gap:10px 18px">${footerStats.map(s => `<div class="footer-stat"><span class="footer-stat-label">${s.label}</span><span class="footer-stat-val" ${s.color ? `style="color:var(--${s.color})"` : ''}>${s.val}</span></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+// Tooltips dos cards abrem para a esquerda por padrão (right:0). Em cards da
+// coluna mais à esquerda isso transborda e fica sob a sidebar — ao passar o
+// mouse, mede a posição e inverte para abrir à direita quando falta espaço.
+document.addEventListener('mouseover', e => {
+  const wrap = e.target.closest && e.target.closest('.tooltip-wrap');
+  if (!wrap) return;
+  const box = wrap.querySelector('.tooltip-box');
+  if (!box) return;
+  box.classList.remove('flip-left');
+  const sidebar = document.querySelector('.sidebar');
+  const minLeft = sidebar ? sidebar.getBoundingClientRect().right : 0;
+  if (box.getBoundingClientRect().left < minLeft + 4) box.classList.add('flip-left');
+});
+
 // ─── Init ─────────────────────────────────────────────────
 (async () => {
   try {
@@ -544,6 +762,7 @@ function toggleSidebar() {
       document.getElementById('connectModal').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       setClusterInfo(data.info);
+      loadDashboard();
       showPage(pageFromHash());
     } else {
       loadConnections();
