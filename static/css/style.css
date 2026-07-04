@@ -945,3 +945,7 @@ input[type="checkbox"] {
 
 /* ─── App container (casca: sidebar + main) ─── */
 .app { display: flex; height: 100vh; overflow: hidden; }
+
+.section-loading {
+  padding: 40px 20px !important;
+}

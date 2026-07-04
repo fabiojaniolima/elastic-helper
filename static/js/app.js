@@ -637,11 +637,20 @@ async function loadDashboard() {
   }
 }
 
+// Refresh da topbar e do atalho R: cada página recarrega a sua própria fonte.
+function refreshCurrentPage() {
+  return loadDashboard();
+}
+
 // ─── Card Definitions ─────────────────────────────────────
 function section(label, sectionId) {
+  const refreshBtn = sectionId
+    ? `<button class="btn-icon" onclick="refreshSection('${sectionId}')" title="Atualizar seção"><i class="fas fa-rotate-right" id="sectionRefreshIcon-${sectionId}"></i></button>`
+    : '';
   return `<div class="grid-section">
     <span class="grid-section-label">${label}</span>
     <span class="grid-section-line"></span>
+    ${refreshBtn}
   </div>`;
 }
 
@@ -679,6 +688,37 @@ function renderCards(d) {
     section('Saúde do Cluster', 'health'),
     `<div id="section-cards-health" class="section-health-cards">${sectionCardsHealth(d)}</div>`,
   ].join('');
+}
+
+// Seção → função que a renderiza. Os ids são os mesmos que o backend conhece
+// em DASHBOARD_SECTIONS (es_service.py) e que vão em ?sections=.
+const SECTION_RENDERERS = {
+  health: sectionCardsHealth,
+};
+
+async function refreshSection(sectionId) {
+  const icon = document.getElementById(`sectionRefreshIcon-${sectionId}`);
+  const container = document.getElementById(`section-cards-${sectionId}`);
+  if (!container) return;
+  const fn = SECTION_RENDERERS[sectionId];
+  if (icon) icon.classList.add('spin');
+
+  container.innerHTML = `<div class="loading-state section-loading"><i class="fas fa-circle-notch fa-spin"></i><span>Atualizando...</span></div>`;
+
+  try {
+    // Só as métricas desta seção são consultadas no cluster; o resultado é
+    // mesclado no dashboardData, sem invalidar o que as outras seções mostram.
+    const [data] = await Promise.all([
+      fetchDashboard([sectionId]),
+      new Promise(resolve => setTimeout(resolve, 500)),
+    ]);
+    if (fn) container.innerHTML = fn(data);
+  } catch (_) {
+    // mantém dados antigos: restaura a render da seção a partir do último estado
+    if (fn && dashboardData) container.innerHTML = fn(dashboardData);
+  } finally {
+    if (icon) icon.classList.remove('spin');
+  }
 }
 
 function cardHealth(h, version, license) {
@@ -737,6 +777,14 @@ function cardStat(metric, title, icon, valueHtml, unit, color, tip, footerStats,
     ${footerStats && footerStats.length ? `<div class="card-footer" style="flex-wrap:wrap;gap:10px 18px">${footerStats.map(s => `<div class="footer-stat"><span class="footer-stat-label">${s.label}</span><span class="footer-stat-val" ${s.color ? `style="color:var(--${s.color})"` : ''}>${s.val}</span></div>`).join('')}</div>` : ''}
   </div>`;
 }
+
+// ─── Keyboard Shortcuts ───────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' &&
+      (currentPage === 'overview' || currentPage === 'capacity' || currentPage === 'kibana')) {
+    refreshCurrentPage();
+  }
+});
 
 // Tooltips dos cards abrem para a esquerda por padrão (right:0). Em cards da
 // coluna mais à esquerda isso transborda e fica sob a sidebar — ao passar o
