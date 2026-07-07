@@ -95,6 +95,11 @@ def fetch_cluster_health():
     return _client.cluster.health().body
 
 
+def fetch_cluster_health_indices():
+    """Saúde por índice (level=indices) — base do detalhe de Saúde do Cluster."""
+    return _client.cluster.health(level='indices').body
+
+
 def fetch_cat_indices():
     """cat.indices em bytes (colunas canônicas). Compartilhado entre o dashboard e
     os detalhes que trabalham com tamanhos em bytes (oversharding)."""
@@ -302,3 +307,70 @@ def dashboard(sections=None):
 
     result['es_version'] = _info.get('version', '')
     return result
+
+
+# ─── Detalhes por métrica ─────────────────────────────────
+def _detail_cluster_health():
+    health = fetch_cluster_health_indices()
+    result = [{'index': name, **dict(stats)} for name, stats in health.get('indices', {}).items()]
+    result.sort(key=lambda x: (['red', 'yellow', 'green'].index(x.get('status', 'green')), x['index']))
+    return result
+
+
+def _detail_all_indices():
+    return [dict(i) for i in _client.cat.indices(
+        h=CAT_INDICES_COLS, format='json', expand_wildcards='all', s='index')]
+
+
+def _detail_indices_without_replicas():
+    indices = [dict(i) for i in _client.cat.indices(
+        h=CAT_INDICES_COLS, format='json', expand_wildcards='all')]
+    result = [i for i in indices if i.get('rep') == '0']
+    result.sort(key=lambda x: x.get('index', ''))
+    return result
+
+
+def _detail_unassignable_replicas():
+    """Índices cujo nº de réplicas >= nº de data nodes — réplicas que nunca alocam."""
+    data_nodes = fetch_cluster_health()['number_of_data_nodes']
+    indices = [dict(i) for i in _client.cat.indices(
+        h=CAT_INDICES_COLS, format='json', expand_wildcards='all')]
+    result = [i for i in indices
+              if safe_int(i.get('rep')) > 0 and data_nodes > 0 and safe_int(i.get('rep')) >= data_nodes]
+    result.sort(key=lambda x: x.get('index', ''))
+    return result
+
+
+def _detail_oversharded_indices():
+    """Índices com vários primários e tamanho médio por shard < 1 GB."""
+    indices = fetch_cat_indices()
+    result = []
+    for i in indices:
+        pri = safe_int(i.get('pri'))
+        pri_store = safe_int(i.get('pri.store.size'))
+        if pri > 1 and pri_store > 0 and (pri_store / pri) < GB_1:
+            result.append({
+                'index': i.get('index'),
+                'pri': pri,
+                'rep': safe_int(i.get('rep')),
+                'pri_store_bytes': pri_store,
+                'avg_shard_bytes': pri_store / pri,
+                'docs': safe_int(i.get('docs.count')),
+            })
+    result.sort(key=lambda x: x['avg_shard_bytes'])
+    return result
+
+
+_DETAIL_DISPATCH = {
+    'cluster_health': _detail_cluster_health,
+    'all_indices': _detail_all_indices,
+    'indices_without_replicas': _detail_indices_without_replicas,
+    'unassignable_replicas': _detail_unassignable_replicas,
+    'oversharded_indices': _detail_oversharded_indices,
+}
+
+
+def detail(metric):
+    """Retorna os dados de uma métrica de detalhe, ou None se a métrica é desconhecida."""
+    fn = _DETAIL_DISPATCH.get(metric)
+    return fn() if fn else None

@@ -208,6 +208,20 @@ def api_dashboard():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/detail/<metric>')
+def api_detail(metric):
+    err = require_es()
+    if err:
+        return err
+    try:
+        result = es_service.detail(metric)
+        if result is None:
+            return jsonify({'error': 'Unknown metric'}), 404
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
     # Debugger/reloader do Flask só quando LOG_LEVEL=DEBUG.
