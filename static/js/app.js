@@ -2,6 +2,11 @@
 
 // ─── State ───────────────────────────────────────────────
 let dashboardData = null;
+let currentSort = { col: null, dir: 'asc' };
+let currentRows = [];
+let currentMetric = null;
+const detailNavStack = [];
+let clusterHealthFilters = new Set();
 
 // ─── Utilities ───────────────────────────────────────────
 function formatBytes(bytes) {
@@ -9,6 +14,14 @@ function formatBytes(bytes) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(1024));
   return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+}
+
+function parseSizeStr(str) {
+  if (!str || str === '-') return 0;
+  const units = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3, tb: 1024 ** 4 };
+  const m = String(str).toLowerCase().match(/^([\d.]+)\s*([a-z]+)$/);
+  if (!m) return parseFloat(str) || 0;
+  return parseFloat(m[1]) * (units[m[2]] || 1);
 }
 
 function fmtNum(n) {
@@ -778,8 +791,352 @@ function cardStat(metric, title, icon, valueHtml, unit, color, tip, footerStats,
   </div>`;
 }
 
+// ─── Export Config ────────────────────────────────────────
+const EXPORT_CONFIG = {
+  indices_without_replicas: {
+    filename: 'Sem Réplica',
+    extract: r => ({
+      índice: r.index,
+      saúde: r.health,
+      primários: r.pri,
+      réplicas: r.rep,
+      tamanho: r['store.size'],
+      documentos: r['docs.count'],
+    }),
+  },
+  unassignable_replicas: {
+    filename: 'Réplicas Não Alocáveis',
+    extract: r => ({
+      índice: r.index,
+      saúde: r.health,
+      primários: r.pri,
+      réplicas: r.rep,
+      tamanho: r['store.size'],
+      documentos: r['docs.count'],
+    }),
+  },
+  oversharded_indices: {
+    filename: 'Índices com Oversharding',
+    extract: r => ({
+      índice: r.index,
+      primários: r.pri,
+      réplicas: r.rep,
+      tamanho_primários: formatBytes(r.pri_store_bytes),
+      tamanho_médio_por_shard: formatBytes(r.avg_shard_bytes),
+      documentos: r.docs,
+    }),
+  },
+};
+
+function exportList() {
+  const config = EXPORT_CONFIG[currentMetric];
+  if (!config) return;
+  const data = currentRows.map(config.extract);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = config.filename + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function setExportBtn(visible) {
+  const btn = document.getElementById('detailExportBtn');
+  if (btn) btn.style.display = visible ? '' : 'none';
+}
+
+async function openDetail(metric, title, subtitle) {
+  clusterHealthFilters.clear();
+  document.getElementById('detailTitle').textContent = title;
+  document.getElementById('detailSubtitle').textContent = subtitle;
+  document.getElementById('detailSearch').value = '';
+  document.getElementById('detailSearchBar').style.display = '';
+  document.getElementById('detailBody').innerHTML =
+    `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando...</span></div>`;
+  document.getElementById('detailModal').style.display = 'flex';
+  document.querySelector('#detailModal .detail-card')
+    .classList.toggle('detail-card--wide', WIDE_DETAIL_METRICS.has(metric));
+  document.body.style.overflow = 'hidden';
+
+  try {
+    const res = await fetch(`/api/detail/${metric}`);
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+    currentRows = data;
+    currentSort = { col: null, dir: 'asc' };
+    currentMetric = metric;
+    renderDetailTable(metric, currentRows);
+  } catch (e) {
+    document.getElementById('detailBody').innerHTML =
+      `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${e.message}</p></div>`;
+  }
+}
+
+function closeDetail(e) {
+  if (e.target === document.getElementById('detailModal')) closeDetailModal();
+}
+
+function closeDetailModal() {
+  document.getElementById('detailModal').style.display = 'none';
+  document.querySelector('#detailModal .detail-card').classList.remove('detail-card--wide');
+  document.body.style.overflow = '';
+  detailNavStack.length = 0;
+  document.getElementById('detailBreadcrumb').style.display = 'none';
+  setExportBtn(false);
+}
+
+function filterTable() {
+  const q = document.getElementById('detailSearch').value.toLowerCase();
+  const rows = document.querySelectorAll('#detailBody tbody tr');
+  let visible = 0;
+  rows.forEach(row => {
+    const match = row.textContent.toLowerCase().includes(q);
+    row.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  updateCount(visible);
+}
+
+function updateCount(n) {
+  const el = document.getElementById('detailCount');
+  if (el) el.textContent = `${n.toLocaleString('pt-BR')} registros`;
+}
+
+// metric → função que renderiza a tabela de detalhe
+const DETAIL_RENDERERS = {
+  cluster_health: tableClusterHealth,
+  all_indices: tableIndices,
+  indices_without_replicas: tableIndices,
+  unassignable_replicas: tableIndices,
+  oversharded_indices: tableOversharded,
+};
+
+// Métricas cuja modal de detalhe usa largura estendida (~96vw) por terem tabelas largas
+const WIDE_DETAIL_METRICS = new Set(['nodes']);
+
+function renderDetailTableBody(metric, rows) {
+  return (DETAIL_RENDERERS[metric] || tableGeneric)(rows);
+}
+
+// Mensagem de estado vazio por métrica (quando o detalhe não traz nenhuma linha).
+const EMPTY_MESSAGES = {
+  slm_policies: {
+    icon: 'fa-database',
+    text: 'Nenhuma política de snapshot (SLM) configurada — o cluster não tem backups automáticos. Crie uma política em Kibana → Stack Management → Snapshot and Restore (ou via <code>PUT _slm/policy</code>) para garantir recuperação em caso de perda de dados.',
+  },
+};
+
+function renderDetailTable(metric, rows) {
+  const body = document.getElementById('detailBody');
+
+  if (!rows.length) {
+    const empty = EMPTY_MESSAGES[metric] || { icon: 'fa-circle-check', text: 'Nenhum item encontrado' };
+    body.innerHTML = `<div class="empty-state"><i class="fas ${empty.icon}"></i><p>${empty.text}</p></div>`;
+    document.getElementById('detailCount').textContent = '0 registros';
+    setExportBtn(false);
+    return;
+  }
+
+  body.innerHTML = renderDetailTableBody(metric, rows);
+  document.getElementById('detailCount').textContent = `${rows.length.toLocaleString('pt-BR')} registros`;
+  setExportBtn(!!EXPORT_CONFIG[metric]);
+  setupSort(metric, rows);
+}
+
+// ─── Table Renderers ──────────────────────────────────────
+function healthBadge(status) {
+  const c = healthColor(status || '');
+  return `<span class="badge badge-${c}">${status || '-'}</span>`;
+}
+
+function pctBar(val) {
+  const n = parseFloat(val) || 0;
+  const c = pctColor(n);
+  return `<div style="display:flex;align-items:center;gap:8px;width:100%">
+    <span style="font-weight:600;color:var(--${c})">${n}%</span>
+    <div class="progress-bar" style="flex:1"><div class="progress-fill progress-${c}" style="width:${Math.min(n, 100)}%"></div></div>
+  </div>`;
+}
+
+function tableClusterHealth(rows) {
+  const filterDefs = [
+    { key: 'unassigned_shards',   label: 'Não Alocados'  },
+    { key: 'relocating_shards',   label: 'Realocando'    },
+    { key: 'initializing_shards', label: 'Inicializando' },
+  ].filter(f => rows.some(r => (r[f.key] || 0) > 0));
+
+  const visible = clusterHealthFilters.size
+    ? rows.filter(r => [...clusterHealthFilters].some(k => (r[k] || 0) > 0))
+    : rows;
+
+  const pills = filterDefs.map(f => {
+    const sel = clusterHealthFilters.has(f.key);
+    return `<button class="task-action-pill${sel ? ' selected' : ''}" onclick="toggleClusterHealthFilter('${f.key}')">${f.label}</button>`;
+  }).join('');
+
+  const clearBtn = clusterHealthFilters.size
+    ? `<button class="tasks-filter-clear" onclick="clearClusterHealthFilter()"><i class="fas fa-xmark"></i> Limpar</button>`
+    : '';
+
+  const filterHtml = filterDefs.length
+    ? `<div class="tasks-filter">\n    <span class="tasks-filter-label">Filtrar</span>\n    ${pills}\n    ${clearBtn}\n  </div>`
+    : '';
+
+  return `${filterHtml}<table class="data-table">
+    <thead><tr>
+      <th data-col="index">Índice <span class="sort-icon">↕</span></th>
+      <th data-col="status">Status <span class="sort-icon">↕</span></th>
+      <th data-col="active_primary_shards" data-type="num">Primários <span class="sort-icon">↕</span></th>
+      <th data-col="number_of_replicas" data-type="num">Réplicas <span class="sort-icon">↕</span></th>
+      <th data-col="unassigned_shards" data-type="num">Não Alocados <span class="sort-icon">↕</span></th>
+      <th data-col="relocating_shards" data-type="num">Realocando <span class="sort-icon">↕</span></th>
+      <th data-col="initializing_shards" data-type="num">Inicializando <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${visible.map(r => `<tr>
+      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td>${healthBadge(r.status)}</td>
+      <td>${fmtNum(r.active_primary_shards)}</td>
+      <td style="color:${r.number_of_replicas === 0 ? 'var(--yellow)' : 'var(--text)'}">${fmtNum(r.number_of_replicas)}</td>
+      <td style="color:${r.unassigned_shards > 0 ? 'var(--red)' : 'var(--text-muted)'}">${fmtNum(r.unassigned_shards)}</td>
+      <td style="color:${r.relocating_shards > 0 ? 'var(--yellow)' : 'var(--text-muted)'}">${fmtNum(r.relocating_shards)}</td>
+      <td style="color:${r.initializing_shards > 0 ? 'var(--yellow)' : 'var(--text-muted)'}">${fmtNum(r.initializing_shards)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function toggleClusterHealthFilter(key) {
+  if (clusterHealthFilters.has(key)) clusterHealthFilters.delete(key);
+  else clusterHealthFilters.add(key);
+  renderDetailTable('cluster_health', currentRows);
+}
+
+function clearClusterHealthFilter() {
+  clusterHealthFilters.clear();
+  renderDetailTable('cluster_health', currentRows);
+}
+
+function tableIndices(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="index">Índice <span class="sort-icon">↕</span></th>
+      <th data-col="health">Saúde <span class="sort-icon">↕</span></th>
+      <th data-col="pri">Primários <span class="sort-icon">↕</span></th>
+      <th data-col="rep">Réplicas <span class="sort-icon">↕</span></th>
+      <th data-col="store.size" data-type="size">Tamanho <span class="sort-icon">↕</span></th>
+      <th data-col="docs.count" data-type="num">Documentos <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td>${healthBadge(r.health)}</td>
+      <td>${r.pri || '-'}</td>
+      <td><span style="color:${r.rep === '0' ? 'var(--yellow)' : 'var(--text)'}">${r.rep || '-'}</span></td>
+      <td>${r['store.size'] || '-'}</td>
+      <td>${fmtNum(r['docs.count'])}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function tableOversharded(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="index">Índice <span class="sort-icon">↕</span></th>
+      <th data-col="pri" data-type="num">Primários <span class="sort-icon">↕</span></th>
+      <th data-col="rep" data-type="num">Réplicas <span class="sort-icon">↕</span></th>
+      <th data-col="pri_store_bytes" data-type="num">Tamanho Primários <span class="sort-icon">↕</span></th>
+      <th data-col="avg_shard_bytes" data-type="num">Médio/Shard <span class="sort-icon">↕</span></th>
+      <th data-col="docs" data-type="num">Documentos <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td style="font-family:monospace;font-size:12px">${escHtml(r.index)}</td>
+      <td>${fmtNum(r.pri)}</td>
+      <td>${fmtNum(r.rep)}</td>
+      <td>${formatBytes(r.pri_store_bytes)}</td>
+      <td style="color:var(--yellow);font-weight:600">${formatBytes(r.avg_shard_bytes)}</td>
+      <td>${fmtNum(r.docs)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function tableGeneric(rows) {
+  if (!rows.length) return '';
+  const cols = Object.keys(rows[0]);
+  return `<table class="data-table">
+    <thead><tr>${cols.map(c => `<th data-col="${c}">${c} <span class="sort-icon">↕</span></th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${r[c] ?? '-'}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ─── Table Sorting ────────────────────────────────────────
+function setupSort(metric, allRows) {
+  document.querySelectorAll('#detailBody th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      const type = th.dataset.type || 'str';
+      const isRoleSort = th.dataset.roleSort === 'true';
+      const sumCols = th.dataset.sumCols ? th.dataset.sumCols.split(',') : null;
+
+      document.querySelectorAll('#detailBody th').forEach(h => h.classList.remove('sort-asc', 'sort-desc', 'sort-role'));
+
+      let sorted;
+      if (isRoleSort) {
+        // Coluna "Nó": todo clique volta para a ordem padrão por role (MASTER > OUTROS >
+        // HOT/DATA_CONTENT > WARM > COLD > FROZEN, alfabético dentro do grupo) — não
+        // participa do toggle asc/desc genérico das demais colunas.
+        currentSort = { col, dir: 'role' };
+        th.classList.add('sort-role');
+        const icon = th.querySelector('.sort-icon');
+        if (icon) icon.textContent = '⟲';
+        sorted = sortNodesByRole(allRows);
+      } else {
+        if (currentSort.col === col) {
+          currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          currentSort.col = col;
+          currentSort.dir = 'asc';
+        }
+        th.classList.add(`sort-${currentSort.dir}`);
+        const icon = th.querySelector('.sort-icon');
+        if (icon) icon.textContent = currentSort.dir === 'asc' ? '↑' : '↓';
+
+        sorted = [...allRows].sort((a, b) => {
+          let va, vb;
+          if (sumCols) {
+            va = sumCols.reduce((s, k) => s + (parseFloat(a[k]) || 0), 0);
+            vb = sumCols.reduce((s, k) => s + (parseFloat(b[k]) || 0), 0);
+          } else {
+            va = a[col] ?? ''; vb = b[col] ?? '';
+            if (type === 'num') { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; }
+            else if (type === 'size') { va = parseSizeStr(va); vb = parseSizeStr(vb); }
+            else { va = String(va).toLowerCase(); vb = String(vb).toLowerCase(); }
+          }
+          const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+          return currentSort.dir === 'asc' ? cmp : -cmp;
+        });
+      }
+
+      const tbody = document.querySelector('#detailBody tbody');
+      if (tbody) {
+        tbody.innerHTML = '';
+        const tmpDiv = document.createElement('div');
+        tmpDiv.innerHTML = renderDetailTableBody(metric, sorted);
+        const newTbody = tmpDiv.querySelector('tbody');
+        if (newTbody) tbody.innerHTML = newTbody.innerHTML;
+      }
+
+      filterTable();
+    });
+  });
+}
+
 // ─── Keyboard Shortcuts ───────────────────────────────────
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeDetailModal(); closeAliasModal(); closeConfirmModal();
+  }
   if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' &&
       (currentPage === 'overview' || currentPage === 'capacity' || currentPage === 'kibana')) {
     refreshCurrentPage();

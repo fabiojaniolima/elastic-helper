@@ -258,6 +258,45 @@
 
 </div>
 
+<!-- ═══════════════════ DETAIL MODAL ═══════════════════════ -->
+<div class="modal-overlay detail-overlay" id="detailModal" style="display:none" onclick="closeDetail(event)">
+  <div class="detail-card" onclick="event.stopPropagation()">
+
+    <div class="detail-header">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <h2 class="detail-title" id="detailTitle"></h2>
+          <span id="detailTitleTip"></span>
+        </div>
+        <p class="detail-subtitle" id="detailSubtitle"></p>
+      </div>
+      <button class="btn-icon" onclick="closeDetailModal()" title="Fechar (Esc)" style="flex-shrink:0">
+        <i class="fas fa-xmark" style="font-size:17px"></i>
+      </button>
+    </div>
+
+    <div class="detail-breadcrumb" id="detailBreadcrumb" style="display:none">
+      <button class="btn-back" onclick="goBackDetail()">
+        <i class="fas fa-arrow-left"></i> Voltar
+      </button>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current" id="breadcrumbCurrent"></span>
+    </div>
+
+    <div class="detail-search" id="detailSearchBar">
+      <i class="fas fa-magnifying-glass"></i>
+      <input type="text" id="detailSearch" placeholder="Filtrar por qualquer campo..." oninput="filterTable()">
+      <span class="detail-count" id="detailCount"></span>
+      <button class="btn btn-ghost btn-sm" id="detailExportBtn" style="display:none" onclick="exportList()">
+        <i class="fas fa-file-export"></i> Exportar lista
+      </button>
+    </div>
+
+    <div class="detail-body" id="detailBody"></div>
+
+  </div>
+</div>
+
 <script src="/static/js/app.js"></script>
 </body>
 </html>
