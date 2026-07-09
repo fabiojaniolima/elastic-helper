@@ -297,6 +297,38 @@
   </div>
 </div>
 
+<!-- ═══════════════════ GENERIC JSON MODAL ═════════════════ -->
+<div class="modal-overlay detail-overlay" id="jsonModal" style="display:none" onclick="if(event.target===this)closeJsonModal()">
+  <div class="task-json-card" onclick="event.stopPropagation()">
+    <div class="detail-header">
+      <div>
+        <h2 class="detail-title" id="jsonModalTitle"></h2>
+        <p class="detail-subtitle" id="jsonModalSubtitle"></p>
+      </div>
+      <button class="btn-icon" onclick="closeJsonModal()" title="Fechar (Esc)" style="flex-shrink:0">
+        <i class="fas fa-xmark" style="font-size:17px"></i>
+      </button>
+    </div>
+    <pre class="task-json-body" id="jsonModalBody"></pre>
+  </div>
+</div>
+
+<!-- ════════════════ DETALHE DE NÓ MODAL ══════════════════ -->
+<div class="modal-overlay detail-overlay" id="nodeModal" style="display:none" onclick="if(event.target===this)closeNodeModal()">
+  <div class="detail-card" onclick="event.stopPropagation()">
+    <div class="detail-header">
+      <div>
+        <h2 class="detail-title" id="nodeModalTitle">Nó</h2>
+        <p class="detail-subtitle" id="nodeModalSubtitle"></p>
+      </div>
+      <button class="btn-icon" onclick="closeNodeModal()" title="Fechar (Esc)" style="flex-shrink:0">
+        <i class="fas fa-xmark" style="font-size:17px"></i>
+      </button>
+    </div>
+    <div class="detail-body" id="nodeModalBody"></div>
+  </div>
+</div>
+
 <script src="/static/js/app.js"></script>
 </body>
 </html>

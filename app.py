@@ -222,6 +222,17 @@ def api_detail(metric):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/node/<path:node_name>')
+def api_node(node_name):
+    err = require_es()
+    if err:
+        return err
+    try:
+        return jsonify(es_service.node_detail(node_name))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
     # Debugger/reloader do Flask só quando LOG_LEVEL=DEBUG.

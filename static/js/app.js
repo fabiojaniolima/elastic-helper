@@ -691,6 +691,10 @@ function sectionCardsHealth(d) {
   ].join('');
 }
 
+function sectionCardsResources(d) {
+  return cardResourceTable(d);
+}
+
 // Página "Sinais Vitais" (id interno: overview) — só o que responde "está
 // funcionando agora?". Nós, volume/inventário e configuração de índices ficam na
 // página "Inventário" (renderCapacity).
@@ -700,6 +704,9 @@ function renderCards(d) {
   grid.innerHTML = [
     section('Saúde do Cluster', 'health'),
     `<div id="section-cards-health" class="section-health-cards">${sectionCardsHealth(d)}</div>`,
+
+    section('Utilização de Recursos', 'resources'),
+    `<div id="section-cards-resources" style="display:contents">${sectionCardsResources(d)}</div>`,
   ].join('');
 }
 
@@ -707,6 +714,7 @@ function renderCards(d) {
 // em DASHBOARD_SECTIONS (es_service.py) e que vão em ?sections=.
 const SECTION_RENDERERS = {
   health: sectionCardsHealth,
+  resources: sectionCardsResources,
 };
 
 async function refreshSection(sectionId) {
@@ -791,6 +799,57 @@ function cardStat(metric, title, icon, valueHtml, unit, color, tip, footerStats,
   </div>`;
 }
 
+function cardResourceTable(d) {
+  const nodes = sortNodesByRole(d.nodes_summary || []);
+  const tip = 'Métricas de utilização ao vivo por nó — um indicador por dimensão de saturação. Clique para a visão completa (Heap JVM, GC Overhead, Rejeições e shards por nó).<br>' +
+    '<strong>CPU</strong>: uso do processador — acima de 80% por períodos prolongados indica sobrecarga e degrada busca e indexação.<br>' +
+    '<strong>Disco</strong>: espaço utilizado — acima de 85% o ES ativa o flood-stage watermark e coloca índices em modo read-only automaticamente.<br>' +
+    '<strong>Mem. Pressure</strong>: percentual da geração antiga (old-gen) do heap ocupada após o último GC — indicador real de pressão de memória. Acima de 75% gera pausas longas (GC storms).<br>' +
+    '<strong>Parent CB</strong>: percentual do limite do circuit breaker <em>parent</em> em uso no momento — indicador antecipado. Ao chegar a 100% o nó começa a derrubar requisições para proteger a memória.<br>' +
+    '<strong>Pressão Escrita</strong>: percentual da memória de buffer de indexação (<code>indexing_pressure</code>) em uso no momento sobre o limite — indicador <em>antecipado</em> e ao vivo de saturação de escrita. Ao chegar a 100% o nó passa a <strong>rejeitar escritas (HTTP 429)</strong>.<br>' +
+    '<strong>Fila TP</strong>: soma das requisições enfileiradas nas thread pools do nó. Indicador <em>antecipado</em> de saturação — uma fila crescente precede as rejeições.';
+
+  const colCount = 7;
+  const rows = nodes.map(n => {
+    const q = n.tp_queue || 0;
+    return `<tr>
+      <td>${nodeNameCell(n.name, n.roles || [], n.is_master)}</td>
+      <td>${pctBar(n.cpu)}</td>
+      <td>${pctBar(n.disk_used_percent)}</td>
+      <td>${pctBar(n.mem_pressure)}</td>
+      <td>${pctBar(n.parent_cb_pct || 0)}</td>
+      <td>${pctBar(n.write_pressure_pct || 0)}</td>
+      <td style="text-align:right;color:${q > 0 ? 'var(--yellow)' : 'var(--text-muted)'};font-weight:${q > 0 ? '700' : '400'}">${fmtNum(q)}</td>
+    </tr>`;
+  }).join('');
+
+  const emptyRow = `<tr><td colspan="${colCount}" style="text-align:center;color:var(--text-dim);padding:24px">Nenhum nó encontrado</td></tr>`;
+
+  return `<div class="metric-card card-full" onclick="openDetail('nodes','Nós do Cluster','Detalhes completos — roles, shards e recursos por nó')">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon"><i class="fas fa-server"></i></div>
+        <div class="card-title">Utilização por Nó</div>
+      </div>
+      ${tooltip(tip, 'help-resource-table')}
+    </div>
+    <div class="resource-table-wrap">
+      <table class="data-table resource-table">
+        <thead><tr>
+          <th>Nó</th>
+          <th>CPU</th>
+          <th>Disco</th>
+          <th>Mem. Pressure</th>
+          <th>Parent CB</th>
+          <th>Pressão Escrita</th>
+          <th style="text-align:right">Fila TP</th>
+        </tr></thead>
+        <tbody>${rows || emptyRow}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 // ─── Export Config ────────────────────────────────────────
 const EXPORT_CONFIG = {
   indices_without_replicas: {
@@ -826,6 +885,70 @@ const EXPORT_CONFIG = {
       documentos: r.docs,
     }),
   },
+  large_primary_shards: {
+    filename: 'Shards Primários > 50 GB',
+    extract: r => ({
+      índice: r.index,
+      shards_primários: r.shard_count,
+      maior_shard_primário: formatBytes(r.max_shard_bytes),
+      tamanho_total: formatBytes(r.total_size_bytes),
+      tamanho_médio_por_shard: formatBytes(r.shard_count > 0 ? r.total_size_bytes / r.shard_count : 0),
+    }),
+  },
+  indices_without_ilm: {
+    filename: 'Sem Política de ILM',
+    extract: r => ({
+      índice: r.index,
+      saúde: r.health,
+      primários: r.pri,
+      réplicas: r.rep,
+      tamanho: r['store.size'],
+      documentos: r['docs.count'],
+    }),
+  },
+  ilm_without_delete: {
+    filename: 'ILM sem Fase DELETE',
+    extract: r => ({
+      política: r.name,
+      índices: r.index_count,
+      fases_configuradas: (r.phases || []).join(', '),
+      última_modificação: r.modified_date,
+    }),
+  },
+  ilm_errors: {
+    filename: 'ILM com Falha',
+    extract: r => ({
+      índice: r.index,
+      política: r.policy,
+      fase: r.phase,
+      passo_com_falha: r.failed_step,
+      tentativas: r.failed_step_retry_count,
+      tipo_do_erro: r.error_type,
+      motivo: r.error_reason,
+    }),
+  },
+  circuit_breakers: {
+    filename: 'Circuit Breakers',
+    extract: r => ({
+      nó: r.node,
+      breaker: r.breaker,
+      disparos: r.tripped,
+      uso_estimado: formatBytes(r.estimated_size_in_bytes),
+      limite: formatBytes(r.limit_size_in_bytes),
+      percentual_do_limite: r.usage_pct,
+    }),
+  },
+  read_only_indices: {
+    filename: 'Índices Read-only',
+    extract: r => ({
+      índice: r.index,
+      categoria: r.category === 'flood' ? 'flood-stage (disco)' : 'manual (sem ILM)',
+      bloqueios: r.blocks,
+      saúde: r.health,
+      tamanho: r['store.size'],
+      documentos: r['docs.count'],
+    }),
+  },
 };
 
 function exportList() {
@@ -848,9 +971,30 @@ function setExportBtn(visible) {
   if (btn) btn.style.display = visible ? '' : 'none';
 }
 
+// Célula nome + roles de um nó a partir do seu nome (mesma regra de "Utilização por
+// Nó"). Usada por qualquer modal de listagem de instâncias cujo dado bruto traz só o
+// nome do nó (recovery, circuit breakers, shards de índice…); as roles vêm do
+// dashboardData já carregado.
+function nodeCellByName(name) {
+  if (!name) return `<div class="node-name-cell"><div class="node-name">—</div></div>`;
+  const nodes = (dashboardData && dashboardData.nodes_summary) || [];
+  const n = nodes.find(x => x.name === name);
+  return nodeNameCell(name, (n && n.roles) || [], !!(n && n.is_master));
+}
+
+const DETAIL_TITLE_TIPS = {
+  circuit_breakers: `<strong style="color:var(--text);display:block;margin-bottom:6px">Regra de listagem</strong>
+A lista mostra <strong>um breaker por linha</strong> (nó × breaker) e exibe apenas os que merecem atenção — um breaker só aparece quando:<br><br>
+<span style="color:var(--red)">●</span>&nbsp;<strong>Disparos &gt; 0</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">(já abortou requisições), <strong>ou</strong></span><br>
+<span style="color:var(--yellow)">●</span>&nbsp;<strong>Uso &ge; 65% do limite</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">(faixa de atenção)</span><br><br>
+Nós cujos breakers estão todos abaixo desses limiares são <strong>omitidos</strong> — o inventário completo de nós fica no card <em>Utilização por Nó</em>.`,
+};
+
 async function openDetail(metric, title, subtitle) {
   clusterHealthFilters.clear();
   document.getElementById('detailTitle').textContent = title;
+  document.getElementById('detailTitleTip').innerHTML =
+    DETAIL_TITLE_TIPS[metric] ? tooltip(DETAIL_TITLE_TIPS[metric]) : '';
   document.getElementById('detailSubtitle').textContent = subtitle;
   document.getElementById('detailSearch').value = '';
   document.getElementById('detailSearchBar').style.display = '';
@@ -866,7 +1010,8 @@ async function openDetail(metric, title, subtitle) {
     const data = await res.json();
 
     if (data.error) throw new Error(data.error);
-    currentRows = data;
+
+    currentRows = metric === 'nodes' ? sortNodesByRole(data) : data;
     currentSort = { col: null, dir: 'asc' };
     currentMetric = metric;
     renderDetailTable(metric, currentRows);
@@ -913,6 +1058,14 @@ const DETAIL_RENDERERS = {
   indices_without_replicas: tableIndices,
   unassignable_replicas: tableIndices,
   oversharded_indices: tableOversharded,
+  large_primary_shards: tableLargeShards,
+  indices_without_ilm: tableIndices,
+  ilm_without_delete: tableIlm,
+  ilm_errors: tableIlmErrors,
+  nodes: tableNodes,
+  circuit_breakers: tableCircuitBreakers,
+  pending_tasks: tablePendingTasks,
+  read_only_indices: tableReadOnly,
 };
 
 // Métricas cuja modal de detalhe usa largura estendida (~96vw) por terem tabelas largas
@@ -960,6 +1113,36 @@ function pctBar(val) {
     <span style="font-weight:600;color:var(--${c})">${n}%</span>
     <div class="progress-bar" style="flex:1"><div class="progress-fill progress-${c}" style="width:${Math.min(n, 100)}%"></div></div>
   </div>`;
+}
+
+function gcOverheadColor(pct) {
+  if (pct >= 25) return 'red';
+  if (pct >= 10) return 'yellow';
+  return 'green';
+}
+
+function gcOverheadBar(val) {
+  const n = parseFloat(val) || 0;
+  const c = gcOverheadColor(n);
+  return `<div style="display:flex;align-items:center;gap:8px;width:100%">
+    <span style="font-weight:600;color:var(--${c})">${n}%</span>
+    <div class="progress-bar" style="flex:1"><div class="progress-fill progress-${c}" style="width:${Math.min(n, 100)}%"></div></div>
+  </div>`;
+}
+
+function loadColor(load, availableProcessors) {
+  if (!availableProcessors || availableProcessors <= 0) return 'text-muted';
+  const ratio = parseFloat(load) / availableProcessors;
+  if (ratio >= 0.9) return 'red';
+  if (ratio >= 0.7) return 'yellow';
+  return 'green';
+}
+
+function loadBadge(load, availableProcessors) {
+  if (load == null || load === '') return '-';
+  const c = loadColor(load, availableProcessors);
+  const colorVar = c === 'text-muted' ? 'var(--text-muted)' : `var(--${c})`;
+  return `<span style="font-variant-numeric:tabular-nums;font-weight:600;color:${colorVar}">${load}</span>`;
 }
 
 function tableClusterHealth(rows) {
@@ -1061,6 +1244,326 @@ function tableOversharded(rows) {
   </table>`;
 }
 
+function tableLargeShards(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="index">Índice <span class="sort-icon">↕</span></th>
+      <th data-col="shard_count" data-type="num">Shards Primários <span class="sort-icon">↕</span></th>
+      <th data-col="max_shard_bytes" data-type="num">Maior Shard Primário <span class="sort-icon">↕</span></th>
+      <th data-col="total_size_bytes" data-type="num">Tamanho Total <span class="sort-icon">↕</span></th>
+      <th data-col="total_size_bytes" data-type="num">Tamanho Médio/Shard <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td style="font-family:monospace;font-size:12px">${r.index}</td>
+      <td>${r.shard_count}</td>
+      <td style="color:var(--red);font-weight:600">${formatBytes(r.max_shard_bytes)}</td>
+      <td>${formatBytes(r.total_size_bytes)}</td>
+      <td>${formatBytes(r.shard_count > 0 ? r.total_size_bytes / r.shard_count : 0)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function tableIlm(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="name">Política <span class="sort-icon">↕</span></th>
+      <th data-col="index_count" data-type="num">Índices <span class="sort-icon">↕</span></th>
+      <th data-col="phases">Fases Configuradas <span class="sort-icon">↕</span></th>
+      <th data-col="modified_date">Última Modificação <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td style="font-family:monospace;font-size:12px">${r.name}</td>
+      <td style="font-weight:600">${fmtNum(r.index_count ?? 0)}</td>
+      <td>${(r.phases || []).map(p => `<span class="badge badge-blue" style="margin-right:4px">${p}</span>`).join('')}</td>
+      <td style="color:var(--text-muted);font-size:12px">${r.modified_date || '-'}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function tableIlmErrors(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="index">Índice <span class="sort-icon">↕</span></th>
+      <th data-col="policy">Política <span class="sort-icon">↕</span></th>
+      <th data-col="phase">Fase <span class="sort-icon">↕</span></th>
+      <th data-col="failed_step">Passo com Falha <span class="sort-icon">↕</span></th>
+      <th data-col="failed_step_retry_count" data-type="num">Tentativas <span class="sort-icon">↕</span></th>
+      <th data-col="error_type">Tipo do Erro <span class="sort-icon">↕</span></th>
+      <th data-col="error_reason">Motivo <span class="sort-icon">↕</span></th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr class="task-row" onclick="showIlmErrorJson(this.dataset.index)" data-index="${escHtml(r.index)}">
+      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td style="font-family:monospace;font-size:12px">${escHtml(r.policy)}</td>
+      <td><span class="badge badge-blue">${escHtml(r.phase)}</span></td>
+      <td style="font-family:monospace;font-size:12px;color:var(--red)">${escHtml(r.failed_step)}</td>
+      <td style="text-align:center;color:var(--text-muted)">${r.failed_step_retry_count ?? '-'}</td>
+      <td><span class="badge badge-red">${escHtml(r.error_type)}</span></td>
+      <td style="color:var(--text-muted);font-size:12px;max-width:480px;white-space:normal">${escHtml(r.error_reason)}</td>
+      <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><i class="fas fa-code"></i></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+const READ_ONLY_CAT = { flood: ['badge-red', 'Flood-stage (disco)'], manual: ['badge-yellow', 'Manual (sem ILM)'] };
+
+function tableReadOnly(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="index">Índice <span class="sort-icon">↕</span></th>
+      <th data-col="category">Categoria <span class="sort-icon">↕</span></th>
+      <th data-col="blocks">Bloqueio(s) <span class="sort-icon">↕</span></th>
+      <th data-col="health">Saúde <span class="sort-icon">↕</span></th>
+      <th data-col="store.size" data-type="size">Tamanho <span class="sort-icon">↕</span></th>
+      <th data-col="docs.count" data-type="num">Documentos <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const [catCls, catLabel] = READ_ONLY_CAT[r.category] || ['badge-gray', r.category || '-'];
+      const blockCls = r.category === 'flood' ? 'badge-red' : 'badge-yellow';
+      return `<tr>
+      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td><span class="badge ${catCls}">${catLabel}</span></td>
+      <td>${(r.blocks || '').split(', ').filter(Boolean).map(b => `<span class="badge ${blockCls}" style="margin-right:4px">${escHtml(b)}</span>`).join('')}</td>
+      <td>${healthBadge(r.health)}</td>
+      <td>${r['store.size'] || '-'}</td>
+      <td>${fmtNum(r['docs.count'])}</td>
+    </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// Abre o JSON completo da entrada de _ilm/explain para o índice clicado
+function showIlmErrorJson(indexName) {
+  const row = currentRows.find(r => r.index === indexName);
+  if (!row) return;
+  showJsonModal('Detalhes do Erro de ILM', indexName, row);
+}
+
+// ─── Modal de JSON genérico ───────────────────────────────
+function showJsonModal(title, subtitle, obj) {
+  document.getElementById('jsonModalTitle').textContent = title;
+  document.getElementById('jsonModalSubtitle').textContent = subtitle || '';
+  document.getElementById('jsonModalBody').textContent = JSON.stringify(obj, null, 2);
+  document.getElementById('jsonModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeJsonModal() {
+  document.getElementById('jsonModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+const ROLE_COLOR = {
+  master: 'yellow', data: 'blue', data_hot: 'blue', data_warm: 'blue',
+  data_cold: 'blue', data_frozen: 'blue', ingest: 'green',
+  ml: 'gray', voting_only: 'gray',
+};
+
+// Rótulos curtos das roles para a linha compacta abaixo do nome do nó
+const ROLE_SHORT = {
+  master: 'MASTER', data: 'DATA', data_content: 'CONTENT', data_hot: 'HOT',
+  data_warm: 'WARM', data_cold: 'COLD', data_frozen: 'FROZEN',
+  ingest: 'INGEST', ml: 'ML', voting_only: 'VOTING',
+};
+// Roles principais exibidas (em ordem) na linha compacta sob o nome do nó
+const ROLE_INLINE_ORDER = ['master', 'data_hot', 'data_warm', 'data_cold', 'data_frozen'];
+const ROLE_CSS_VAR = { yellow: '--yellow', blue: '--blue', green: '--green', gray: '--text-dim' };
+
+// Um nó é considerado dedicado a ML quando tem a role `ml` e nenhuma role de
+// master ou de dados. Nesse caso a linha compacta — que normalmente ficaria
+// vazia (ML não é uma role de tier) — passa a exibir ML, para não deixar o nó
+// sem role visível.
+function isDedicatedMl(roles) {
+  const r = Array.isArray(roles) ? roles : [];
+  return r.includes('ml') && !r.includes('master') && !r.some(x => x.startsWith('data'));
+}
+
+// Linha compacta e colorida ("MASTER / HOT / WARM / ...") exibida sob o nome do nó
+function renderRolesInline(roles, isElectedMaster) {
+  if (!Array.isArray(roles) || !roles.length) return '';
+  const present = new Set(roles);
+  const ordered = ROLE_INLINE_ORDER.filter(r => present.has(r));
+  if (isDedicatedMl(roles)) ordered.push('ml');
+  if (!ordered.length) return '';
+  return ordered.map(role => {
+    const v = ROLE_CSS_VAR[ROLE_COLOR[role] || 'gray'] || '--text-dim';
+    const star = (role === 'master' && isElectedMaster) ? '&#9733;' : '';
+    return `<span style="color:var(${v})">${star}${ROLE_SHORT[role] || role.toUpperCase()}</span>`;
+  }).join('<span style="color:var(--text-dim)"> / </span>');
+}
+
+// Texto do hover (title) listando TODAS as roles do nó (master eleito com ★)
+function rolesTitle(roles, isElectedMaster) {
+  const all = (Array.isArray(roles) ? roles : []).slice().sort();
+  const titleRoles = all.map(r => (r === 'master' && isElectedMaster) ? `★ ${r}` : r).join(', ');
+  return titleRoles ? `Roles: ${titleRoles}` : 'Sem roles';
+}
+
+// Célula que mescla nome + roles; o title (hover) lista TODAS as roles do nó
+function nodeNameCell(name, roles, isElectedMaster) {
+  const inline = renderRolesInline(roles, isElectedMaster);
+  const title = rolesTitle(roles, isElectedMaster);
+  const safeAttr = (name || '').replace(/'/g, '&#39;');
+  const click = name ? ` onclick="event.stopPropagation();openNodeModal('${safeAttr}')"` : '';
+  return `<div class="node-name-cell" title="${title}">
+    <div class="node-name node-name-clickable"${click}>${escHtml(name) || '-'}</div>
+    ${inline ? `<div class="node-roles-inline">${inline}</div>` : ''}
+  </div>`;
+}
+
+// Nome do master eleito, a partir dos dados de dashboard já carregados (para a ★)
+function electedMasterName() {
+  const nodes = (dashboardData && dashboardData.nodes_summary) || [];
+  const m = nodes.find(n => n.is_master);
+  return m ? m.name : null;
+}
+
+// ─── Página Diagnóstico ───────────────────────────────────
+// Leitura interpretada dos dados, reaproveitando o estado já carregado pela
+// Sinais Vitais (dashboardData/tasksList) — sem nenhuma requisição extra.
+
+// Tier predominante do nó a partir das roles (frozen > cold > warm > hot)
+function nodeTier(roles) {
+  const present = new Set(Array.isArray(roles) ? roles : []);
+  if (present.has('data_frozen')) return 'FROZEN';
+  if (present.has('data_cold')) return 'COLD';
+  if (present.has('data_warm')) return 'WARM';
+  if (present.has('data_hot')) return 'HOT';
+  return null;
+}
+
+// Ordem padrão da coluna "Nó" nas tabelas de utilização/detalhe: MASTER dedicado >
+// OUTROS (sem master, sem tier/data_content) > HOT/DATA_CONTENT > WARM > COLD > FROZEN,
+// e alfabético dentro de cada grupo.
+function nodeSortRank(roles) {
+  const r = Array.isArray(roles) ? roles : [];
+  const hasData = r.some(x => x.startsWith('data'));
+  if (r.includes('master') && !hasData) return 0;
+  if (r.includes('data_hot') || r.includes('data_content')) return 2;
+  if (r.includes('data_warm')) return 3;
+  if (r.includes('data_cold')) return 4;
+  if (r.includes('data_frozen')) return 5;
+  return 1;
+}
+
+function sortNodesByRole(nodes) {
+  return [...nodes].sort((a, b) => {
+    const ra = nodeSortRank(a.roles), rb = nodeSortRank(b.roles);
+    if (ra !== rb) return ra - rb;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+}
+
+function tableNodes(rows) {
+  const loadTip = `<strong style="color:var(--text);display:block;margin-bottom:6px">Como as cores do Load são calculadas</strong>
+<span style="color:var(--text-dim)">O load average do Linux <strong>não mede só CPU</strong>: ele conta processos rodando ou aguardando a CPU <strong>e também processos bloqueados em I/O</strong> (ex.: espera de disco). Um load alto pode indicar gargalo de disco/merge/flush no Elasticsearch mesmo com a CPU tranquila — por isso é um indicador de demanda geral do nó, não um substituto do CPU%.</span><br><br>
+A cor reflete a proporção entre o load e o número de processadores disponíveis no nó (<code style="color:var(--blue);background:var(--surface-hover);padding:1px 4px;border-radius:3px">os.available_processors</code>):<br><br>
+<code style="color:var(--text-muted);font-size:11px">utilização = load / os.available_processors</code><br><br>
+<span style="color:var(--green)">●</span>&nbsp;<strong style="color:var(--green)">Verde</strong>&nbsp;&nbsp;&nbsp;— utilização &lt; 70%&nbsp;&nbsp;<span style="color:var(--text-dim)">(carga saudável)</span><br>
+<span style="color:var(--yellow)">●</span>&nbsp;<strong style="color:var(--yellow)">Amarelo</strong>&nbsp;— utilização &gt;= 70% e &lt; 90%&nbsp;&nbsp;<span style="color:var(--text-dim)">(atenção)</span><br>
+<span style="color:var(--red)">●</span>&nbsp;<strong style="color:var(--red)">Vermelho</strong>&nbsp;— utilização &gt;= 90%&nbsp;&nbsp;<span style="color:var(--text-dim)">(risco de sobrecarga)</span><br><br>
+<span style="color:var(--text-dim)">Ex.: nó com 8 processadores e load 1m = 6.4 → 80% → amarelo.<br>Regra aplicada igualmente para 1m, 5m e 15m.</span><br><br>
+<span style="color:var(--text-dim)"><strong style="color:var(--text)">Como diagnosticar a causa:</strong> cruze com a coluna <strong>CPU%</strong> desta mesma linha. Load e CPU% altos juntos → gargalo de CPU. Load alto com CPU% normal/baixo → provável espera por I/O (disco lento, merge/flush, GC ou swap), já que o load conta processos bloqueados em I/O, não só os que disputam CPU.</span>`;
+  return `<table class="data-table data-table--freeze-first">
+    <thead><tr>
+      <th data-col="name" data-role-sort="true">Nó <span class="sort-icon">↕</span></th>
+      <th>Shards P/R</th>
+      <th data-col="cpu" data-type="num">CPU% <span class="sort-icon">↕</span></th>
+      <th data-col="heap.percent" data-type="num">Heap% <span class="sort-icon">↕</span></th>
+      <th data-col="mem_pressure" data-type="num">Mem. Pressure% <span class="sort-icon">↕</span></th>
+      <th data-col="write_pressure_pct" data-type="num">Pressão Escrita% <span class="sort-icon">↕</span></th>
+      <th data-col="gc_overhead" data-type="num">GC Overhead% <span class="sort-icon">↕</span></th>
+      <th data-col="available_processors" data-type="num">Processadores <span class="sort-icon">↕</span></th>
+      <th data-col="load_sum" data-type="num" data-sum-cols="load_1m,load_5m,load_15m"><div style="display:flex;align-items:center;gap:5px">Load 1m/5m/15m <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()" style="font-weight:400;text-transform:none;letter-spacing:0"><div class="tooltip-btn">?</div><div class="tooltip-box" style="right:-8px;width:360px">${loadTip}</div></div></div></th>
+      <th data-col="disk.used_percent" data-type="num">Disco <span class="sort-icon">↕</span></th>
+      <th data-col="tp_queue" data-type="num" style="text-align:right">Fila TP <span class="sort-icon">↕</span></th>
+      <th data-col="rejections" data-type="num" style="text-align:right">Rejeições Thread Pool <span class="sort-icon">↕</span></th>
+      <th data-col="indexing_rejections" data-type="num" style="text-align:right">Rejeições Indexação <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td>${nodeNameCell(r.name, r.roles, r.master === '*')}</td>
+      <td><span style="font-weight:600;color:var(--blue)">${fmtNum(r.shards_primary)}</span><span style="color:var(--text-muted)"> / ${fmtNum(r.shards_replica)}</span></td>
+      <td>${pctBar(r.cpu)}</td>
+      <td>${pctBar(r['heap.percent'])}</td>
+      <td>${pctBar(r.mem_pressure)}</td>
+      <td>${pctBar(r.write_pressure_pct || 0)}</td>
+      <td>${gcOverheadBar(r.gc_overhead)}</td>
+      <td style="text-align:center;color:var(--text-muted);font-variant-numeric:tabular-nums">${r.available_processors || '-'}</td>
+      <td>${loadBadge(r.load_1m, r.available_processors)} / ${loadBadge(r.load_5m, r.available_processors)} / ${loadBadge(r.load_15m, r.available_processors)}</td>
+      <td><div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:90px">${pctBar(r['disk.used_percent'])}</div>
+        <span style="flex-shrink:0;width:120px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap">${r['disk.used'] || '-'} / ${r['disk.total'] || '-'}</span>
+      </div></td>
+      <td style="text-align:right;color:${(r.tp_queue||0)>0?'var(--yellow)':'var(--text-muted)'};font-weight:${(r.tp_queue||0)>0?'700':'400'}">${fmtNum(r.tp_queue??0)}</td>
+      <td style="text-align:right;color:${(r.rejections||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.rejections||0)>0?'700':'400'}">${fmtNum(r.rejections??0)}</td>
+      <td style="text-align:right;color:${(r.indexing_rejections||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.indexing_rejections||0)>0?'700':'400'}">${fmtNum(r.indexing_rejections??0)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function tableCircuitBreakers(rows) {
+  const trippedTip = `<strong style="color:var(--text);display:block;margin-bottom:6px">O que são os Disparos (tripped)</strong>
+Cada vez que o breaker <strong>aborta uma requisição</strong> para proteger a JVM de estouro de memória, o contador <code style="color:var(--blue);background:var(--surface-hover);padding:1px 4px;border-radius:3px">tripped</code> é incrementado. Cada disparo é uma query ou indexação <strong>rejeitada</strong>.<br><br>
+É um indicador <strong>tardio</strong>: quando ele sobe, o nó já esteve sob pressão de memória e derrubou trabalho.<br><br>
+<span style="color:var(--text-muted)">●</span>&nbsp;<strong style="color:var(--text-muted)">0 disparos</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">(nenhuma requisição derrubada)</span><br>
+<span style="color:var(--red)">●</span>&nbsp;<strong style="color:var(--red)">&gt; 0 disparos</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">(pressão de memória — requer investigação)</span>`;
+
+  const usageTip = `<strong style="color:var(--text);display:block;margin-bottom:6px">Como o % do Limite é calculado</strong>
+A cor reflete a proporção entre o uso estimado do breaker e o limite configurado para ele:<br><br>
+<code style="color:var(--text-muted);font-size:11px">% do limite = uso_estimado / limite</code><br><br>
+<span style="color:var(--green)">●</span>&nbsp;<strong style="color:var(--green)">Verde</strong>&nbsp;&nbsp;&nbsp;— &lt; 65%&nbsp;&nbsp;<span style="color:var(--text-dim)">(folga)</span><br>
+<span style="color:var(--yellow)">●</span>&nbsp;<strong style="color:var(--yellow)">Amarelo</strong>&nbsp;— &gt;= 65% e &lt; 80%&nbsp;&nbsp;<span style="color:var(--text-dim)">(atenção)</span><br>
+<span style="color:var(--red)">●</span>&nbsp;<strong style="color:var(--red)">Vermelho</strong>&nbsp;— &gt;= 80%&nbsp;&nbsp;<span style="color:var(--text-dim)">(próximo de disparar)</span><br><br>
+<span style="color:var(--text-dim)">É o indicador <em>antecipado</em>: ao chegar a 100% o breaker começa a derrubar requisições (sobem os disparos).</span>`;
+
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="node">Nó <span class="sort-icon">↕</span></th>
+      <th data-col="breaker">Breaker <span class="sort-icon">↕</span></th>
+      <th data-col="tripped" data-type="num"><div style="display:flex;align-items:center;gap:5px">Disparos <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()" style="font-weight:400;text-transform:none;letter-spacing:0"><div class="tooltip-btn">?</div><div class="tooltip-box" style="right:-8px;width:340px">${trippedTip}</div></div></div></th>
+      <th data-col="estimated_size_in_bytes" data-type="num">Uso Estimado <span class="sort-icon">↕</span></th>
+      <th data-col="limit_size_in_bytes" data-type="num">Limite <span class="sort-icon">↕</span></th>
+      <th data-col="usage_pct" data-type="num"><div style="display:flex;align-items:center;gap:5px">% do Limite <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()" style="font-weight:400;text-transform:none;letter-spacing:0"><div class="tooltip-btn">?</div><div class="tooltip-box" style="right:0;width:340px">${usageTip}</div></div></div></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td>${nodeCellByName(r.node)}</td>
+      <td><span class="badge badge-gray">${escHtml(r.breaker || '-')}</span></td>
+      <td style="color:${(r.tripped||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.tripped||0)>0?'700':'400'}">${fmtNum(r.tripped)}</td>
+      <td>${formatBytes(r.estimated_size_in_bytes)}</td>
+      <td style="color:var(--text-muted)">${formatBytes(r.limit_size_in_bytes)}</td>
+      <td>${pctBar(r.usage_pct)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+const PRIORITY_COLOR = {
+  IMMEDIATE: 'red', URGENT: 'red', HIGH: 'yellow',
+  NORMAL: 'blue', LOW: 'gray', LANGUID: 'gray',
+};
+
+function tablePendingTasks(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="insert_order" data-type="num">Ordem <span class="sort-icon">↕</span></th>
+      <th data-col="priority">Prioridade <span class="sort-icon">↕</span></th>
+      <th data-col="source">Origem <span class="sort-icon">↕</span></th>
+      <th data-col="executing">Executando <span class="sort-icon">↕</span></th>
+      <th data-col="time_in_queue_millis" data-type="num" style="text-align:right">Tempo na Fila <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const pc = PRIORITY_COLOR[r.priority] || 'gray';
+      const wait = r.time_in_queue_millis || 0;
+      return `<tr>
+      <td style="font-weight:700;color:var(--text-muted)">${r.insert_order ?? '-'}</td>
+      <td><span class="badge badge-${pc}">${escHtml(r.priority || '-')}</span></td>
+      <td style="font-family:monospace;font-size:12px;max-width:520px;white-space:normal">${escHtml(r.source || '-')}</td>
+      <td>${r.executing ? '<span class="badge badge-green">sim</span>' : '<span class="badge badge-gray">não</span>'}</td>
+      <td style="text-align:right;color:${wait >= 200 ? 'var(--red)' : wait > 0 ? 'var(--yellow)' : 'var(--text-muted)'};font-weight:${wait > 0 ? '700' : '400'}">${fmtDuration(wait)}</td>
+    </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
 function tableGeneric(rows) {
   if (!rows.length) return '';
   const cols = Object.keys(rows[0]);
@@ -1132,9 +1635,235 @@ function setupSort(metric, allRows) {
   });
 }
 
+// ─── Modal de Detalhe de Nó (Topologia) ──────────────────
+// Carregado sob demanda ao clicar na caixinha — sem impacto no dashboard.
+
+function openNodeModal(name) {
+  document.getElementById('nodeModalTitle').textContent = name;
+  document.getElementById('nodeModalSubtitle').textContent = '';
+  document.getElementById('nodeModalBody').innerHTML =
+    `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando...</span></div>`;
+  document.getElementById('nodeModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  loadNodeDetail(name);
+}
+
+function closeNodeModal() {
+  document.getElementById('nodeModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function loadNodeDetail(name) {
+  const body = document.getElementById('nodeModalBody');
+  if (!body) return;
+  try {
+    const res  = await fetch('/api/node/' + encodeURIComponent(name));
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderNodeDetail(data);
+  } catch (e) {
+    body.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p></div>`;
+  }
+}
+
+function renderNodeDetail(d) {
+  const body = document.getElementById('nodeModalBody');
+  if (!body) return;
+
+  const id  = d.identity  || {};
+  const os  = d.os        || {};
+  const cpu = d.cpu       || {};
+  const mem = d.memory    || {};
+  const jvm = d.jvm       || {};
+  const dsk = d.disk      || {};
+  const prc = d.process   || {};
+
+  // Topo mostra só o nome da instância (IP e SO ficam nas seções abaixo)
+  document.getElementById('nodeModalSubtitle').textContent = '';
+
+  // Helper: barra de % colorida (reutiliza .tier-disk-track/.tier-disk-fill)
+  function pctRow(label, pct, extra = '', opts = {}) {
+    const color = pct >= 85 ? 'red' : pct >= 70 ? 'yellow' : 'green';
+    // fixedBar: barra de largura fixa (para alinhar barras entre linhas e trazer
+    // o texto logo em seguida, em vez de a barra esticar até o fim da linha)
+    return `<div class="nd-row${opts.fixedBar ? ' nd-row--fixbar' : ''}">
+      <span class="nd-label">${label}</span>
+      <div class="nd-bar-wrap">
+        <div class="tier-disk-track nd-bar"><div class="tier-disk-fill" style="width:${pct}%;background:var(--${color})"></div></div>
+        <span class="nd-pct text-${color}">${pct}%</span>
+        ${extra ? `<span class="nd-extra">${extra}</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // Helper: linha simples label / valor
+  function valRow(label, value, dim = false) {
+    if (value === null || value === undefined || value === '') return '';
+    return `<div class="nd-row">
+      <span class="nd-label">${label}</span>
+      <span class="nd-value${dim ? ' nd-dim' : ''}">${value}</span>
+    </div>`;
+  }
+
+  // Helper: nota de alerta (linha sem coluna de rótulo), cor amarela/vermelha
+  function warnRow(text, color = 'yellow') {
+    return `<div class="nd-row"><span class="nd-value text-${color}" style="font-size:12px">
+      <i class="fas fa-triangle-exclamation" style="margin-right:6px"></i>${text}</span></div>`;
+  }
+
+  function sec(icon, title, rows) {
+    return `<div class="nd-section">
+      <div class="nd-section-title"><i class="fas ${icon}"></i>${title}</div>
+      ${rows.filter(Boolean).join('')}
+    </div>`;
+  }
+
+  // Disco: uso geral + mounts. O uso é calculado sobre "available" (espaço
+  // disponível a não-root), que é a base dos watermarks do ES (85/90/95%).
+  // Filesystems de rede (NFS/CIFS/…) não são recomendados para dados do ES.
+  function isNetworkFs(t) { return /nfs|cifs|smb|glusterfs|ceph|lustre|9p|afs/i.test(t || ''); }
+  function diskUsage(total, available, free) {
+    if (!total) return { used: null, avail: null, pct: 0 };
+    const avail = available != null ? available : free;
+    const used = avail != null ? total - avail : null;
+    return { used, avail, pct: used != null ? Math.round((used / total) * 100) : 0 };
+  }
+
+  // Rótulo do tipo de filesystem (amarelo + ⚠ quando for de rede)
+  function fsTypeTag(t) {
+    if (!t) return '';
+    const net = isNetworkFs(t);
+    return `<span class="${net ? 'text-yellow' : 'nd-dim'}"${net ? ' title="Filesystem de rede — não recomendado para dados do Elasticsearch"' : ''}>(${escHtml(t)}${net ? ' ⚠' : ''})</span>`;
+  }
+
+  const dg = diskUsage(dsk.total, dsk.available, dsk.free);
+  const mounts = Array.isArray(dsk.mounts) ? dsk.mounts : [];
+  // Detalha os mounts quando há mais de um ou quando algum é filesystem de rede
+  const showMounts = mounts.length > 1 || mounts.some(m => isNetworkFs(m.type));
+  // Disco único: o tipo do fs vai no próprio "Uso geral" (sem sub-lista)
+  const singleType = (!showMounts && mounts.length === 1) ? mounts[0].type : '';
+  const dskRows = [
+    dsk.total ? pctRow('Uso geral', dg.pct,
+      `${singleType ? fsTypeTag(singleType) + ' · ' : ''}${formatBytes(dg.used ?? 0)} de ${formatBytes(dsk.total)} · livre ${formatBytes(dg.avail ?? 0)}`) : '',
+  ];
+  if (showMounts) {
+    for (const m of mounts) {
+      if (!m.total) continue;
+      const mu = diskUsage(m.total, m.available, m.free);
+      const typeTag = m.type ? fsTypeTag(m.type) + ' · ' : '';
+      const label = `<i class="fas fa-folder nd-dim" style="margin-right:6px"></i>${escHtml(m.path || m.mount || '—')}`;
+      dskRows.push(pctRow(label, mu.pct,
+        `${typeTag}${formatBytes(mu.used ?? 0)} de ${formatBytes(m.total)}`));
+    }
+  }
+
+  // Load average com qtd de CPUs como referência
+  const procs = os.available_processors || 1;
+  function loadColor(v) { return v / procs >= 1.5 ? 'red' : v / procs >= 0.8 ? 'yellow' : 'green'; }
+  function loadVal(v) {
+    if (!v && v !== 0) return '';
+    const c = loadColor(v);
+    return `<span class="text-${c}" style="font-weight:700">${v.toFixed(2)}</span>`;
+  }
+  const loadLine = [cpu.load_1m, cpu.load_5m, cpu.load_15m].some(v => v != null)
+    ? `<div class="nd-row"><span class="nd-label">Load avg (1m/5m/15m)</span><span class="nd-value">${
+        [cpu.load_1m, cpu.load_5m, cpu.load_15m].map(v => v != null ? loadVal(v) : '—').join(' / ')
+      } <span class="nd-dim">· ${procs} vCPU${procs !== 1 ? 's' : ''}</span></span></div>`
+    : '';
+
+  const heapPct = jvm.heap_used_percent || 0;
+
+  // Sanidade do heap (regras de ouro do ES): não passar de ~50% da RAM (deixar
+  // memória para o filesystem cache) nem de ~32 GB (senão perde os compressed
+  // oops). Ambas derivadas de heap_max + RAM total, sem chamada extra.
+  const GB = 1024 ** 3;
+  const heapMax = jvm.heap_max || 0;
+  const heapPctRam = mem.total ? Math.round((heapMax / mem.total) * 100) : null;
+  const heapOverHalf = heapPctRam != null && heapPctRam > 50;
+  const heapOver32 = heapMax > 32 * GB;
+  const heapRatioRow = heapPctRam != null
+    ? valRow('Heap / RAM física', `<span class="text-${heapOverHalf ? 'yellow' : 'green'}">${heapPctRam}%</span>`)
+    : '';
+  // Aviso de heap > 50% da RAM foi movido para o Diagnóstico (card de insight);
+  // aqui fica só a linha informativa "Heap / RAM física" (colorida) e o aviso de
+  // compressed oops, que é específico do nó.
+  const heapWarns = [
+    heapOver32 ? warnRow('Heap acima de ~32 GB — sem compressed oops (ponteiros comprimidos); um heap menor pode render mais') : '',
+  ];
+
+  // Swap: o ES recomenda swap desabilitado. Verde quando desabilitado/sem uso,
+  // amarelo quando há swap em uso (risco de pausas e latência).
+  const swapTotal = mem.swap_total || 0;
+  const swapUsed  = mem.swap_used  || 0;
+  const swapRow = swapTotal === 0
+    ? valRow('Swap', `<span class="text-green">desabilitado</span>`)
+    : swapUsed === 0
+      ? valRow('Swap', `<span class="text-green">0 em uso</span> <span class="nd-dim">· ${formatBytes(swapTotal)} disponível</span>`)
+      : valRow('Swap', `<span class="text-yellow">${formatBytes(swapUsed)} em uso</span> <span class="nd-dim">de ${formatBytes(swapTotal)}</span>`);
+  const swapWarn = (swapTotal > 0 && swapUsed > 0)
+    ? warnRow('Swap em uso — o ES recomenda desabilitar o swap para evitar pausas de GC e latência')
+    : '';
+
+  // Memory lock (mlockall): heap travado na RAM, protegido de swap.
+  const mlock = mem.mlockall;
+  const mlockRow = mlock == null ? '' : (mlock
+    ? valRow('Memory lock', `<span class="text-green">ativo</span> <span class="nd-dim">· heap travado na RAM</span>`)
+    : valRow('Memory lock', `<span class="text-yellow">inativo</span> <span class="nd-dim">· heap pode ser paginado para swap</span>`));
+
+  const uptimeStr = jvm.uptime_millis ? fmtDuration(jvm.uptime_millis) : '—';
+
+  const fdsStr = prc.open_fds != null && prc.max_fds
+    ? `${fmtNum(prc.open_fds)} / ${fmtNum(prc.max_fds)}`
+    : prc.open_fds != null ? fmtNum(prc.open_fds) : null;
+
+  body.innerHTML = `<div class="nd-body">
+    ${sec('fa-server', 'Identificação', [
+      valRow('Host', id.host),
+      valRow('Versão ES', id.version),
+      valRow('Build flavor', id.build_flavor, true),
+      valRow('Build type', id.build_type, true),
+      valRow('Build hash', id.build_hash, true),
+      valRow('Roles', (id.roles || []).join(', '), true),
+    ])}
+    ${sec('fa-desktop', 'Sistema Operacional', [
+      valRow('SO', os.pretty_name || os.name),
+      valRow('Versão do kernel', os.version, true),
+      valRow('Arquitetura', os.arch, true),
+    ])}
+    ${sec('fa-microchip', 'CPU', [
+      cpu.percent != null ? pctRow('CPU (SO)', cpu.percent) : '',
+      cpu.proc_percent != null ? pctRow('CPU (processo ES)', cpu.proc_percent) : '',
+      loadLine,
+    ])}
+    ${sec('fa-memory', 'RAM/JVM', [
+      mem.total ? pctRow('RAM usada', mem.used_percent,
+        `${formatBytes(mem.used)} de ${formatBytes(mem.total)} · livre ${formatBytes(mem.free ?? (mem.total - mem.used))}`, { fixedBar: true }) : '',
+      jvm.heap_max ? pctRow('Heap usada', heapPct,
+        `${formatBytes(jvm.heap_used)} de ${formatBytes(jvm.heap_max)} · livre ${formatBytes(jvm.heap_max - jvm.heap_used)}`, { fixedBar: true }) : '',
+      heapRatioRow,
+      ...heapWarns,
+      swapRow,
+      swapWarn,
+      mlockRow,
+      valRow('Uptime', uptimeStr),
+      valRow('Versão JVM', jvm.version),
+      valRow('VM', [jvm.vm_name, jvm.vm_vendor].filter(Boolean).join(' · '), true),
+    ])}
+    ${sec('fa-hard-drive', 'Disco', dskRows)}
+    ${(fdsStr || jvm.threads) ? sec('fa-file', 'Processo', [
+      fdsStr ? valRow('File descriptors (abertos / máx.)', fdsStr) : '',
+      jvm.threads ? valRow('Threads', fmtNum(jvm.threads)) : '',
+    ]) : ''}
+  </div>`;
+}
+
 // ─── Keyboard Shortcuts ───────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    const jm = document.getElementById('jsonModal');
+    if (jm && jm.style.display === 'flex') { closeJsonModal(); return; }
+    const nm = document.getElementById('nodeModal');
+    if (nm && nm.style.display === 'flex') { closeNodeModal(); return; }
     closeDetailModal(); closeAliasModal(); closeConfirmModal();
   }
   if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' &&
