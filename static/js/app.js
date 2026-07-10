@@ -6,6 +6,7 @@ let currentSort = { col: null, dir: 'asc' };
 let currentRows = [];
 let currentMetric = null;
 const detailNavStack = [];
+let tasksList = [];
 let clusterHealthFilters = new Set();
 
 // ─── Utilities ───────────────────────────────────────────
@@ -27,6 +28,26 @@ function parseSizeStr(str) {
 function fmtNum(n) {
   if (n == null || n === '') return '-';
   return Number(n).toLocaleString('pt-BR');
+}
+
+function fmtNanosToSecs(ns) {
+  const totalSecs = ns / 1e9;
+  if (totalSecs < 60) return totalSecs.toFixed(1) + 's';
+  const totalMins = totalSecs / 60;
+  if (totalMins < 60) return totalMins.toFixed(1) + 'm';
+  return (totalMins / 60).toFixed(1) + 'h';
+}
+
+function fmtDuration(ms) {
+  if (!ms || ms <= 0) return '0s';
+  if (ms < 1000) return Math.round(ms) + 'ms';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + 's';
+  const totalM = Math.floor(s / 60);
+  if (totalM < 60) return totalM + 'm';
+  const h = Math.floor(totalM / 60);
+  const m = totalM % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 function escHtml(str) {
@@ -563,6 +584,7 @@ function showPage(page) {
   // O timestamp / refresh só fazem sentido onde há dado ao vivo para recarregar.
   document.getElementById('topbarActions').style.visibility =
     REFRESHABLE_PAGES.has(page) ? 'visible' : 'hidden';
+  if (page === 'insights') renderInsights();
   // Reflete a página na URL (hash) para preservar no refresh e permitir compartilhar o link.
   if (location.hash.slice(1) !== page) {
     history.replaceState(null, '', '#' + page);
@@ -636,7 +658,9 @@ async function loadDashboard() {
     // Refresh global: coleta completa, que também realimenta Inventário e Diagnóstico.
     const data = await fetchDashboard();
     renderCards(data);
-
+    // Mantém a página Diagnóstico e o badge da nav em sincronia a cada atualização
+    // (a seção fica oculta nos Sinais Vitais, mas o badge reflete os riscos atuais).
+    renderInsights();
     document.getElementById('lastUpdated').textContent =
       'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
   } catch (e) {
@@ -691,6 +715,99 @@ function sectionCardsHealth(d) {
   ].join('');
 }
 
+// Faixa de sinais binários de saúde: pressão no master, falhas de ILM e
+// disparos de circuit breaker — cada um é um card horizontal clicável que
+// abre o detalhe correspondente.
+function sectionCardsSignals(d) {
+  return cardAlertSignals(d, d.cluster_health);
+}
+
+function cardAlertSignals(d, h) {
+  const pending = h.number_of_pending_tasks || 0;
+  const wait = h.task_max_waiting_in_queue_millis || 0;
+  const pendColor = pending > 0 ? (wait >= 200 ? 'red' : 'yellow') : 'green';
+  const pendSub = pending > 0 ? `Espera máx ${fmtDuration(wait)}` : 'sem fila no master';
+  const pendTip = 'Tarefas de atualização do <strong>cluster state</strong> (criação de índices, alterações de mapping, alocação de shards) enfileiradas aguardando o nó <strong>master</strong>.<br><br>' +
+    'Valores persistentemente acima de zero — e principalmente uma <strong>espera máxima</strong> alta — indicam um master sobrecarregado, causa comum de lentidão generalizada no cluster.';
+
+  const ilm = d.ilm_errors || 0;
+  const ilmColor = ilm > 0 ? 'red' : 'green';
+  const ilmSub = ilm > 0 ? `${fmtNum(ilm)} índice(s) parados em erro` : 'nenhum índice em erro';
+  const ilmTip = 'Índices cuja execução da política de ILM <strong>falhou</strong> e está parada num passo de <strong>ERRO</strong> (consulta <code>_ilm/explain?only_errors=true</code>).<br><br>' +
+    'Enquanto o índice permanece nesse estado, ele não avança nas fases (hot → warm → cold → delete): não é encolhido, realocado nem excluído. Causas comuns incluem falta de espaço em disco, ausência de nós com o atributo de alocação exigido pela fase ou erros de permissão. Requer investigação e, muitas vezes, um <code>_ilm/retry</code> após corrigir a causa raiz.';
+
+  const cb = d.circuit_breaker_trips || 0;
+  const cbColor = cb > 0 ? 'red' : 'green';
+  const cbSub = cb > 0 ? `Parent: ${fmtNum(d.circuit_breaker_parent_trips)} disparo(s)` : 'sem disparos desde o boot';
+  const cbTip = 'Os <strong>circuit breakers</strong> do Elasticsearch abortam requisições para proteger a JVM de estouro de memória. O contador <code>tripped</code> conta quantas requisições já foram <strong>derrubadas por proteção de memória</strong> — cada disparo é uma query ou indexação rejeitada.<br><br>' +
+    'O breaker <strong>parent</strong> é o mais crítico: ele soma o uso de todos os demais (fielddata, request, in-flight, etc.) e, ao atingir o limite (padrão ~95% do heap), começa a rejeitar tudo. Disparos acima de zero indicam pressão de memória severa e instabilidade — o cluster pode estar derrubando consultas silenciosamente. Clique para ver o uso atual de cada breaker por nó.<br><br>' +
+    '<strong>Atenção:</strong> este contador é <strong>acumulado desde o boot do nó</strong> — não reflete o instante atual. Para avaliar o estado <em>agora</em>, observe o <strong>Parent CB %</strong> e a <strong>Fila TP</strong> na tabela <em>Utilização por Nó</em>, que são indicadores vivos e antecipados.';
+
+  // Backup / SLM: indisponível (licença/permissão) → neutro; falha → red;
+  // não configurado → yellow; em dia → green. Espelha o insight de backup.
+  const slm = d.slm || {};
+  let slmColor, slmVal, slmSub;
+  if (!slm.available) {
+    slmColor = 'muted'; slmVal = 0; slmSub = 'indisponível (licença/permissão)';
+  } else if ((slm.failed || 0) > 0) {
+    slmColor = 'red'; slmVal = slm.failed; slmSub = `${fmtNum(slm.failed)} política(s) com falha`;
+  } else if (!slm.configured) {
+    slmColor = 'yellow'; slmVal = 0; slmSub = 'sem snapshots automáticos';
+  } else {
+    slmColor = 'green'; slmVal = slm.configured; slmSub = 'backups em dia';
+  }
+  const slmTip = 'Estado das políticas de <strong>snapshot (SLM)</strong> — os backups automáticos do cluster.<br><br>' +
+    '<strong>Vermelho</strong>: a execução mais recente de alguma política falhou (os backups podem estar desatualizados — verifique o repositório). ' +
+    '<strong>Amarelo</strong>: nenhuma política configurada, o cluster não tem backup automático. ' +
+    '<strong>—</strong>: a API de SLM está indisponível (licença ou permissão).<br><br>' +
+    'Clique para ver cada política: repositório, agendamento, último sucesso/falha e próxima execução.';
+
+  // Flood-stage é o único sinal vital aqui: bloqueio de escrita aplicado
+  // automaticamente quando o disco passou de 95% — incidente de disponibilidade
+  // ao vivo. Read-only manual sem ILM (yellow) e read-only via ILM (esperado)
+  // não entram nos sinais vitais; o manual aparece como insight de higiene.
+  const flood = (d.read_only_indices || {}).flood || 0;
+  const floodColor = flood > 0 ? 'red' : 'green';
+  const floodSub = flood > 0 ? `${fmtNum(flood)} índice(s) com escrita bloqueada` : 'nenhum índice nesse status';
+  const floodTip = '<strong>Flood-stage</strong>: bloqueio de escrita aplicado <strong>automaticamente</strong> pelo Elasticsearch quando o disco de um nó passou de <strong>95%</strong> (<code>cluster.routing.allocation.disk.watermark.flood_stage</code>).<br><br>' +
+    'É um <strong>incidente de disponibilidade ao vivo</strong>: enquanto durar, os índices afetados não aceitam escrita. O bloqueio (<code>index.blocks.read_only_allow_delete</code>) <strong>persiste mesmo após liberar disco</strong> — é preciso removê-lo manualmente (<code>"index.blocks.read_only_allow_delete": null</code>) depois de resolver o espaço.<br><br>' +
+    'Bloqueios <em>read-only manuais</em> (fora do ILM) não são incidente e aparecem como apontamento na página <strong>Diagnóstico</strong>; read-only definido pelo ILM é esperado. Clique para listar os índices bloqueados e a categoria de cada um.';
+
+  return [
+    signalItem('pending_tasks', 'Tarefas Pendentes', 'Tarefas de cluster state aguardando o nó master', 'fa-list-check', 'Tarefas Pendentes', pending, pendColor, pendSub, pendTip, 'help-pending-tasks'),
+    signalItem('ilm_errors', 'ILM com Falha', '', 'fa-circle-exclamation', 'ILM com Falha', ilm, ilmColor, ilmSub, ilmTip, 'help-ilm-errors'),
+    signalItem('circuit_breakers', 'Circuit Breakers', '', 'fa-bolt', 'Circuit Breakers', cb, cbColor, cbSub, cbTip, 'help-circuit-breakers'),
+    signalItem('slm_policies', 'Políticas de Snapshot (SLM)', 'Último backup, falhas e agendamento', 'fa-database', 'Backup (SLM)', slmVal, slmColor, slmSub, slmTip, 'help-slm-policies'),
+    signalItem('read_only_indices', 'Índices Read-only', '', 'fa-water', 'Flood-stage', flood, floodColor, floodSub, floodTip, 'help-flood-stage'),
+  ].join('');
+}
+
+// Snapshots em criação agora (_snapshot/_status, via d.snapshots_running) —
+// vive no Inventário (Volume e Capacidade), não nos Sinais Vitais: é dado de
+
+
+// color: 'green' (ok, com check) | 'yellow'/'red'/'blue' (alerta, sub colorido) |
+// 'muted' (indisponível — renderiza '—' em vez do número, sem check nem cor).
+function signalItem(metric, detailTitle, detailSub, icon, label, value, color, sub, tip, topic) {
+  const numHtml = color === 'muted' ? '&mdash;' : fmtNum(value);
+  const subHtml = color === 'green'
+    ? `<i class="fas fa-check signal-ok-icon"></i> ${sub}`
+    : sub;
+  const subStyle = (color === 'red' || color === 'yellow' || color === 'blue') ? `style="color:var(--${color})"` : '';
+  const clickAttr = `onclick="openDetail('${metric}','${detailTitle}','${detailSub}')"`;
+  return `<div class="signal-card status-${color}" ${clickAttr}>
+    <div class="signal-num value-${color}">${numHtml}</div>
+    <div class="signal-info">
+      <div class="signal-title">
+        <i class="fas ${icon} signal-title-icon"></i>
+        <span class="signal-label">${label}</span>
+      </div>
+      <div class="signal-sub" ${subStyle}>${subHtml}</div>
+    </div>
+    ${tooltip(tip, topic)}
+  </div>`;
+}
+
 function sectionCardsResources(d) {
   return cardResourceTable(d);
 }
@@ -705,6 +822,9 @@ function renderCards(d) {
     section('Saúde do Cluster', 'health'),
     `<div id="section-cards-health" class="section-health-cards">${sectionCardsHealth(d)}</div>`,
 
+    section('Sinais de Alerta', 'signals'),
+    `<div id="section-cards-signals" class="section-signals-cards">${sectionCardsSignals(d)}</div>`,
+
     section('Utilização de Recursos', 'resources'),
     `<div id="section-cards-resources" style="display:contents">${sectionCardsResources(d)}</div>`,
   ].join('');
@@ -714,6 +834,7 @@ function renderCards(d) {
 // em DASHBOARD_SECTIONS (es_service.py) e que vão em ?sections=.
 const SECTION_RENDERERS = {
   health: sectionCardsHealth,
+  signals: sectionCardsSignals,
   resources: sectionCardsResources,
 };
 
@@ -734,6 +855,7 @@ async function refreshSection(sectionId) {
       new Promise(resolve => setTimeout(resolve, 500)),
     ]);
     if (fn) container.innerHTML = fn(data);
+    renderInsights();
   } catch (_) {
     // mantém dados antigos: restaura a render da seção a partir do último estado
     if (fn && dashboardData) container.innerHTML = fn(dashboardData);
@@ -1454,6 +1576,461 @@ function sortNodesByRole(nodes) {
   });
 }
 
+function insightCard(sev, icon, title, metric, desc, tag, onclick) {
+  const click = onclick ? ` onclick="${onclick}"` : '';
+  return `<div class="insight-card sev-${sev}">
+    <div class="insight-icon"><i class="fas ${icon}"></i></div>
+    <div class="insight-body">
+      <div class="insight-head"><span class="insight-title">${title}</span>${metric ? `<span class="insight-metric">${metric}</span>` : ''}</div>
+      <div class="insight-desc">${desc}</div>
+      ${tag ? `<div class="insight-tag"${click}><i class="fas fa-arrow-right"></i>${tag}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+// Detalhe local (sem backend) do insight "heap acima de 50% da RAM": lista só os
+// nós alertados, com nome+role, o % do heap sobre a RAM, o heap e a RAM total.
+// Alimentado pelo dashboardData já carregado (mesmo padrão de openShardsDetail).
+function openHeapRamDetail() {
+  if (!dashboardData) return;
+  const nodes = (dashboardData.nodes_summary || [])
+    .filter(n => n.heap_max && n.ram_total && n.heap_max / n.ram_total > 0.5)
+    .sort((a, b) => (b.heap_max / b.ram_total) - (a.heap_max / a.ram_total));
+
+  clusterHealthFilters.clear();
+  detailNavStack.length = 0;
+  document.getElementById('detailTitle').textContent = 'Heap acima de 50% da RAM';
+  document.getElementById('detailTitleTip').innerHTML = '';
+  document.getElementById('detailSubtitle').textContent =
+    `${fmtNum(nodes.length)} nó${nodes.length !== 1 ? 's' : ''} — o heap deve ficar em ≤ 50% da RAM física`;
+  document.getElementById('detailSearch').value = '';
+  document.getElementById('detailCount').textContent = '';
+  document.getElementById('detailSearchBar').style.display = 'none';
+  document.getElementById('detailBreadcrumb').style.display = 'none';
+  document.querySelector('#detailModal .detail-card').classList.remove('detail-card--wide');
+  document.getElementById('detailModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setExportBtn(false);
+
+  const body = document.getElementById('detailBody');
+  if (!nodes.length) {
+    body.innerHTML = `<div class="empty-state"><i class="fas fa-circle-check"></i><p>Nenhum nó com heap acima de 50% da RAM.</p></div>`;
+    return;
+  }
+  const rows = nodes.map(n => {
+    const pct = Math.round(n.heap_max / n.ram_total * 100);
+    const color = pct >= 75 ? 'red' : 'yellow';
+    return `<tr>
+      <td>${nodeNameCell(n.name, n.roles, n.is_master)}</td>
+      <td><span class="text-${color}" style="font-weight:700">${pct}%</span></td>
+      <td>${formatBytes(n.heap_max)}</td>
+      <td>${formatBytes(n.ram_total)}</td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = `<table class="data-table">
+    <thead><tr>
+      <th>Nó</th>
+      <th>Heap / RAM</th>
+      <th>Heap</th>
+      <th>RAM total</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function renderInsights() {
+  const el = document.getElementById('page-insights');
+  if (!el) return;
+  const d = dashboardData;
+  if (!d) {
+    el.innerHTML = `<div class="empty-state">
+      <i class="fas fa-circle-info"></i>
+      <p>Sem dados ainda — abra os Sinais Vitais para carregar as métricas.</p>
+    </div>`;
+    return;
+  }
+
+  const h = d.cluster_health || {};
+  const status = h.status || 'green';
+  const nodes = d.nodes_summary || [];
+  const insights = [];
+  const add = (sev, icon, title, metric, desc, tag, onclick) =>
+    insights.push({ sev, html: insightCard(sev, icon, title, metric, desc, tag, onclick) });
+  const plural = (n) => n !== 1 ? 's' : '';
+
+  // 1. Índices sem réplica
+  const noRep = d.indices_without_replicas || 0;
+  if (noRep > 0) {
+    const total = d.total_indices || 0;
+    const pct = total ? Math.round(noRep / total * 100) : 0;
+    add('red', 'fa-shield-halved',
+      `${fmtNum(noRep)} índice${plural(noRep)} sem réplica`,
+      total ? `≈ ${pct}% do total` : '',
+      'Índices sem cópia — a perda de um único data node pode significar perda de dados.',
+      'Listar índices sem réplica',
+      `openDetail('indices_without_replicas','Índices sem Réplica','')`);
+  }
+
+  // 2. Índices sem política de ILM
+  const noIlm = d.indices_without_ilm || 0;
+  if (noIlm > 0) {
+    add('yellow', 'fa-clock-rotate-left',
+      `${fmtNum(noIlm)} índice${plural(noIlm)} sem política de ILM`,
+      'sem ciclo de vida',
+      'Crescem sem rollover nem expurgo automático — risco de saturar o disco com o tempo.',
+      'Listar índices sem política de ILM',
+      `openDetail('indices_without_ilm','Sem Política de ILM','')`);
+  }
+
+  // 3. Disco alto por tier — um card por tier afetado (≥70%); vermelho se ≥85%
+  const byTier = {};
+  for (const n of nodes) {
+    const tier = nodeTier(n.roles);
+    const disk = n.disk_used_percent;
+    if (tier == null || disk == null || disk < 70) continue;
+    (byTier[tier] = byTier[tier] || []).push(n);
+  }
+  for (const tier of ['HOT', 'WARM', 'COLD', 'FROZEN']) {
+    const hot = byTier[tier];
+    if (!hot || !hot.length) continue;
+    hot.sort((a, b) => b.disk_used_percent - a.disk_used_percent);
+    const max = hot[0].disk_used_percent;
+    const list = hot.map(n => `${n.name} (${n.disk_used_percent.toFixed(1)}%)`).join(', ');
+    // Watermarks padrão do ES: low 85% (não aloca novos), high 90% (realoca para fora), flood 95% (read-only)
+    let tail;
+    if (max >= 95) tail = 'nível de flood-stage (≥ 95%) — índices podem entrar em modo read-only.';
+    else if (max >= 90) tail = 'acima do high watermark (≥ 90%) — o ES força a realocação de shards para fora do nó.';
+    else if (max >= 85) tail = 'acima do low watermark (≥ 85%) — novos shards deixam de ser alocados no nó.';
+    else tail = 'acima do limite de alerta (70%).';
+    add(max >= 85 ? 'red' : 'yellow', 'fa-hard-drive',
+      `Disco alto no tier ${tier}`,
+      `${hot.length} nó${plural(hot.length)} ≥ 70%`,
+      `${list} — ${tail}`,
+      'Ver detalhes',
+      'openDiskModal()');
+  }
+
+  // 4. Políticas de ILM sem fase delete
+  const ilmNoDel = d.ilm_without_delete || 0;
+  if (ilmNoDel > 0) {
+    add('yellow', 'fa-trash-can',
+      `${fmtNum(ilmNoDel)} política${plural(ilmNoDel)} de ILM sem fase delete`,
+      'retenção infinita',
+      'Dados gerenciados por essas políticas migram entre tiers mas nunca são removidos.',
+      'Listar políticas sem fase delete',
+      `openDetail('ilm_without_delete','ILM sem Fase DELETE','')`);
+  }
+
+  // 5. Réplicas não alocáveis (rep >= nº de data nodes) — mantém o cluster YELLOW
+  const unassignRep = d.unassignable_replicas || 0;
+  if (unassignRep > 0) {
+    const dataNodes = h.number_of_data_nodes || 0;
+    add('red', 'fa-clone',
+      `${fmtNum(unassignRep)} índice${plural(unassignRep)} com réplicas não alocáveis`,
+      `≥ ${dataNodes} data node${plural(dataNodes)}`,
+      'O número de réplicas é maior ou igual ao de data nodes, então essas réplicas nunca alocam e mantêm o cluster em YELLOW. Reduza as réplicas ou adicione data nodes.',
+      'Listar índices afetados',
+      `openDetail('unassignable_replicas','Réplicas Não Alocáveis','')`);
+  }
+
+  // 6. Quorum de master frágil (poucos master-eligible ou número par)
+  const me = d.master_eligible_nodes || 0;
+  const totalNodes = d.total_nodes || 0;
+  if (totalNodes > 1 && (me < 3 || me % 2 === 0)) {
+    const sev = me < 3 ? 'red' : 'yellow';
+    const msg = me < 3
+      ? `Há apenas ${fmtNum(me)} nó${plural(me)} master-eligible — sem tolerância à falha do master (o recomendado em produção são 3).`
+      : `${fmtNum(me)} nós master-eligible (número par) — recomenda-se um número ímpar para um quorum saudável e evitar split-brain.`;
+    add(sev, 'fa-crown',
+      'Quorum de master frágil',
+      `${fmtNum(me)} master-eligible`,
+      msg,
+      'Ver nós',
+      `openDetail('nodes','Nós do Cluster','')`);
+  }
+
+  // 7. Oversharding — vários primários com tamanho médio por shard < 1 GB
+  const overshard = d.oversharded_indices || 0;
+  if (overshard > 0) {
+    add('yellow', 'fa-grip',
+      `${fmtNum(overshard)} índice${plural(overshard)} com oversharding`,
+      'shards pequenos demais',
+      'Índices com mais de um shard primário e tamanho médio por shard abaixo de 1 GB — muitos shards pequenos desperdiçam heap e geram overhead de cluster.',
+      'Listar índices',
+      `openDetail('oversharded_indices','Índices com Oversharding','')`);
+  }
+
+  // 8. Pressão de memória (GC overhead ≥ 25% ou mem pressure ≥ 75% em algum nó)
+  const memHot = nodes.filter(n => (n.gc_overhead || 0) >= 25 || (n.mem_pressure || 0) >= 75);
+  if (memHot.length) {
+    const list = memHot.map(n => n.name).join(', ');
+    add('yellow', 'fa-memory',
+      `${fmtNum(memHot.length)} nó${plural(memHot.length)} sob pressão de memória`,
+      'GC / heap alto',
+      `${list} — GC overhead ≥ 25% ou memory pressure ≥ 75%, sinal de heap pressionado (risco de pausas longas de GC).`,
+      'Ver nós',
+      `openDetail('nodes','Nós do Cluster','')`);
+  }
+
+  // 8a2. Heap acima de 50% da RAM física (pouca memória para o filesystem cache)
+  const heapBig = nodes.filter(n => n.heap_max && n.ram_total && n.heap_max / n.ram_total > 0.5);
+  if (heapBig.length) {
+    const list = heapBig.map(n => `${n.name} (${Math.round(n.heap_max / n.ram_total * 100)}%)`).join(', ');
+    add('yellow', 'fa-scale-unbalanced',
+      `${fmtNum(heapBig.length)} nó${plural(heapBig.length)} com heap acima de 50% da RAM`,
+      'Heap desproporcional',
+      `${list} — o heap ocupa mais da metade da RAM física, sobrando pouca memória para o filesystem cache (essencial ao desempenho de busca do ES). O recomendado é manter o heap em ≤ 50% da RAM.`,
+      'Ver nós',
+      `openHeapRamDetail()`);
+  }
+
+  // 8b. Pressão de escrita ao vivo (indexing_pressure ≥ 70% em algum nó)
+  const writeHot = nodes.filter(n => (n.write_pressure_pct || 0) >= 70);
+  if (writeHot.length) {
+    const critical = writeHot.some(n => (n.write_pressure_pct || 0) >= 90);
+    const list = writeHot.map(n => `${n.name} (${n.write_pressure_pct}%)`).join(', ');
+    add(critical ? 'red' : 'yellow', 'fa-pen-to-square',
+      `${fmtNum(writeHot.length)} nó${plural(writeHot.length)} sob pressão de escrita`,
+      'Indexing pressure alto',
+      `${list} — memória de buffer de indexação acima de 70% do limite. Ao chegar a 100% o nó passa a rejeitar escritas (HTTP 429). Veja a coluna "Pressão Escrita" na tabela de nós.`,
+      'Ver nós',
+      `openDetail('nodes','Nós do Cluster','')`);
+  }
+
+  // 9. Versões de ES mistas (rolling upgrade em andamento/incompleto)
+  const versions = d.node_versions || [];
+  if (versions.length > 1) {
+    add('yellow', 'fa-code-branch',
+      'Versões de Elasticsearch mistas',
+      `${versions.length} versões`,
+      `Nós rodando versões diferentes (${escHtml(versions.join(', '))}) — rolling upgrade em andamento ou incompleto. Evite operações prolongadas (reindex, snapshots grandes) até concluir.`,
+      'Ver nós',
+      `openDetail('nodes','Nós do Cluster','')`);
+  }
+
+  // 10. Backup / SLM (só avalia quando a consulta de SLM esteve disponível)
+  const slm = d.slm || {};
+  if (slm.available) {
+    if (slm.failed > 0) {
+      add('red', 'fa-database',
+        `${fmtNum(slm.failed)} política${plural(slm.failed)} de snapshot com falha`,
+        'backup falhando',
+        'A execução mais recente de uma ou mais políticas de SLM falhou — os backups podem estar desatualizados. Verifique o repositório de snapshots.',
+        'Revisar SLM',
+        `openDetail('slm_policies','Políticas de Snapshot (SLM)','Último backup, falhas e agendamento')`);
+    } else if (!slm.configured) {
+      add('yellow', 'fa-database',
+        'Sem política de backup (SLM)',
+        'sem snapshots automáticos',
+        'Não há nenhuma política de snapshot (SLM) configurada — o cluster não possui backups automáticos. Configure o SLM para garantir recuperação em caso de perda de dados.',
+        'Configurar SLM',
+        `openDetail('slm_policies','Políticas de Snapshot (SLM)','Backups automáticos do cluster')`);
+    }
+  }
+
+  // 11. Tarefa longa em execução (reusa tasksList já carregado pelos Sinais Vitais)
+  if (Array.isArray(tasksList) && tasksList.length) {
+    const longest = tasksList.reduce((a, b) =>
+      (b.running_time_in_nanos || 0) > (a.running_time_in_nanos || 0) ? b : a);
+    // Contagem por operação (tarefas-pai), coerente com o badge da seção; o "mais
+    // longa" continua sendo o maior tempo bruto (o pai carrega o tempo total).
+    const ops = taskRoots(tasksList).length;
+    add('blue', 'fa-gears',
+      `${fmtNum(ops)} tarefa${plural(ops)} longa${plural(ops)} em execução`,
+      `${fmtNanosToSecs(longest.running_time_in_nanos || 0)} ativa`,
+      `Mais longa: <code>${escHtml(longest.action || '—')}</code> no ${escHtml(longest.node || '—')}.`,
+      'Ver tarefas em execução',
+      'goToTasks()');
+  }
+
+  // 12. Índices com bloqueio de escrita — flood-stage (red) e manual sem ILM (yellow);
+  //     read-only definido pelo ILM é esperado e não entra aqui.
+  const ro = d.read_only_indices || {};
+  const roFlood = ro.flood || 0;
+  const roManual = ro.manual || 0;
+  if (roFlood > 0) {
+    add('red', 'fa-lock',
+      `${fmtNum(roFlood)} índice${plural(roFlood)} bloqueado${plural(roFlood)} por flood-stage`,
+      'disco / escrita bloqueada',
+      'Bloqueio de escrita aplicado automaticamente pelo ES quando o disco passou de 95% (flood-stage). Pode persistir mesmo após liberar disco — verifique e remova com <code>"index.blocks.read_only_allow_delete": null</code> depois de resolver o espaço.',
+      'Listar índices bloqueados',
+      `openDetail('read_only_indices','Índices Read-only','')`);
+  }
+  if (roManual > 0) {
+    add('yellow', 'fa-lock',
+      `${fmtNum(roManual)} índice${plural(roManual)} read-only sem ILM`,
+      'bloqueio manual',
+      'Índices com bloqueio de escrita (<code>read_only</code>/<code>write</code>) que <strong>não</strong> são gerenciados por ILM — pode ser intencional (dados arquivados) ou um bloqueio manual esquecido. Índices deixados read-only pelo ILM não entram aqui.',
+      'Listar índices bloqueados',
+      `openDetail('read_only_indices','Índices Read-only','')`);
+  }
+
+  // 13. Configurações de cluster de risco (alocação desligada, watermarks, read-only…)
+  const cs = d.cluster_settings_risks || {};
+  if (cs.available && (cs.red > 0 || cs.yellow > 0)) {
+    const n = cs.red + cs.yellow;
+    add(cs.red > 0 ? 'red' : 'yellow', 'fa-sliders',
+      `${fmtNum(n)} ${n !== 1 ? 'configurações de cluster de risco' : 'configuração de cluster de risco'}`,
+      'overrides',
+      'Sobrescritas no cluster que podem causar problemas — por exemplo alocação de shards restrita, watermarks de disco desabilitados ou cluster em read-only.',
+      'Revisar configurações',
+      `openDetail('cluster_settings','Configurações de Cluster de Risco','')`);
+  }
+
+  // 14. Deprecations (prontidão para upgrade)
+  const dep = d.deprecations || {};
+  if (dep.available && dep.total > 0) {
+    const parts = [];
+    if (dep.critical) parts.push(`${fmtNum(dep.critical)} crítico${plural(dep.critical)}`);
+    if (dep.warning) parts.push(`${fmtNum(dep.warning)} aviso${plural(dep.warning)}`);
+    add(dep.critical > 0 ? 'red' : 'yellow', 'fa-clipboard-check',
+      `${fmtNum(dep.total)} aviso${plural(dep.total)} de deprecação`,
+      'prontidão p/ upgrade',
+      `${parts.join(' e ')} — configurações que vão mudar ou quebrar na próxima versão major. Resolva antes de atualizar.`,
+      'Ver deprecations',
+      `openDetail('deprecations','Deprecations','Prontidão para upgrade')`);
+  }
+
+  // 15. Licença expirada ou expirando
+  const lic = d.license || {};
+  if (lic.available && (lic.status === 'expired' || (lic.days_left != null && lic.days_left <= 30))) {
+    const expired = lic.status === 'expired';
+    const sev = (expired || (lic.days_left != null && lic.days_left <= 7)) ? 'red' : 'yellow';
+    const type = (lic.type || '-').toUpperCase();
+    const msg = expired
+      ? `A licença ${escHtml(type)} está expirada — recursos licenciados podem estar desativados.`
+      : `A licença ${escHtml(type)} expira em ${fmtNum(lic.days_left)} dia${plural(lic.days_left)}. Renove para não perder recursos.`;
+    add(sev, 'fa-id-card',
+      expired ? 'Licença expirada' : 'Licença expirando',
+      escHtml(type),
+      msg,
+      'Ver licenciamento');
+  }
+
+  // 16. Shards não alocados — diagnóstico via allocation explain
+  const unassignedShards = h.unassigned_shards || 0;
+  if (unassignedShards > 0) {
+    add('red', 'fa-circle-question',
+      `${fmtNum(unassignedShards)} shard${plural(unassignedShards)} não alocado${plural(unassignedShards)} — diagnóstico`,
+      'allocation explain',
+      'Descubra a razão exata pela qual cada shard não aloca (a decisão dos deciders por nó) via <code>_cluster/allocation/explain</code>.',
+      'Diagnosticar alocação',
+      `openDetail('allocation_explain','Diagnóstico de Alocação','Por que cada shard não aloca')`);
+  }
+
+  // 17. Disponibilidade — só aparece quando há problema (oculta se tudo saudável)
+  const unassigned = h.unassigned_shards || 0;
+  const cbTrips = d.circuit_breaker_trips || 0;
+  const activePct = h.active_shards_percent ?? 100;
+  const availabilityAdded = status !== 'green' || unassigned > 0 || cbTrips > 0;
+  if (availabilityAdded) {
+    const sev = (status === 'red' || unassigned > 0) ? 'red' : 'yellow';
+    const parts = [`${activePct}% dos shards ativos`, `${fmtNum(unassigned)} não alocado${plural(unassigned)}`];
+    if (cbTrips > 0) parts.push(`${fmtNum(cbTrips)} disparo${plural(cbTrips)} de circuit breaker`);
+    add(sev, 'fa-heart-pulse',
+      'Disponibilidade comprometida',
+      status.toUpperCase(),
+      parts.join(', ') + '.',
+      'Revisar saúde do cluster',
+      `openDetail('cluster_health','Saúde por Índice','Status e shards por índice')`);
+  }
+
+  // ─── Resumo de severidade (topo) ───
+  const counts = { red: 0, yellow: 0, blue: 0 };
+  for (const i of insights) if (counts[i.sev] != null) counts[i.sev]++;
+  const riskTotal = counts.red + counts.yellow;
+  const badge = document.getElementById('insightsBadge');
+  if (badge) {
+    badge.textContent = riskTotal;
+    badge.hidden = riskTotal === 0;
+  }
+  // A cor/ícone do resumo seguem a disponibilidade do cluster (status), não as
+  // severidades de configuração: um cluster GREEN mostra o card verde (OK) mesmo
+  // havendo riscos de configuração a tratar.
+  const sumColor = healthColor(status);
+  const sumIcon = status === 'red' ? 'fa-circle-exclamation'
+    : (status === 'yellow' ? 'fa-triangle-exclamation' : 'fa-circle-check');
+  const configRisks = riskTotal - (availabilityAdded ? 1 : 0);
+  const v = configRisks !== 1 ? 'precisam' : 'precisa';
+  const riskPhrase = configRisks > 0
+    ? (status === 'green'
+        ? ` Há, porém, <strong class="text-yellow">${configRisks} risco${plural(configRisks)} de configuração</strong> que ${v} de atenção.`
+        : ` Soma-se a isso <strong class="text-yellow">${configRisks} risco${plural(configRisks)} de configuração</strong>.`)
+    : ' Nenhum risco de configuração identificado nos dados atuais.';
+  const availPhrase = status === 'green'
+    ? 'Nenhum problema crítico de disponibilidade.'
+    : 'Há problemas de disponibilidade que precisam de atenção.';
+  const sumDesc = availPhrase + riskPhrase;
+
+  const summary = `<div class="insights-summary">
+    <div class="insights-summary-main">
+      <div class="insights-summary-icon" style="background:var(--${sumColor}-bg);color:var(--${sumColor})"><i class="fas ${sumIcon}"></i></div>
+      <div>
+        <div class="insights-summary-title">Cluster operando em ${status.toUpperCase()}</div>
+        <div class="insights-summary-desc">${sumDesc}</div>
+      </div>
+    </div>
+    <div class="insights-summary-counts">
+      <div class="severity-count"><div class="severity-num text-red">${counts.red}</div><div class="severity-label">Crítico</div></div>
+      <div class="severity-count"><div class="severity-num text-yellow">${counts.yellow}</div><div class="severity-label">Atenção</div></div>
+      <div class="severity-count"><div class="severity-num text-blue">${counts.blue}</div><div class="severity-label">Info</div></div>
+    </div>
+  </div>`;
+
+  // ─── Grade "O que merece atenção" ───
+  // Ordena por severidade: críticos (red) primeiro, depois atenção (yellow) e por
+  // fim info (blue). Sort estável — mantém a ordem de inserção dentro de cada nível.
+  const sevRank = { red: 0, yellow: 1, blue: 2 };
+  const ordered = [...insights].sort((a, b) => (sevRank[a.sev] ?? 3) - (sevRank[b.sev] ?? 3));
+  const gridBlock = insights.length
+    ? `<div class="insights-block">
+        <div class="grid-section"><span class="grid-section-label">O que merece atenção</span><span class="grid-section-line"></span></div>
+        <div class="insights-grid">${ordered.map(i => i.html).join('')}</div>
+      </div>`
+    : `<div class="insights-block">
+        <div class="empty-state"><i class="fas fa-circle-check"></i><p>Nenhum ponto de atenção nos dados atuais.</p></div>
+      </div>`;
+
+  el.innerHTML = summary + gridBlock;
+}
+
+// Visual "Uso de disco por nó" (nós ≥70%, desc) — usado no modal do insight de disco.
+// Retorna '' quando nenhum nó atinge o limite de alerta.
+function diskByNodeContent() {
+  const nodes = (dashboardData && dashboardData.nodes_summary) || [];
+  const diskNodes = nodes
+    .filter(n => (n.disk_used_percent ?? 0) >= 70)
+    .sort((a, b) => b.disk_used_percent - a.disk_used_percent);
+  if (!diskNodes.length) return '';
+  const rows = diskNodes.map(n => {
+    const disk = n.disk_used_percent;
+    const color = disk >= 85 ? 'red' : 'yellow';
+    // Mesma célula nome + roles principais dos Sinais Vitais (Utilização por Nó).
+    return `<div class="disk-row">
+      <div class="disk-label">${nodeNameCell(n.name, n.roles, n.is_master)}</div>
+      <div class="disk-track"><div class="disk-fill" style="width:${disk}%;background:var(--${color})"></div></div>
+      <div class="disk-val text-${color}">${disk.toFixed(2)}%</div>
+    </div>`;
+  }).join('');
+  return `<div class="disk-card">
+    ${rows}
+    <div class="disk-note"><i class="fas fa-circle-info"></i>Alerta de disco: <strong class="text-yellow">≥ 70%</strong> (atenção) · <strong class="text-red">≥ 85%</strong> (crítico). Watermarks padrão do ES: low 85% / high 90%.</div>
+  </div>`;
+}
+
+function openDiskModal() {
+  const content = diskByNodeContent();
+  document.getElementById('diskModalBody').innerHTML = content ||
+    `<div class="empty-state"><i class="fas fa-circle-check"></i><p>Nenhum nó acima de 70% de uso de disco.</p></div>`;
+  document.getElementById('diskModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDiskModal() {
+  document.getElementById('diskModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
 function tableNodes(rows) {
   const loadTip = `<strong style="color:var(--text);display:block;margin-bottom:6px">Como as cores do Load são calculadas</strong>
 <span style="color:var(--text-dim)">O load average do Linux <strong>não mede só CPU</strong>: ele conta processos rodando ou aguardando a CPU <strong>e também processos bloqueados em I/O</strong> (ex.: espera de disco). Um load alto pode indicar gargalo de disco/merge/flush no Elasticsearch mesmo com a CPU tranquila — por isso é um indicador de demanda geral do nó, não um substituto do CPU%.</span><br><br>
@@ -1862,6 +2439,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     const jm = document.getElementById('jsonModal');
     if (jm && jm.style.display === 'flex') { closeJsonModal(); return; }
+    const dm = document.getElementById('diskModal');
+    if (dm && dm.style.display === 'flex') { closeDiskModal(); return; }
     const nm = document.getElementById('nodeModal');
     if (nm && nm.style.display === 'flex') { closeNodeModal(); return; }
     closeDetailModal(); closeAliasModal(); closeConfirmModal();

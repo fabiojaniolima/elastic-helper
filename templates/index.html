@@ -245,6 +245,7 @@
       <section class="page page-capacity" id="page-capacity" hidden></section>
 
       <!-- ========== DIAGNÓSTICO (id interno: insights) ========== -->
+      <!-- Conteúdo gerado por renderInsights() em app.js a partir de dashboardData/tasksList -->
       <section class="page page-insights" id="page-insights" hidden></section>
 
       <!-- ========== CONFIGURAÇÃO ========== -->
@@ -310,6 +311,22 @@
       </button>
     </div>
     <pre class="task-json-body" id="jsonModalBody"></pre>
+  </div>
+</div>
+
+<!-- ═══════════════════ DISK BY NODE MODAL ═════════════════ -->
+<div class="modal-overlay detail-overlay" id="diskModal" style="display:none" onclick="if(event.target===this)closeDiskModal()">
+  <div class="detail-card" onclick="event.stopPropagation()">
+    <div class="detail-header">
+      <div>
+        <h2 class="detail-title">Uso de disco por nó</h2>
+        <p class="detail-subtitle">Nós com uso de disco ≥ 70% (ordenados do maior para o menor)</p>
+      </div>
+      <button class="btn-icon" onclick="closeDiskModal()" title="Fechar (Esc)" style="flex-shrink:0">
+        <i class="fas fa-xmark" style="font-size:17px"></i>
+      </button>
+    </div>
+    <div class="detail-body" id="diskModalBody"></div>
   </div>
 </div>
 
