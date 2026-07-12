@@ -689,6 +689,13 @@ input[type="checkbox"] {
   gap: 16px;
 }
 
+.section-volume-cards {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
 /* ─── Sinais de Alerta (faixa de cards horizontais) ─── */
 .section-signals-cards {
   grid-column: 1 / -1;
@@ -1248,6 +1255,33 @@ input[type="checkbox"] {
 /* ─── App container (casca: sidebar + main) ─── */
 .app { display: flex; height: 100vh; overflow: hidden; }
 
+/* ─── Responsive ─── */
+@media (max-width: 1200px) {
+  .metrics-grid { grid-template-columns: repeat(3, 1fr); }
+  .insights-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .section-health-cards { grid-template-columns: repeat(2, 1fr); }
+  .section-volume-cards { grid-template-columns: repeat(2, 1fr); }
+  .section-signals-cards { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .topbar { padding: 0 16px; }
+  .page-scroll { padding: 20px 16px 0; }
+  .app-footer { margin-top: 28px; padding: 14px 0 20px; }
+  .detail-card { max-height: calc(100vh - 20px); }
+  .form-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .metrics-grid { grid-template-columns: 1fr; }
+  .section-health-cards { grid-template-columns: 1fr; }
+  .section-volume-cards { grid-template-columns: 1fr; }
+}
+
 .tasks-filter {
   display: flex;
   align-items: center;
@@ -1520,6 +1554,45 @@ input[type="checkbox"] {
   gap: 7px;
 }
 .disk-note i { color: var(--blue); font-size: 11px; }
+
+/* ─── Disco por Tier (barras horizontais) ─── */
+.tier-disk-list { display: flex; flex-direction: column; gap: 22px; margin-top: 6px; }
+.tier-disk-item { display: flex; flex-direction: column; gap: 8px; }
+.tier-disk-row { display: flex; align-items: center; gap: 16px; }
+/* Largura fixa = a do maior nome (FROZEN), alinhado à direita: assim o texto
+   encosta sempre a um mesmo gap (16px) da barra e todas as barras se alinham. */
+.tier-disk-name {
+  width: 60px;
+  flex-shrink: 0;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text);
+}
+.tier-disk-track {
+  flex: 1;
+  height: 30px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.tier-disk-fill { height: 100%; transition: width 0.3s ease; }
+.tier-disk-pct {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tier-disk-bytes { text-align: center; font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 560px) {
+  .tier-disk-pct { width: 44px; }
+}
 
 /* ═══ Modal de Detalhe de Nó ═══ */
 .nd-body {

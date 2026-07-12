@@ -584,7 +584,14 @@ function showPage(page) {
   // O timestamp / refresh só fazem sentido onde há dado ao vivo para recarregar.
   document.getElementById('topbarActions').style.visibility =
     REFRESHABLE_PAGES.has(page) ? 'visible' : 'hidden';
+  // Diagnóstico reaproveita o que já foi carregado (dashboardData), sem
+  // requisição nova. O Inventário faz o mesmo, e só busca por conta própria se
+  // ainda não houver dado nenhum e nada estiver em voo (entrada direta por #capacity).
   if (page === 'insights') renderInsights();
+  if (page === 'capacity') {
+    if (dashboardData) renderCapacity();
+    else if (!dashboardInFlight.size) loadCapacity();
+  }
   // Reflete a página na URL (hash) para preservar no refresh e permitir compartilhar o link.
   if (location.hash.slice(1) !== page) {
     history.replaceState(null, '', '#' + page);
@@ -661,6 +668,9 @@ async function loadDashboard() {
     // Mantém a página Diagnóstico e o badge da nav em sincronia a cada atualização
     // (a seção fica oculta nos Sinais Vitais, mas o badge reflete os riscos atuais).
     renderInsights();
+    // Capacidade compartilha o mesmo dashboardData — re-renderiza quando ativa.
+    if (currentPage === 'capacity') renderCapacity(data);
+
     document.getElementById('lastUpdated').textContent =
       'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
   } catch (e) {
@@ -674,8 +684,39 @@ async function loadDashboard() {
   }
 }
 
+// Página "Inventário": mesma fonte do dashboard, pedindo só as seções dela.
+async function loadCapacity() {
+  const grid = document.getElementById('capacityGrid');
+  const icon = document.getElementById('refreshIcon');
+  if (!grid) return;
+  if (icon) icon.classList.add('spin');
+
+  grid.innerHTML = `<div class="loading-state">
+    <i class="fas fa-circle-notch fa-spin"></i>
+    <span>Carregando métricas...</span>
+  </div>`;
+
+  try {
+    const data = await fetchDashboard(CAPACITY_SECTIONS);
+    renderCapacity(data);
+    // O badge do Diagnóstico sai do mesmo dashboardData — segue o dado novo.
+    renderInsights();
+    document.getElementById('lastUpdated').textContent =
+      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) {
+    if (e.message === 'unauthorized') return;  // página já está recarregando
+    grid.innerHTML = `<div class="error-state">
+      <i class="fas fa-triangle-exclamation"></i>
+      <p>${escHtml(e.message)}</p>
+    </div>`;
+  } finally {
+    if (icon) icon.classList.remove('spin');
+  }
+}
+
 // Refresh da topbar e do atalho R: cada página recarrega a sua própria fonte.
 function refreshCurrentPage() {
+  if (currentPage === 'capacity') return loadCapacity();
   return loadDashboard();
 }
 
@@ -830,13 +871,32 @@ function renderCards(d) {
   ].join('');
 }
 
+// Página "Inventário" (id interno: capacity) — nós, volume e
+// higiene de configuração de índices. Reaproveita sectionCardsVolume/Indices e
+// os mesmos ids de container, mantendo refreshSection('volume'|'indices') válido.
+function renderCapacity(d = dashboardData) {
+  const grid = document.getElementById('capacityGrid');
+  if (!grid || !d) return;
+
+  grid.innerHTML = [
+    section('Volume e Capacidade', 'volume'),
+    `<div id="section-cards-volume" class="section-volume-cards">${sectionCardsVolume(d)}</div>`,
+
+    section('Disco por Tier', 'tierdisk'),
+    `<div id="section-cards-tierdisk" class="section-volume-cards">${sectionCardsTierDisk(d)}</div>`,
+  ].join('');
+}
+
 // Seção → função que a renderiza. Os ids são os mesmos que o backend conhece
 // em DASHBOARD_SECTIONS (es_service.py) e que vão em ?sections=.
 const SECTION_RENDERERS = {
   health: sectionCardsHealth,
   signals: sectionCardsSignals,
   resources: sectionCardsResources,
+  volume: sectionCardsVolume,
+  tierdisk: sectionCardsTierDisk,
 };
+const CAPACITY_SECTIONS = ['volume', 'tierdisk'];
 
 async function refreshSection(sectionId) {
   const icon = document.getElementById(`sectionRefreshIcon-${sectionId}`);
@@ -898,6 +958,74 @@ function cardHealth(h, version, license) {
   </div>`;
 }
 
+// Conta nós por tier de dados (HOT/WARM/COLD/FROZEN), mas só quando o nó tem
+// EXATAMENTE um desses roles de tier — nós que acumulam mais de um tier (ex.:
+// data_hot + data_warm) não entram em nenhuma contagem. Roles complementares
+// (ingest, data_content, etc.) não interferem. Quando o nó também é master, o
+// tier é rotulado como "MASTER / HOT" (master conviver com um único tier é comum
+// em ambientes menores). A chave de cada contagem é o próprio rótulo exibido.
+const TIER_ROLES = { data_hot: 'HOT', data_warm: 'WARM', data_cold: 'COLD', data_frozen: 'FROZEN' };
+const TIER_LABEL_ORDER = ['HOT', 'MASTER / HOT', 'WARM', 'MASTER / WARM', 'COLD', 'MASTER / COLD', 'FROZEN', 'MASTER / FROZEN'];
+function tierNodeCounts(nodes) {
+  const counts = {};
+  for (const n of nodes) {
+    const roles = Array.isArray(n.roles) ? n.roles : [];
+    const tiers = roles.filter(r => TIER_ROLES[r]);
+    if (tiers.length !== 1) continue;
+    const label = (roles.includes('master') ? 'MASTER / ' : '') + TIER_ROLES[tiers[0]];
+    counts[label] = (counts[label] || 0) + 1;
+  }
+  return counts;
+}
+
+function cardNodes(total, h, dedicatedMasters, nodes) {
+  const tip = 'Monitore a estabilidade do número de nós. Uma diminuição inesperada indica falha. O número de data nodes impacta a distribuição de shards.';
+  const footerStat = (label, val) => `<div class="footer-stat"><span class="footer-stat-label">${label}</span><span class="footer-stat-val">${fmtNum(val)}</span></div>`;
+  const masterStat = dedicatedMasters > 0 ? footerStat('Master', dedicatedMasters) : '';
+  const tiers = tierNodeCounts(nodes || []);
+  const tierStats = TIER_LABEL_ORDER
+    .filter(t => tiers[t] > 0)
+    .map(t => footerStat(t, tiers[t]))
+    .join('');
+  return `<div class="metric-card status-blue" onclick="openDetail('nodes','Nós do Cluster','Detalhes de CPU, Heap e Disco por nó')">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon"><i class="fas fa-server"></i></div>
+        <div class="card-title">Total de Nós</div>
+      </div>
+      ${tooltip(tip, 'help-total-nodes')}
+    </div>
+    <div class="card-value-wrap">
+      <div class="card-value">${total}</div>
+      <div class="card-label">nós no cluster</div>
+    </div>
+    <div class="card-footer">
+      ${footerStat('Data Nodes', h.number_of_data_nodes)}
+      ${masterStat}
+      ${tierStats}
+    </div>
+  </div>`;
+}
+
+function cardCount(metric, title, icon, value, unit, valColor, cardStatus, tipText, footerStats, detailTitle, topic) {
+  const iconBg = `--card-icon-bg:var(--${valColor}-bg);--card-icon-color:var(--${valColor})`;
+  const dt = detailTitle || title;
+  return `<div class="metric-card status-${cardStatus}" onclick="openDetail('${metric}','${dt}','')">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon" style="${iconBg}"><i class="fas ${icon}"></i></div>
+        <div class="card-title">${title}</div>
+      </div>
+      ${tooltip(tipText, topic)}
+    </div>
+    <div class="card-value-wrap">
+      <div class="card-value value-${valColor}">${fmtNum(value)}</div>
+      <div class="card-label">${unit}</div>
+    </div>
+    ${footerStats.length ? `<div class="card-footer">${footerStats.map(s => `<div class="footer-stat"><span class="footer-stat-label">${s.label}</span><span class="footer-stat-val" ${s.color ? `style="color:var(--${s.color})"` : ''}>${s.val}</span></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+
 // Card de valor genérico (aceita HTML já formatado no valor, ex.: formatBytes).
 function cardStat(metric, title, icon, valueHtml, unit, color, tip, footerStats, topic) {
   const iconBg = `--card-icon-bg:var(--${color}-bg);--card-icon-color:var(--${color})`;
@@ -919,6 +1047,80 @@ function cardStat(metric, title, icon, valueHtml, unit, color, tip, footerStats,
     </div>
     ${footerStats && footerStats.length ? `<div class="card-footer" style="flex-wrap:wrap;gap:10px 18px">${footerStats.map(s => `<div class="footer-stat"><span class="footer-stat-label">${s.label}</span><span class="footer-stat-val" ${s.color ? `style="color:var(--${s.color})"` : ''}>${s.val}</span></div>`).join('')}</div>` : ''}
   </div>`;
+}
+
+// Capacidade de disco agregada por tier (bytes): total, usado e livre, somando
+// todos os data nodes de cada tier. Base do card "Disco por Tier" (página Inventário).
+function tierDiskAgg(nodes) {
+  const tiers = {};
+  for (const n of nodes) {
+    const t = nodeTier(n.roles);
+    if (!t || !n.disk_total) continue;
+    tiers[t] = tiers[t] || { used: 0, total: 0 };
+    tiers[t].used += n.disk_used || 0;
+    tiers[t].total += n.disk_total || 0;
+  }
+  return tiers;
+}
+
+// Gráfico de barras horizontais: uma linha por tier. O trilho cinza é a
+// capacidade total do tier; o preenchimento colorido é o uso, com o % à direita.
+// Os bytes (usado · total · livre) ficam centralizados abaixo de cada barra.
+// Cor por uso: verde <70%, amarelo ≥70%, vermelho ≥85%.
+function tierDiskRow(tier, agg) {
+  const total = agg.total || 0;
+  const used = agg.used || 0;
+  const free = Math.max(0, total - used);
+  const pct = total ? Math.round(used / total * 100) : 0;
+  const freePct = 100 - pct;
+  const color = pct >= 85 ? 'red' : pct >= 70 ? 'yellow' : 'green';
+  return `<div class="tier-disk-item">
+    <div class="tier-disk-row">
+      <div class="tier-disk-name">${tier}</div>
+      <div class="tier-disk-track"><div class="tier-disk-fill" style="width:${pct}%;background:var(--${color})"></div></div>
+      <div class="tier-disk-pct text-${color}">${pct}%</div>
+    </div>
+    <div class="tier-disk-bytes">${formatBytes(used)} usado · ${formatBytes(total)} total · ${formatBytes(free)} livre (${freePct}%)</div>
+  </div>`;
+}
+
+function sectionCardsTierDisk(d) {
+  const tiers = tierDiskAgg((d || {}).nodes_summary || []);
+  const order = ['HOT', 'WARM', 'COLD', 'FROZEN'].filter(t => tiers[t]);
+  const tip = 'Capacidade de disco por <strong>tier de dados</strong> (HOT / WARM / COLD / FROZEN), somando todos os data nodes de cada tier.<br><br>' +
+    'Em cada barra, o trilho <strong>cinza</strong> é a capacidade <strong>total</strong> do tier e o preenchimento <strong>colorido</strong> mostra o quanto está em uso. O <strong>% de uso</strong> fica à direita e os volumes (usado · total · livre) logo abaixo da barra.<br><br>' +
+    'Cor por uso: amarelo a partir de <strong>70%</strong>, vermelho a partir de <strong>85%</strong>. Watermarks padrão do ES: low 85% / high 90% / flood 95%.';
+  const body = order.length
+    ? `<div class="tier-disk-list">${order.map(t => tierDiskRow(t, tiers[t])).join('')}</div>`
+    : `<div class="empty-state" style="padding:16px"><i class="fas fa-circle-info"></i><p>Sem dados de disco por tier — nenhum data node com role de tier (<code>data_hot/warm/cold/frozen</code>) reportou capacidade.</p></div>`;
+  return `<div class="metric-card metric-card-static card-full">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon"><i class="fas fa-hard-drive"></i></div>
+        <div class="card-title">Capacidade por tier</div>
+      </div>
+      ${tooltip(tip, 'help-tier-disk')}
+    </div>
+    ${body}
+  </div>`;
+}
+
+function sectionCardsVolume(d) {
+  const h = d.cluster_health || {};
+  return [
+    cardNodes(d.total_nodes, h, d.dedicated_master_nodes || 0, d.nodes_summary || []),
+    cardStat(null, 'Volume de Dados', 'fa-database', formatBytes(d.total_store_bytes || 0), 'em disco (store, com réplicas)', 'blue',
+      'Soma do tamanho em disco de todos os índices (primários + réplicas, incluindo índices de sistema).',
+      [], 'help-data-volume'),
+    cardStat(null, 'Documentos', 'fa-file-lines', fmtNum(d.total_docs || 0), 'documentos indexados', 'blue',
+      'Soma de <code>docs.count</code> de todos os índices — o total de documentos vivos no cluster.',
+      [], 'help-total-docs'),
+    cardCount('all_indices', 'Total de Índices', 'fa-layer-group', d.total_indices,
+      'índices', 'blue', 'blue',
+      'Contagem total de índices do cluster, incluindo índices de sistema (prefixo <code>.</code>). Uma contagem elevada pode impactar o desempenho — avalie o uso de data streams para séries temporais. Clique para listar todos os índices.',
+      [],
+      'Todos os Índices', 'help-total-indices'),
+  ].join('');
 }
 
 function cardResourceTable(d) {

@@ -541,6 +541,9 @@ DASHBOARD_SECTIONS = {
     'health':    ('health', 'indices'),
     'signals':   ('health', 'ilm_errors', 'index_settings', 'nodes'),
     'resources': ('nodes',),
+    # Página Inventário
+    'volume':    ('health', 'indices', 'nodes'),
+    'tierdisk':  ('nodes',),
 }
 
 
