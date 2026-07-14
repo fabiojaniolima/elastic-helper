@@ -1411,6 +1411,19 @@ input[type="checkbox"] {
 .breadcrumb-sep { color: var(--text-dim); font-size: 12px; }
 .breadcrumb-current { font-family: monospace; font-size: 12px; color: var(--text-muted); }
 
+/* ─── Shard Relocation Info ─── */
+.reloc-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.reloc-out { color: var(--yellow); }
+.reloc-in  { color: var(--blue); }
+
 /* ─── Utilitários de cor de texto ─── */
 .text-yellow { color: var(--yellow); }
 .text-red    { color: var(--red); }

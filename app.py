@@ -222,6 +222,17 @@ def api_detail(metric):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/index_shards/<path:index_name>')
+def api_index_shards(index_name):
+    err = require_es()
+    if err:
+        return err
+    try:
+        return jsonify(es_service.index_shards(index_name))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/node/<path:node_name>')
 def api_node(node_name):
     err = require_es()

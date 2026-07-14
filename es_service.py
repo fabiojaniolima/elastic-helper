@@ -544,6 +544,7 @@ DASHBOARD_SECTIONS = {
     # Página Inventário
     'volume':    ('health', 'indices', 'nodes'),
     'tierdisk':  ('nodes',),
+    'indices':   ('health', 'indices', 'shards', 'index_settings', 'ilm'),
 }
 
 
@@ -971,3 +972,53 @@ def node_detail(node_name):
             'max_fds':  safe_int(proc.get('max_file_descriptors')),
         },
     }
+
+
+# ─── Shards de um índice ──────────────────────────────────
+def index_shards(index_name):
+    shards = list(_client.cat.shards(
+        index=index_name,
+        h='shard,prirep,state,node,ip,docs,store,unassigned.reason',
+        format='json',
+    ))
+
+    # Correlate RELOCATING ↔ INITIALIZING pairs to determine relocation direction.
+    # For RELOCATING, the node field is "source_name -> target_ip target_id target_name";
+    # extract only the source name when building reloc_map.
+    init_map = {}   # (shard, prirep) -> node name when INITIALIZING
+    reloc_map = {}  # (shard, prirep) -> cleaned source node name when RELOCATING
+    for s in shards:
+        key = (s.get('shard'), s.get('prirep'))
+        state = s.get('state', '')
+        node_raw = s.get('node', '') or ''
+        if state == 'INITIALIZING' and key not in init_map:
+            init_map[key] = node_raw
+        elif state == 'RELOCATING' and key not in reloc_map:
+            src = node_raw.split(' -> ', 1)[0].strip() if ' -> ' in node_raw else node_raw
+            reloc_map[key] = src
+
+    result = []
+    for s in shards:
+        shard = dict(s)
+        key = (shard.get('shard'), shard.get('prirep'))
+        state = shard.get('state', '')
+        node_raw = shard.get('node', '') or ''
+
+        if state == 'RELOCATING':
+            # ES concatenates source and destination into the node field:
+            # "source_name -> target_ip target_id target_name"
+            if ' -> ' in node_raw:
+                src, rest = node_raw.split(' -> ', 1)
+                shard['node'] = src.strip()
+                tokens = rest.strip().split()
+                shard['relocation_target'] = tokens[-1] if tokens else rest.strip()
+            elif key in init_map:
+                shard['relocation_target'] = init_map[key]
+        elif state == 'INITIALIZING' and key in reloc_map:
+            # reloc_map stores the already-cleaned source node name
+            shard['relocation_source'] = reloc_map.get(key, '')
+
+        result.append(shard)
+
+    result.sort(key=lambda x: (x.get('prirep', 'z'), safe_int(x.get('shard'))))
+    return result

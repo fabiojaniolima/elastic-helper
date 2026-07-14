@@ -853,6 +853,31 @@ function sectionCardsResources(d) {
   return cardResourceTable(d);
 }
 
+function sectionCardsIndices(d) {
+  return [
+    cardCount('indices_without_replicas', 'Sem Réplica', 'fa-shield-halved', d.indices_without_replicas,
+      'índices', d.indices_without_replicas > 0 ? 'yellow' : 'green',
+      d.indices_without_replicas > 0 ? 'yellow' : 'green',
+      'Índices sem réplicas são pontos únicos de falha. A perda de um nó com um shard primário sem réplica resulta em perda de dados permanente.',
+      [], null, 'help-without-replicas'),
+    cardCount('large_primary_shards', 'Shards Primários > 50 GB', 'fa-hard-drive', d.large_primary_shards,
+      'índices', d.large_primary_shards > 0 ? 'yellow' : 'green',
+      d.large_primary_shards > 0 ? 'yellow' : 'green',
+      'Sinaliza índices que têm <strong>algum shard primário individual</strong> acima de 50 GB (não a soma do índice). Shards primários grandes causam recuperação lenta, realocação demorada e queda de desempenho. Considere reindexar com mais shards ou revisar a política de ILM.',
+      [], null, 'help-large-shards'),
+    cardCount('indices_without_ilm', 'Sem Política de ILM', 'fa-clock-rotate-left', d.indices_without_ilm,
+      'índices', d.indices_without_ilm > 0 ? 'yellow' : 'green',
+      d.indices_without_ilm > 0 ? 'yellow' : 'green',
+      'Índices sem ILM podem crescer indefinidamente. O ILM automatiza a transição por fases (hot → warm → cold → delete), otimizando uso de recursos.',
+      [], null, 'help-without-ilm'),
+    cardCount('ilm_without_delete', 'ILM sem Fase DELETE', 'fa-trash-can', d.ilm_without_delete,
+      'políticas', d.ilm_without_delete > 0 ? 'yellow' : 'green',
+      d.ilm_without_delete > 0 ? 'yellow' : 'green',
+      'Políticas de ILM sem fase de exclusão acumulam dados antigos indefinidamente, levando ao esgotamento de disco ao longo do tempo.',
+      [], null, 'help-ilm-without-delete'),
+  ].join('');
+}
+
 // Página "Sinais Vitais" (id interno: overview) — só o que responde "está
 // funcionando agora?". Nós, volume/inventário e configuração de índices ficam na
 // página "Inventário" (renderCapacity).
@@ -884,6 +909,9 @@ function renderCapacity(d = dashboardData) {
 
     section('Disco por Tier', 'tierdisk'),
     `<div id="section-cards-tierdisk" class="section-volume-cards">${sectionCardsTierDisk(d)}</div>`,
+
+    section('Configuração de Índices', 'indices'),
+    `<div id="section-cards-indices" style="display:contents">${sectionCardsIndices(d)}</div>`,
   ].join('');
 }
 
@@ -895,8 +923,9 @@ const SECTION_RENDERERS = {
   resources: sectionCardsResources,
   volume: sectionCardsVolume,
   tierdisk: sectionCardsTierDisk,
+  indices: sectionCardsIndices,
 };
-const CAPACITY_SECTIONS = ['volume', 'tierdisk'];
+const CAPACITY_SECTIONS = ['volume', 'tierdisk', 'indices'];
 
 async function refreshSection(sectionId) {
   const icon = document.getElementById(`sectionRefreshIcon-${sectionId}`);
@@ -1389,6 +1418,7 @@ const DETAIL_RENDERERS = {
   nodes: tableNodes,
   circuit_breakers: tableCircuitBreakers,
   pending_tasks: tablePendingTasks,
+  index_shards: tableIndexShards,
   read_only_indices: tableReadOnly,
 };
 
@@ -2349,6 +2379,109 @@ function tableGeneric(rows) {
   return `<table class="data-table">
     <thead><tr>${cols.map(c => `<th data-col="${c}">${c} <span class="sort-icon">↕</span></th>`).join('')}</tr></thead>
     <tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${r[c] ?? '-'}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ─── Index Shard Drill-down ───────────────────────────────
+async function openIndexShards(indexName) {
+  detailNavStack.push({
+    title: document.getElementById('detailTitle').textContent,
+    subtitle: document.getElementById('detailSubtitle').textContent,
+    search: document.getElementById('detailSearch').value,
+    metric: currentMetric,
+    rows: currentRows.slice(),
+    sort: { ...currentSort },
+  });
+
+  document.getElementById('detailTitle').textContent = indexName;
+  document.getElementById('detailTitleTip').innerHTML = '';
+  document.getElementById('detailSubtitle').textContent = 'Shards do índice';
+  document.getElementById('detailSearch').value = '';
+  document.getElementById('detailCount').textContent = '';
+  setExportBtn(false);
+  document.getElementById('detailBreadcrumb').style.display = 'flex';
+  document.getElementById('breadcrumbCurrent').textContent = indexName;
+  document.getElementById('detailBody').innerHTML =
+    `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando shards...</span></div>`;
+
+  try {
+    const res = await fetch(`/api/index_shards/${encodeURIComponent(indexName)}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    currentRows = data;
+    currentSort = { col: null, dir: 'asc' };
+    currentMetric = 'index_shards';
+    renderDetailTable('index_shards', data);
+  } catch (e) {
+    document.getElementById('detailBody').innerHTML =
+      `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p></div>`;
+  }
+}
+
+function goBackDetail() {
+  if (!detailNavStack.length) return;
+  const prev = detailNavStack.pop();
+  document.getElementById('detailTitle').textContent = prev.title;
+  document.getElementById('detailTitleTip').innerHTML =
+    DETAIL_TITLE_TIPS[prev.metric] ? tooltip(DETAIL_TITLE_TIPS[prev.metric]) : '';
+  document.getElementById('detailSubtitle').textContent = prev.subtitle;
+  document.getElementById('detailSearch').value = prev.search || '';
+  currentRows = prev.rows;
+  currentSort = prev.sort;
+  currentMetric = prev.metric;
+  renderDetailTable(prev.metric, prev.rows);
+  if (prev.search) filterTable();
+  if (!detailNavStack.length) {
+    document.getElementById('detailBreadcrumb').style.display = 'none';
+  }
+}
+
+function shardTypeBadge(prirep) {
+  if (prirep === 'p') return `<span class="badge badge-blue">Primário</span>`;
+  if (prirep === 'r') return `<span class="badge badge-gray">Réplica</span>`;
+  return `<span class="badge badge-gray">${escHtml(prirep || '-')}</span>`;
+}
+
+function shardStateBadge(state) {
+  const color = { STARTED: 'green', RELOCATING: 'yellow', INITIALIZING: 'blue', UNASSIGNED: 'red' }[state] || 'gray';
+  return `<span class="badge badge-${color}">${escHtml(state || '-')}</span>`;
+}
+
+function tableIndexShards(rows) {
+  if (!rows.length) {
+    return `<div class="empty-state"><i class="fas fa-circle-check"></i><p>Nenhum shard encontrado</p></div>`;
+  }
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="shard" data-type="num">Shard <span class="sort-icon">↕</span></th>
+      <th data-col="prirep">Tipo <span class="sort-icon">↕</span></th>
+      <th data-col="state">Estado <span class="sort-icon">↕</span></th>
+      <th data-col="node">Nó <span class="sort-icon">↕</span></th>
+      <th data-col="ip">IP <span class="sort-icon">↕</span></th>
+      <th data-col="docs" data-type="num">Docs <span class="sort-icon">↕</span></th>
+      <th data-col="store" data-type="size">Tamanho <span class="sort-icon">↕</span></th>
+      <th>Realocação / Motivo</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      let infoCell = '<span style="color:var(--text-dim)">—</span>';
+      if (r.state === 'RELOCATING' && r.relocation_target) {
+        infoCell = `<span class="reloc-info reloc-out"><i class="fas fa-arrow-right"></i> ${escHtml(r.relocation_target)}</span>`;
+      } else if (r.state === 'INITIALIZING' && r.relocation_source) {
+        infoCell = `<span class="reloc-info reloc-in"><i class="fas fa-arrow-left"></i> ${escHtml(r.relocation_source)}</span>`;
+      } else if (r.state === 'UNASSIGNED' && r['unassigned.reason']) {
+        infoCell = `<span class="badge badge-red" style="font-size:10px">${escHtml(r['unassigned.reason'])}</span>`;
+      }
+      return `<tr>
+        <td style="font-weight:700;color:var(--text-muted)">${r.shard ?? '-'}</td>
+        <td>${shardTypeBadge(r.prirep)}</td>
+        <td>${shardStateBadge(r.state)}</td>
+        <td>${r.node ? nodeCellByName(r.node) : '<span style="color:var(--text-dim)">—</span>'}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${r.ip || '—'}</td>
+        <td>${fmtNum(r.docs)}</td>
+        <td>${r.store || '—'}</td>
+        <td>${infoCell}</td>
+      </tr>`;
+    }).join('')}</tbody>
   </table>`;
 }
 
