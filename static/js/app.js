@@ -912,6 +912,9 @@ function renderCapacity(d = dashboardData) {
 
     section('Configuração de Índices', 'indices'),
     `<div id="section-cards-indices" style="display:contents">${sectionCardsIndices(d)}</div>`,
+
+    section('Topologia do Cluster', 'topology'),
+    `<div id="section-cards-topology" class="section-volume-cards">${sectionCardsTopology(d)}</div>`,
   ].join('');
 }
 
@@ -924,8 +927,9 @@ const SECTION_RENDERERS = {
   volume: sectionCardsVolume,
   tierdisk: sectionCardsTierDisk,
   indices: sectionCardsIndices,
+  topology: sectionCardsTopology,
 };
-const CAPACITY_SECTIONS = ['volume', 'tierdisk', 'indices'];
+const CAPACITY_SECTIONS = ['volume', 'tierdisk', 'indices', 'topology'];
 
 async function refreshSection(sectionId) {
   const icon = document.getElementById(`sectionRefreshIcon-${sectionId}`);
@@ -1131,6 +1135,135 @@ function sectionCardsTierDisk(d) {
       ${tooltip(tip, 'help-tier-disk')}
     </div>
     ${body}
+  </div>`;
+}
+
+// ─── Seção: Topologia do Cluster ──────────────────────────
+// Diagrama de fluxo dinâmico: MASTER → HOT → WARM → COLD → FROZEN,
+// com setas conectando as camadas. Tiers unificados (hot+warm no mesmo nó)
+// formam uma faixa combinada. Faixas surgem/somem conforme as roles reais.
+
+const TOPOLOGY_TIER_ORDER = ['data_hot', 'data_warm', 'data_cold', 'data_frozen'];
+const TOPOLOGY_TIER_LABEL = { data_hot: 'HOT', data_warm: 'WARM', data_cold: 'COLD', data_frozen: 'FROZEN' };
+const TOPOLOGY_TIER_ICON  = { MASTER: 'fa-crown', HOT: 'fa-fire-flame-curved', WARM: 'fa-temperature-half', COLD: 'fa-snowflake', FROZEN: 'fa-icicles', OUTROS: 'fa-server' };
+
+// Agrupa nós por camada; retorna array ordenado { label, nodes, sortKey, isMaster, isOthers }.
+function groupNodesByLayer(nodes) {
+  const layers = {};
+  for (const n of nodes) {
+    const roles = Array.isArray(n.roles) ? n.roles : [];
+    const tierRoles = TOPOLOGY_TIER_ORDER.filter(r => roles.includes(r));
+    let key, label, sortKey, isMasterLayer = false, isOthers = false;
+    if (tierRoles.length > 0) {
+      const tierLabel = tierRoles.map(r => TOPOLOGY_TIER_LABEL[r]).join(' / ');
+      label = roles.includes('master') ? `MASTER / ${tierLabel}` : tierLabel;
+      key = label;
+      sortKey = TOPOLOGY_TIER_ORDER.indexOf(tierRoles[0]);
+    } else if (roles.includes('master') && !roles.some(r => r.startsWith('data'))) {
+      key = '__MASTER__'; label = 'MASTER'; sortKey = -1; isMasterLayer = true;
+    } else {
+      key = '__OTHERS__'; label = 'OUTROS'; sortKey = 999; isOthers = true;
+    }
+    if (!layers[key]) layers[key] = { label, nodes: [], sortKey, isMasterLayer, isOthers };
+    layers[key].nodes.push(n);
+  }
+  return Object.values(layers).sort((a, b) => a.sortKey - b.sortKey);
+}
+
+// Card individual de nó: nome e IP. Clicável — abre o modal de detalhe do nó.
+function topologyNodeCard(n, electedName) {
+  const isMaster = n.name === electedName;
+  const titleAttr = rolesTitle(n.roles, isMaster);
+  const star = isMaster ? '<span class="topology-master-star" title="Master eleito">★</span>' : '';
+  const nameEsc = escHtml(n.name || '').replace(/'/g, '&#39;');
+  const metricRow = (label, val) => {
+    const pct = parseFloat(val) || 0;
+    const c = pctColor(pct);
+    return `<div class="topo-metric-row">
+      <span class="topo-metric-label">${label}</span>
+      <div class="progress-bar topo-metric-bar"><div class="progress-fill progress-${c}" style="width:${Math.min(pct,100)}%"></div></div>
+      <span class="topo-metric-val text-${c}">${pct}%</span>
+    </div>`;
+  };
+  return `<div class="topology-node-card" title="${titleAttr}" onclick="openNodeModal('${nameEsc}')">
+    <div class="topology-node-name">${escHtml(n.name) || '-'}${star}</div>
+    ${n.ip ? `<div class="topology-node-ip">${escHtml(n.ip)}</div>` : ''}
+    <div class="topo-metrics">
+      ${metricRow('CPU', n.cpu)}
+      ${metricRow('Heap', n.heap_percent)}
+      ${metricRow('Disco', n.disk_used_percent)}
+    </div>
+  </div>`;
+}
+
+// Conector com seta e badge de rótulo entre duas camadas do fluxo.
+function topologyConnector(label) {
+  return `<div class="topology-connector">
+    <div class="topology-connector-stem"></div>
+    <div class="topology-connector-badge"><i class="fas fa-arrow-down"></i>${label}</div>
+    <div class="topology-connector-stem"></div>
+    <div class="topology-connector-arrow"></div>
+  </div>`;
+}
+
+// Bloco visual de uma camada: cabeçalho com ícone/rótulo + grid de cards de nó.
+function topologyLayerBlock(layer, electedName) {
+  const firstLabel = layer.label.split(' / ')[0];
+  const icon = TOPOLOGY_TIER_ICON[firstLabel] || 'fa-server';
+  return `<div class="topology-layer${layer.isMasterLayer ? ' topology-layer-master' : ''}${layer.isOthers ? ' topology-layer-others' : ''}">
+    <div class="topology-layer-label">
+      <i class="fas ${icon}"></i>
+      <span>${layer.label}</span>
+    </div>
+    <div class="topology-nodes">
+      ${layer.nodes.map(n => topologyNodeCard(n, electedName)).join('')}
+    </div>
+  </div>`;
+}
+
+function sectionCardsTopology(d) {
+  const nodes = (d || {}).nodes_summary || [];
+  const electedName = (nodes.find(n => n.is_master) || {}).name || null;
+  const allLayers = groupNodesByLayer(nodes);
+
+  // Fluxo principal (MASTER + tiers) e camada OUTROS separada
+  const flowLayers = allLayers.filter(l => !l.isOthers);
+  const othersLayer = allLayers.find(l => l.isOthers);
+
+  const tip = 'Diagrama de <strong>fluxo da infraestrutura</strong> do cluster. As camadas representam o ciclo de vida típico dos dados no Elasticsearch: os nós <strong>MASTER</strong> gerenciam o cluster state; os dados entram pelo tier <strong>HOT</strong> (alta performance) e o ILM os move para tiers mais frios (<strong>WARM → COLD → FROZEN</strong>) conforme envelhecem, reduzindo custo. ' +
+    'Nós com múltiplos tiers formam uma <strong>faixa combinada</strong> (ex.: HOT / WARM). ' +
+    'O <strong>master eleito</strong> (★) aparece no seu tier; masters <strong>dedicados</strong> ficam na camada MASTER. ' +
+    'A barrinha de cada nó mostra o <strong>uso de disco</strong> (amarelo ≥ 70%, vermelho ≥ 85%).';
+
+  const header = `<div class="card-header">
+    <div class="card-icon-title">
+      <div class="card-icon"><i class="fas fa-sitemap"></i></div>
+      <div class="card-title">Topologia do Cluster</div>
+    </div>
+    ${tooltip(tip, 'help-cluster-topology')}
+  </div>`;
+
+  if (!allLayers.length) {
+    return `<div class="metric-card metric-card-static card-full">${header}
+      <div class="empty-state" style="padding:16px"><i class="fas fa-circle-info"></i><p>Sem dados de nós disponíveis.</p></div>
+    </div>`;
+  }
+
+  // Monta o fluxo com conectores entre camadas
+  const flowHtml = flowLayers.map((layer, i) => {
+    const isFirstTier = !layer.isMasterLayer && i > 0 && flowLayers[i - 1].isMasterLayer;
+    const connector = i > 0
+      ? topologyConnector(isFirstTier ? 'gerencia' : 'ILM →')
+      : '';
+    return connector + topologyLayerBlock(layer, electedName);
+  }).join('');
+
+  const othersHtml = othersLayer
+    ? `<div class="topology-others-divider"><span>Outros nós</span></div>${topologyLayerBlock(othersLayer, electedName)}`
+    : '';
+
+  return `<div class="metric-card metric-card-static card-full">${header}
+    <div class="topology-flow">${flowHtml}${othersHtml}</div>
   </div>`;
 }
 

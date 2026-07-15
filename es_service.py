@@ -545,6 +545,7 @@ DASHBOARD_SECTIONS = {
     'volume':    ('health', 'indices', 'nodes'),
     'tierdisk':  ('nodes',),
     'indices':   ('health', 'indices', 'shards', 'index_settings', 'ilm'),
+    'topology':  ('nodes',),
 }
 
 
