@@ -7,6 +7,8 @@ let currentRows = [];
 let currentMetric = null;
 const detailNavStack = [];
 let tasksList = [];
+let selectedActions = new Set();
+let expandedTasks = new Set();   // ids de tarefas-pai com as sub-tarefas (slices) expandidas
 let clusterHealthFilters = new Set();
 
 // ─── Utilities ───────────────────────────────────────────
@@ -28,6 +30,13 @@ function parseSizeStr(str) {
 function fmtNum(n) {
   if (n == null || n === '') return '-';
   return Number(n).toLocaleString('pt-BR');
+}
+
+function fmtMillisDate(ms) {
+  if (!ms) return '-';
+  const d = new Date(ms);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} às ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 function fmtNanosToSecs(ns) {
@@ -617,6 +626,14 @@ function toggleSidebar() {
     collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
 }
 
+function goToTasks() {
+  showPage('overview');
+  requestAnimationFrame(() => {
+    const el = document.getElementById('tasksBody');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
 // ─── Dashboard ────────────────────────────────────────────
 // Não há cache: toda carga e todo refresh consultam o cluster de novo. O que
 // varia é o ESCOPO — o refresh global pede o dashboard inteiro e o de uma seção
@@ -660,6 +677,10 @@ async function loadDashboard() {
     <i class="fas fa-circle-notch fa-spin"></i>
     <span>Carregando métricas...</span>
   </div>`;
+
+  // Atualiza as tarefas em paralelo, para a animação de load aparecer
+  // junto com a das métricas (e não só depois que o dashboard renderiza).
+  loadTasks();
 
   try {
     // Refresh global: coleta completa, que também realimenta Inventário e Diagnóstico.
@@ -2680,6 +2701,242 @@ function setupSort(metric, allRows) {
   });
 }
 
+// ─── Tasks Section ────────────────────────────────────────
+async function loadTasks() {
+  const body = document.getElementById('tasksBody');
+  const icon = document.getElementById('tasksRefreshIcon');
+  if (icon) icon.classList.add('spin');
+
+  body.innerHTML = `<div class="loading-state tasks-loading">
+    <i class="fas fa-circle-notch fa-spin"></i><span>Carregando tarefas...</span>
+  </div>`;
+
+  try {
+    const res = await fetch('/api/tasks');
+    if (res.status === 401) return;
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderTasksTable(data);
+    const countEl = document.getElementById('tasksCount');
+    if (countEl) {
+      // Conta operações (tarefas-pai), não tarefas brutas: 5 reindexes com slices=5
+      // são 5 operações, não 30.
+      const ops = taskRoots(data).length;
+      if (ops) {
+        countEl.textContent = `${ops} tarefa${ops !== 1 ? 's' : ''}`;
+        countEl.style.display = '';
+      } else {
+        countEl.textContent = '';
+        countEl.style.display = 'none';
+      }
+    }
+    // tasksList acabou de ser atualizado — reflete o card "Tarefa longa" e o badge.
+    if (dashboardData) renderInsights();
+  } catch (e) {
+    body.innerHTML = `<div class="error-state tasks-loading">
+      <i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p>
+    </div>`;
+  } finally {
+    if (icon) icon.classList.remove('spin');
+  }
+}
+
+// Agrupa a lista plana por parent_task_id: cada tarefa cujo pai está presente na
+// lista é anexada em childrenOf[pai]; as demais (raiz ou órfã — pai filtrado pelo
+// corte de 5s) viram roots. Um nível basta (slices de reindex não têm netos).
+// Devolve os objetos ORIGINAIS (não cópias), para `tasksList.indexOf` seguir válido.
+function groupTasks(tasks) {
+  const byId = new Map(tasks.map(t => [t.id, t]));
+  const childrenOf = new Map();
+  const roots = [];
+  for (const t of tasks) {
+    const pid = t.parent_task_id;
+    if (pid && pid !== '-' && byId.has(pid)) {
+      if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+      childrenOf.get(pid).push(t);
+    } else {
+      roots.push(t);
+    }
+  }
+  return { roots, childrenOf };
+}
+
+// Nº de operações (tarefas raiz) — usado nas contagens (badge da seção e insight).
+function taskRoots(tasks) {
+  return groupTasks(tasks).roots;
+}
+
+function renderTasksTable(tasks) {
+  tasksList = tasks;
+  const body = document.getElementById('tasksBody');
+
+  if (!tasks.length) {
+    body.innerHTML = `<div class="empty-state tasks-empty">
+      <i class="fas fa-circle-check"></i>
+      <p>Nenhuma tarefa com mais de 5 segundos em execução</p>
+    </div>`;
+    return;
+  }
+
+  const actions = [...new Set(tasks.map(t => t.action))].sort();
+
+  // Remove seleções de ações que não existem mais
+  for (const a of selectedActions) {
+    if (!actions.includes(a)) selectedActions.delete(a);
+  }
+
+  const visible = selectedActions.size
+    ? tasks.filter(t => selectedActions.has(t.action))
+    : tasks;
+
+  // Filter pills (rendered inside the table wrapper)
+  const actionCounts = tasks.reduce((acc, t) => { acc[t.action] = (acc[t.action] || 0) + 1; return acc; }, {});
+  const pills = actions.map(a => {
+    const sel = selectedActions.has(a);
+    return `<button class="task-action-pill${sel ? ' selected' : ''}" onclick="toggleActionFilter('${escHtml(a)}')">${escHtml(a)} (total: ${actionCounts[a]})</button>`;
+  }).join('');
+
+  const clearBtn = selectedActions.size
+    ? `<button class="tasks-filter-clear" onclick="clearActionFilter()"><i class="fas fa-xmark"></i> Limpar</button>`
+    : '';
+
+  const filterHtml = `<div class="tasks-filter">
+    <span class="tasks-filter-label">Ação</span>
+    ${pills}
+    ${clearBtn}
+  </div>`;
+
+  // Agrupa filhas (slices) sob a tarefa-pai; renderiza recolhido por padrão.
+  const { roots, childrenOf } = groupTasks(visible);
+
+  // Monta o <tr> de uma tarefa (isChild = linha-filha recuada). O pai com filhas
+  // ganha o chevron de expandir + badge "N sub-tarefas"; o chevron não abre o JSON.
+  const taskRowHtml = (t, isChild) => {
+    const idx = tasksList.indexOf(t);
+    const kids = childrenOf.get(t.id) || [];
+    const expanded = expandedTasks.has(t.id);
+    const cancelBtn = t.cancellable
+      ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();cancelTask('${escHtml(t.id)}', this)">
+           <i class="fas fa-ban"></i> Cancelar
+         </button>`
+      : `<button class="btn btn-ghost btn-sm" style="cursor:not-allowed;opacity:0.45" title="Essa tarefa não pode ser cancelada" onclick="event.stopPropagation()">
+           <i class="fas fa-ban"></i> Cancelar
+         </button>`;
+    const toggle = kids.length
+      ? `<button class="task-group-toggle${expanded ? ' open' : ''}" onclick="event.stopPropagation();toggleTaskGroup('${escHtml(t.id)}')" title="${expanded ? 'Recolher' : 'Expandir'} sub-tarefas"><i class="fas fa-chevron-right"></i></button>`
+      : '<span class="task-group-spacer"></span>';
+    const subBadge = kids.length
+      ? `<span class="task-subcount">${fmtNum(kids.length)} sub-tarefa${kids.length !== 1 ? 's' : ''}</span>`
+      : '';
+    return `<tr class="task-row${isChild ? ' task-child-row' : ''}" onclick="showTaskJson(${idx})">
+      <td><div class="task-node-cell">${toggle}${nodeNameCell(t.node, t.roles || [], t.node === electedMasterName())}</div></td>
+      <td><code class="task-action">${escHtml(t.action)}</code>${subBadge}</td>
+      <td class="task-desc">${escHtml(t.description || '—')}</td>
+      <td class="task-elapsed" style="white-space:nowrap;font-weight:700;color:var(--yellow)" title="Início: ${escHtml(fmtMillisDate(t.start_time_in_millis))}">${fmtNanosToSecs(t.running_time_in_nanos)}</td>
+      <td style="text-align:right">${cancelBtn}</td>
+    </tr>`;
+  };
+
+  const rows = roots.map(r => {
+    const kids = childrenOf.get(r.id) || [];
+    const parentHtml = taskRowHtml(r, false);
+    return (kids.length && expandedTasks.has(r.id))
+      ? parentHtml + kids.map(k => taskRowHtml(k, true)).join('')
+      : parentHtml;
+  }).join('');
+
+  const emptyFilter = visible.length === 0
+    ? `<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-dim)">Nenhuma tarefa para os filtros selecionados</td></tr>`
+    : '';
+
+  body.innerHTML = `<div class="tasks-table-wrap">
+    ${filterHtml}
+    <table class="data-table tasks-table">
+      <thead><tr>
+        <th>Nó</th>
+        <th>Ação</th>
+        <th>Descrição</th>
+        <th>Tempo</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows || emptyFilter}</tbody>
+    </table>
+  </div>`;
+}
+
+function toggleActionFilter(action) {
+  if (selectedActions.has(action)) selectedActions.delete(action);
+  else selectedActions.add(action);
+  renderTasksTable(tasksList);
+}
+
+function clearActionFilter() {
+  selectedActions.clear();
+  renderTasksTable(tasksList);
+}
+
+function toggleTaskGroup(parentId) {
+  if (expandedTasks.has(parentId)) expandedTasks.delete(parentId);
+  else expandedTasks.add(parentId);
+  renderTasksTable(tasksList);
+}
+
+let currentTaskId = '';
+
+function showTaskJson(idx) {
+  const task = tasksList[idx];
+  if (!task) return;
+  currentTaskId = task.id;
+  document.getElementById('taskJsonSubtitle').textContent = task.id;
+  document.getElementById('taskJsonBody').textContent = JSON.stringify(task, null, 2);
+  document.getElementById('taskJsonModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+async function copyTaskId() {
+  try {
+    await navigator.clipboard.writeText(currentTaskId);
+    const icon = document.querySelector('#taskJsonCopyBtn i');
+    icon.className = 'fas fa-check';
+    setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500);
+  } catch (_) {}
+}
+
+function closeTaskJsonModal() {
+  document.getElementById('taskJsonModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function cancelTask(taskId, btn) {
+  if (!confirm(`Cancelar a tarefa:\n${taskId}\n\nEsta ação envia um sinal de cancelamento ao Elasticsearch. Confirma?`)) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+
+  try {
+    const res = await fetch('/api/tasks/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_id: taskId }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      const row = btn.closest('tr');
+      if (row) row.style.opacity = '0.4';
+      btn.innerHTML = '<i class="fas fa-check"></i> Cancelada';
+      setTimeout(loadTasks, 2500);
+    } else {
+      alert('Erro ao cancelar: ' + (data.error || 'desconhecido'));
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-ban"></i> Cancelar';
+    }
+  } catch (e) {
+    alert('Erro de rede: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-ban"></i> Cancelar';
+  }
+}
+
 // ─── Modal de Detalhe de Nó (Topologia) ──────────────────
 // Carregado sob demanda ao clicar na caixinha — sem impacto no dashboard.
 
@@ -2911,7 +3168,7 @@ document.addEventListener('keydown', e => {
     if (dm && dm.style.display === 'flex') { closeDiskModal(); return; }
     const nm = document.getElementById('nodeModal');
     if (nm && nm.style.display === 'flex') { closeNodeModal(); return; }
-    closeDetailModal(); closeAliasModal(); closeConfirmModal();
+    closeDetailModal(); closeTaskJsonModal(); closeAliasModal(); closeConfirmModal();
   }
   if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' &&
       (currentPage === 'overview' || currentPage === 'capacity' || currentPage === 'kibana')) {

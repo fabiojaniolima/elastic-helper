@@ -239,6 +239,27 @@
             <span>Carregando métricas...</span>
           </div>
         </div>
+
+        <!-- Tarefas em Execução -->
+        <div class="tasks-section-header">
+          <span class="grid-section-label">Tarefas em Execução</span>
+          <span class="tasks-section-hint">&gt; 5s</span>
+          <div class="tooltip-wrap" style="font-weight:400;text-transform:none;letter-spacing:0">
+            <div class="tooltip-btn tooltip-btn-link" onclick="goToHelp('help-running-tasks')" title="Abrir a ajuda detalhada desta seção">?</div>
+            <div class="tooltip-box" style="left:0;right:auto">Tarefas do cluster com tempo de execução acima de <strong>5s</strong> (ignora ações internas de baixo nível). Útil para flagrar operações travadas, reindexações longas ou consultas pesadas. Cada tarefa pode ser inspecionada e, quando cancelável, cancelada.<div class="tooltip-help-hint"><i class="fas fa-circle-question"></i> Clique no <strong>?</strong> para abrir a ajuda detalhada</div></div>
+          </div>
+          <span class="grid-section-line"></span>
+          <span class="tasks-badge" id="tasksCount"></span>
+          <button class="btn-icon" onclick="loadTasks()" title="Atualizar tarefas">
+            <i class="fas fa-rotate-right" id="tasksRefreshIcon"></i>
+          </button>
+        </div>
+        <div id="tasksBody">
+          <div class="loading-state tasks-loading">
+            <i class="fas fa-circle-notch fa-spin"></i>
+            <span>Carregando tarefas...</span>
+          </div>
+        </div>
       </section>
 
       <!-- ========== INVENTÁRIO (id interno: capacity) ========== -->
@@ -298,6 +319,27 @@
 
     <div class="detail-body" id="detailBody"></div>
 
+  </div>
+</div>
+
+<!-- ═══════════════════ TASK JSON MODAL ════════════════════ -->
+<div class="modal-overlay detail-overlay" id="taskJsonModal" style="display:none" onclick="if(event.target===this)closeTaskJsonModal()">
+  <div class="task-json-card" onclick="event.stopPropagation()">
+    <div class="detail-header">
+      <div>
+        <h2 class="detail-title">Detalhes da Tarefa</h2>
+        <div class="task-json-id-row">
+          <p class="detail-subtitle" id="taskJsonSubtitle"></p>
+          <button class="btn-copy-id" id="taskJsonCopyBtn" onclick="copyTaskId()" title="Copiar ID">
+            <i class="fas fa-copy"></i>
+          </button>
+        </div>
+      </div>
+      <button class="btn-icon" onclick="closeTaskJsonModal()" title="Fechar (Esc)" style="flex-shrink:0">
+        <i class="fas fa-xmark" style="font-size:17px"></i>
+      </button>
+    </div>
+    <pre class="task-json-body" id="taskJsonBody"></pre>
   </div>
 </div>
 

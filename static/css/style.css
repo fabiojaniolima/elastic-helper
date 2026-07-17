@@ -1282,6 +1282,40 @@ input[type="checkbox"] {
   .section-volume-cards { grid-template-columns: 1fr; }
 }
 
+/* ─── Tasks Section ─── */
+.tasks-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  margin-bottom: 16px;
+}
+
+.tasks-section-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.tasks-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--yellow);
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow-dim);
+  border-radius: 20px;
+  padding: 2px 10px;
+  display: none;
+}
+
+.tasks-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
 .tasks-filter {
   display: flex;
   align-items: center;
@@ -1347,14 +1381,134 @@ input[type="checkbox"] {
 
 .tasks-filter-clear:hover { color: var(--red); }
 
+.tasks-table td {
+  vertical-align: middle;
+  padding: 12px 16px;
+}
+
+.task-row {
+  cursor: pointer;
+}
+
+/* Coluna Tempo: o hover revela a data/hora de início (atributo title) */
+.task-elapsed {
+  cursor: help;
+}
+
+/* ─── Agrupamento de sub-tarefas (slices) sob a tarefa-pai ─── */
+.task-node-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Chevron de expandir/recolher as filhas do pai */
+.task-group-toggle {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  transition: transform var(--transition), background var(--transition), color var(--transition);
+}
+.task-group-toggle:hover {
+  background: var(--blue-bg);
+  color: var(--blue);
+  border-color: var(--blue-dim);
+}
+.task-group-toggle.open {
+  transform: rotate(90deg);
+}
+
+/* Espaçador para alinhar linhas sem chevron (pais sem filhas) com as que têm */
+.task-group-spacer {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+/* "N sub-tarefas" abaixo da action do pai — mesma tipografia da role sob o nome
+   do nó (.node-roles-inline), mantendo a cor azul. */
+.task-subcount {
+  display: block;
+  margin-top: 3px;
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+/* Linha-filha (slice) recuada e com fundo sutil */
+.task-child-row {
+  background: var(--surface-2);
+}
+.task-child-row > td:first-child {
+  padding-left: 40px;
+}
+.task-child-row .task-action {
+  color: var(--text-muted);
+}
+
+.tasks-loading {
+  padding: 32px 20px !important;
+}
+
 .section-loading {
   padding: 40px 20px !important;
+}
+
+.tasks-empty {
+  padding: 36px 20px;
+}
+
+.task-action {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.task-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 450px;
+  word-break: break-word;
 }
 
 .btn-sm {
   padding: 4px 10px;
   font-size: 12px;
 }
+
+/* ─── Task JSON Modal ─── */
+.task-json-id-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-copy-id {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1;
+  transition: color var(--transition);
+  flex-shrink: 0;
+}
+
+.btn-copy-id:hover { color: var(--blue); }
 
 .task-json-card {
   background: var(--surface);
@@ -1423,6 +1577,18 @@ input[type="checkbox"] {
 }
 .reloc-out { color: var(--yellow); }
 .reloc-in  { color: var(--blue); }
+
+.task-json-body {
+  padding: 20px 24px 24px;
+  font-size: 13px;
+  font-family: monospace;
+  color: var(--text-muted);
+  line-height: 1.6;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  flex: 1;
+}
 
 /* ─── Utilitários de cor de texto ─── */
 .text-yellow { color: var(--yellow); }

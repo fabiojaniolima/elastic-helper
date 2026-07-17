@@ -222,6 +222,32 @@ def api_detail(metric):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/tasks')
+def api_tasks():
+    err = require_es()
+    if err:
+        return err
+    try:
+        return jsonify(es_service.tasks())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/tasks/cancel', methods=['POST'])
+def api_cancel_task():
+    err = require_es()
+    if err:
+        return err
+    task_id = (request.get_json() or {}).get('task_id', '')
+    if not task_id:
+        return jsonify({'success': False, 'error': 'task_id is required'}), 400
+    try:
+        es_service.cancel_task(task_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/index_shards/<path:index_name>')
 def api_index_shards(index_name):
     err = require_es()

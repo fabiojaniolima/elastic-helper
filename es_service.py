@@ -862,6 +862,51 @@ def detail(metric):
     return fn() if fn else None
 
 
+# ─── Tarefas em execução ──────────────────────────────────
+FIVE_SECONDS_NS = 5_000_000_000
+IGNORED_ACTIONS = {
+    'data_frame/transforms[c]',
+    'health-node[c]',
+    'geoip-downloader[c]',
+    'indices:monitor/fleet/global_checkpoints',
+    'indices:monitor/fleet/global_checkpoints[s]',
+    'indices:monitor/fleet/global_checkpoints[s][s]',
+}
+
+
+def tasks():
+    """Tarefas em execução há mais de 5s (ignora ações internas), ordenadas por duração."""
+    response = _client.tasks.list(detailed=True)
+    result = []
+    for node_id, node_data in response.body.get('nodes', {}).items():
+        node_name = node_data.get('name', node_id)
+        node_roles = list(node_data.get('roles', []))
+        for task_key, task in node_data.get('tasks', {}).items():
+            running_ns = task.get('running_time_in_nanos', 0)
+            if running_ns > FIVE_SECONDS_NS and task.get('action') not in IGNORED_ACTIONS:
+                result.append({
+                    'node': node_name,
+                    'roles': node_roles,
+                    'id': task_key,
+                    # parent_task_id vem como "nodeId:num" (mesmo formato de `id`) quando a
+                    # tarefa é filha de outra (ex.: slices de reindex sob a coordenadora);
+                    # ausente/'-' em tarefas raiz. Usado no front para agrupar filhas sob o pai.
+                    'parent_task_id': task.get('parent_task_id'),
+                    'action': task.get('action', ''),
+                    'description': task.get('description', ''),
+                    'start_time_in_millis': task.get('start_time_in_millis'),
+                    'running_time_in_nanos': running_ns,
+                    'cancellable': task.get('cancellable', False),
+                    'headers': dict(task.get('headers', {})),
+                })
+    result.sort(key=lambda t: t['running_time_in_nanos'], reverse=True)
+    return result
+
+
+def cancel_task(task_id):
+    _client.tasks.cancel(task_id=task_id)
+
+
 # ─── Detalhe de um nó específico ──────────────────────────
 def node_detail(node_name):
     """Coleta paralela de nodes.info + nodes.stats filtrados para um único nó.
