@@ -259,6 +259,17 @@ def api_index_shards(index_name):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/recovery')
+def api_recovery():
+    err = require_es()
+    if err:
+        return err
+    try:
+        return jsonify(es_service.recovery())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/node/<path:node_name>')
 def api_node(node_name):
     err = require_es()

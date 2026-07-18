@@ -1068,3 +1068,55 @@ def index_shards(index_name):
 
     result.sort(key=lambda x: (x.get('prirep', 'z'), safe_int(x.get('shard'))))
     return result
+
+
+# ─── Realocação e recuperação de shards ───────────────────
+def _recovery_pct(val):
+    """Converte o percentual textual do _recovery ('45.2%') em float; 0.0 se vazio."""
+    try:
+        return float(str(val).replace('%', '').strip())
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def recovery():
+    """Realocações e recuperações de shards em andamento (_recovery?active_only).
+
+    Usa a API JSON `_recovery` (e NÃO o `_cat/recovery`) porque ela traz, por shard,
+    o campo `primary` — permitindo marcar cada operação como primário ou réplica, o
+    que o `_cat/recovery` não expõe. Só operações ativas (active_only): relocação
+    entre nós (PEER), recuperação de réplica, restore de snapshot, shrink local, etc.
+    Cada linha traz origem, destino, tipo, estágio, se é primário, progresso
+    (bytes/arquivos/translog em %, bytes em bytes) e o tempo decorrido. Os totais de
+    bytes/arquivos/translog são o denominador coerente com os percentuais do ES."""
+    body = _client.indices.recovery(active_only=True, detailed=True).body
+    result = []
+    for index_name, idx_data in body.items():
+        for sh in idx_data.get('shards', []):
+            size = sh.get('index', {}).get('size', {})
+            files = sh.get('index', {}).get('files', {})
+            translog = sh.get('translog', {})
+            result.append({
+                'index': index_name,
+                'shard': safe_int(sh.get('id')),
+                'primary': bool(sh.get('primary')),
+                # total_time_in_millis vem sempre; o `total_time` (string) só com human=true.
+                # Enviamos em ms e formatamos no front (fmtDuration).
+                'time_ms': safe_int(sh.get('total_time_in_millis')),
+                'type': (sh.get('type', '') or '').upper(),
+                'stage': (sh.get('stage', '') or '').upper(),
+                'source_node': (sh.get('source') or {}).get('name', '') or '',
+                'target_node': (sh.get('target') or {}).get('name', '') or '',
+                'files_recovered': safe_int(files.get('recovered')),
+                'files_total': safe_int(files.get('total')),
+                'files_percent': _recovery_pct(files.get('percent')),
+                'bytes_recovered': safe_int(size.get('recovered_in_bytes')),
+                'bytes_total': safe_int(size.get('total_in_bytes')),
+                'bytes_percent': _recovery_pct(size.get('percent')),
+                'translog_recovered': safe_int(translog.get('recovered')),
+                'translog_total': safe_int(translog.get('total')),
+                'translog_percent': _recovery_pct(translog.get('percent')),
+            })
+    # Menos avançados primeiro: o que ainda precisa de atenção fica no topo.
+    result.sort(key=lambda x: (x['bytes_percent'], x['index'], x['shard']))
+    return result

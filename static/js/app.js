@@ -1478,6 +1478,77 @@ function setExportBtn(visible) {
   if (btn) btn.style.display = visible ? '' : 'none';
 }
 
+// ─── Detail Modal ─────────────────────────────────────────
+
+function openShardsDetail() {
+  if (!dashboardData) return;
+  const h = dashboardData.cluster_health || {};
+  const dataNodes = h.number_of_data_nodes || 0;
+  const totalShards = dashboardData.total_shards || 0;
+  const avgShards = dataNodes ? Math.round(totalShards / dataNodes) : 0;
+  const pctRaw = h.active_shards_percent ?? 100;
+  const pctColor = pctRaw >= 100 ? 'green' : pctRaw >= 90 ? 'yellow' : 'red';
+  const pct = pctRaw >= 100 ? 100 : Math.min(99.9, Math.round(pctRaw * 10) / 10);
+  const avgColor = avgShards >= 1000 ? 'red' : avgShards >= 600 ? 'yellow' : null;
+  const unassigned = h.unassigned_shards || 0;
+  const delayed = h.delayed_unassigned_shards || 0;
+
+  clusterHealthFilters.clear();
+  detailNavStack.length = 0;
+  document.getElementById('detailTitle').textContent = 'Total de Shards';
+  document.getElementById('detailTitleTip').innerHTML = '';
+  document.getElementById('detailSubtitle').textContent = '';
+  document.getElementById('detailSearch').value = '';
+  document.getElementById('detailCount').textContent = '';
+  // Este modal não tem tabela filtrável — esconde a barra de busca
+  document.getElementById('detailSearchBar').style.display = 'none';
+  document.getElementById('detailBreadcrumb').style.display = 'none';
+  document.getElementById('detailModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setExportBtn(false);
+
+  const stats = [
+    { label: 'Primários', val: fmtNum(h.active_primary_shards), color: null },
+    { label: 'Réplicas', val: fmtNum((h.active_shards || 0) - (h.active_primary_shards || 0)), color: null },
+    { label: 'Ativos', val: `${pct}%`, color: pctColor },
+    { label: 'Média por data node', val: fmtNum(avgShards), color: avgColor },
+  ];
+
+  const unassignedLabel = `${fmtNum(unassigned)} shard${unassigned === 1 ? '' : 's'} não alocado${unassigned === 1 ? '' : 's'} aguardando alocação`;
+  const delayedNote = delayed > 0 ? ` · ${fmtNum(delayed)} com atraso por timeout` : '';
+  const noticeHtml = unassigned > 0 ? `
+    <div class="shards-notice">
+      <i class="fas fa-circle-info"></i>
+      <div class="shards-notice-text">
+        <span class="shards-notice-main">${unassignedLabel}</span>
+        <span class="shards-notice-sub">Pode incluir restaurações de snapshot e réplicas pendentes. Consulte o diagnóstico para ver o motivo de cada shard.${delayedNote}</span>
+      </div>
+    </div>` : '';
+
+  document.getElementById('detailBody').innerHTML = `
+    <div class="shards-detail">
+      <div class="shards-stats">
+        ${stats.map(s => `
+          <div class="shards-stat">
+            <div class="shards-stat-val" ${s.color ? `style="color:var(--${s.color})"` : ''}>${s.val}</div>
+            <div class="shards-stat-label">${s.label}</div>
+          </div>`).join('')}
+      </div>
+      ${noticeHtml}
+      <div class="shards-recovery">
+        <div class="shards-recovery-head">
+          <h3><i class="fas fa-right-left"></i> Realocação e Recuperação de Shards</h3>
+          <span id="recoveryCount" class="shards-recovery-count"></span>
+        </div>
+        <div id="recoveryBody">
+          <div class="loading-state section-loading"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando...</span></div>
+        </div>
+      </div>
+    </div>`;
+
+  loadRecovery();
+}
+
 // Célula nome + roles de um nó a partir do seu nome (mesma regra de "Utilização por
 // Nó"). Usada por qualquer modal de listagem de instâncias cujo dado bruto traz só o
 // nome do nó (recovery, circuit breakers, shards de índice…); as roles vêm do
@@ -1489,6 +1560,101 @@ function nodeCellByName(name) {
   return nodeNameCell(name, (n && n.roles) || [], !!(n && n.is_master));
 }
 
+// Mapeia o `type` do _recovery em rótulo de operação.
+// `desc` = "quando ocorre" (exibido no tooltip, junto do valor cru do ES).
+// Pode ser uma string ou uma função (primary) => string, quando o texto depende de
+// o shard ser primário ou réplica (caso do PEER).
+const RECOVERY_TYPES = {
+  PEER: { label: 'Realocação', desc: (primary) => primary
+    ? 'Cópia a partir de outro nó — este shard primário está sendo realocado entre nós.'
+    : 'Cópia a partir de outro nó — esta réplica está sendo criada/copiada a partir do primário.' },
+  SNAPSHOT: { label: 'Restauração (snapshot)', desc: 'Restauração a partir de um snapshot/repositório.' },
+  EXISTING_STORE: { label: 'Recuperação local', desc: 'Shard recuperado do disco do próprio nó (ex.: após restart).' },
+  EMPTY_STORE: { label: 'Inicialização', desc: 'Shard primário novo e vazio (criação de índice).' },
+  LOCAL_SHARDS: { label: 'Redução (shrink)', desc: 'Shard montado a partir de shards locais num _shrink.' },
+};
+
+// Estágios do _recovery (em ordem) → significado, exibido no tooltip junto do
+// valor cru do ES. DONE não aparece no painel (active_only só lista o que está ativo).
+const RECOVERY_STAGES = {
+  INIT: 'Recuperação registrada, mas ainda não começou a transferir dados.',
+  INDEX: 'Copiando os arquivos do índice (segmentos Lucene) do nó de origem.',
+  VERIFY_INDEX: 'Verificando a integridade dos arquivos copiados (checksums).',
+  TRANSLOG: 'Reaplicando as operações do translog (escritas ocorridas durante a cópia).',
+  FINALIZE: 'Limpeza e finalização (refresh, atualização do cluster state).',
+  DONE: 'Recuperação concluída.',
+};
+
+// Estados de snapshot em execução (_snapshot/_status).
+// Cada entrada: { label: rótulo pt-BR, desc: explicação para o tooltip }.
+
+async function loadRecovery() {
+  const body = document.getElementById('recoveryBody');
+  if (!body) return;
+  try {
+    const res = await fetch('/api/recovery');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderRecovery(data);
+  } catch (e) {
+    body.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${e.message}</p></div>`;
+  }
+}
+
+function renderRecovery(rows) {
+  const body = document.getElementById('recoveryBody');
+  const countEl = document.getElementById('recoveryCount');
+  if (!body) return;
+
+  if (!rows || rows.length === 0) {
+    if (countEl) countEl.textContent = '';
+    body.innerHTML = `<div class="empty-state" style="padding:28px 16px">
+      <i class="fas fa-circle-check"></i>
+      <p>Nenhuma realocação ou recuperação de shards em andamento.</p></div>`;
+    return;
+  }
+
+  if (countEl) countEl.textContent = `${rows.length} em andamento`;
+
+  body.innerHTML = `<div class="recovery-list">${rows.map(r => {
+    const pct = Math.min(100, Math.max(0, r.bytes_percent || 0));
+    const fillColor = pct >= 100 ? 'green' : 'blue';
+    const meta = RECOVERY_TYPES[r.type] || { label: r.type || 'Recuperação' };
+    const typeDesc = typeof meta.desc === 'function' ? meta.desc(r.primary) : meta.desc;
+    const stageDesc = RECOVERY_STAGES[r.stage];
+    // Tooltip único do par tipo+estágio. Usa o vocabulário do ES (Type/Stage), mostra
+    // o valor cru + o rótulo amigável no tipo, e separa as duas descrições por uma
+    // linha em branco (\n\n no title nativo).
+    const typePart = `Type: ${r.type} (${meta.label})${typeDesc ? ` — ${typeDesc}` : ''}`;
+    const stagePart = `Stage: ${r.stage}${stageDesc ? ` — ${stageDesc}` : ''}`;
+    const opTitle = `${typePart}\n\n${stagePart}`;
+    const route = r.source_node && r.target_node
+      ? `${nodeCellByName(r.source_node)}<i class="fas fa-arrow-right-long rarrow"></i>${nodeCellByName(r.target_node)}`
+      : nodeCellByName(r.target_node || r.source_node);
+    return `
+      <div class="recovery-item">
+        <div class="recovery-head">
+          <span class="recovery-index">${r.index}</span>
+          <span class="recovery-shard">shard ${r.shard} · ${r.primary ? 'Primário' : 'Réplica'}</span>
+          <span class="recovery-op" title="${escHtml(opTitle)}">${meta.label} / ${r.stage}</span>
+          <span class="recovery-time"><i class="far fa-clock"></i> ${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
+        </div>
+        <div class="recovery-route">${route}</div>
+        <div class="recovery-progress">
+          <div class="recovery-track"><div class="recovery-fill" style="width:${pct}%;background:var(--${fillColor})"></div></div>
+          <span class="recovery-pct">${pct.toFixed(1)}%</span>
+          <span class="recovery-bytes">${formatBytes(r.bytes_recovered)} / ${formatBytes(r.bytes_total)}</span>
+        </div>
+        <div class="recovery-sub">
+          <span>Arquivos ${fmtNum(r.files_recovered)} / ${fmtNum(r.files_total)} (${(r.files_percent || 0).toFixed(0)}%)</span>
+          <span>Translog ${fmtNum(r.translog_recovered)} / ${fmtNum(r.translog_total)} (${(r.translog_percent || 0).toFixed(0)}%)</span>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+// Tooltip de ajuda exibido ao lado do título de certas modais de detalhe, quando a
+// lista tem uma regra de recorte que não é óbvia. Mesmo visual dos tooltips dos cards.
 const DETAIL_TITLE_TIPS = {
   circuit_breakers: `<strong style="color:var(--text);display:block;margin-bottom:6px">Regra de listagem</strong>
 A lista mostra <strong>um breaker por linha</strong> (nó × breaker) e exibe apenas os que merecem atenção — um breaker só aparece quando:<br><br>
