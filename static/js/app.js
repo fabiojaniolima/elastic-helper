@@ -846,7 +846,21 @@ function cardAlertSignals(d, h) {
 
 // Snapshots em criação agora (_snapshot/_status, via d.snapshots_running) —
 // vive no Inventário (Volume e Capacidade), não nos Sinais Vitais: é dado de
-
+// infraestrutura/capacidade, não de disponibilidade do cluster.
+function cardSnapshotRunning(d) {
+  const snapRun = d.snapshots_running || {};
+  let color, valueHtml, unit;
+  if (!snapRun.available) {
+    color = 'muted'; valueHtml = '&mdash;'; unit = 'indisponível (licença/permissão)';
+  } else if ((snapRun.running || 0) > 0) {
+    color = 'blue'; valueHtml = fmtNum(snapRun.running); unit = 'snapshot(s) em andamento';
+  } else {
+    color = 'green'; valueHtml = '0'; unit = 'nenhum em execução agora';
+  }
+  const tip = 'Snapshots em <strong>criação</strong> neste momento — visão ao vivo de qual backup está rodando, em qual repositório, há quanto tempo e o progresso total (bytes e shards).<br><br>' +
+    'Clique para abrir o painel com barra de progresso por snapshot em andamento.';
+  return cardStat('openSnapshotModal()', 'Snapshot em Execução', 'fa-camera', valueHtml, unit, color, tip, [], 'help-snapshot-running');
+}
 
 // color: 'green' (ok, com check) | 'yellow'/'red'/'blue' (alerta, sub colorido) |
 // 'muted' (indisponível — renderiza '—' em vez do número, sem check nem cor).
@@ -1303,6 +1317,7 @@ function sectionCardsVolume(d) {
       'Contagem total de índices do cluster, incluindo índices de sistema (prefixo <code>.</code>). Uma contagem elevada pode impactar o desempenho — avalie o uso de data streams para séries temporais. Clique para listar todos os índices.',
       [],
       'Todos os Índices', 'help-total-indices'),
+    cardSnapshotRunning(d),
   ].join('');
 }
 
@@ -1456,6 +1471,22 @@ const EXPORT_CONFIG = {
       documentos: r['docs.count'],
     }),
   },
+  slm_policies: {
+    filename: 'Políticas de Snapshot (SLM)',
+    extract: r => ({
+      política: r.name,
+      estado: r.state,
+      repositório: r.repository,
+      agendamento: r.schedule,
+      último_sucesso: r.last_success_time ? fmtMillisDate(r.last_success_time) : '-',
+      último_snapshot: r.last_success_snapshot,
+      última_falha: r.last_failure_time ? fmtMillisDate(r.last_failure_time) : '-',
+      motivo_da_falha: r.last_failure_reason,
+      próxima_execução: r.next_execution_millis ? fmtMillisDate(r.next_execution_millis) : '-',
+      snapshots_tirados: r.snapshots_taken,
+      snapshots_falhos: r.snapshots_failed,
+    }),
+  },
 };
 
 function exportList() {
@@ -1587,6 +1618,15 @@ const RECOVERY_STAGES = {
 
 // Estados de snapshot em execução (_snapshot/_status).
 // Cada entrada: { label: rótulo pt-BR, desc: explicação para o tooltip }.
+const SNAPSHOT_STATES = {
+  STARTED:      { label: 'Iniciado',      desc: 'Snapshot registrado e aceito, aguardando o início da transferência de dados para o repositório.' },
+  IN_PROGRESS:  { label: 'Em progresso',  desc: 'Copiando dados dos shards para o repositório. Este é o estado esperado durante a maior parte da execução.' },
+  SUCCESS:      { label: 'Concluído',     desc: 'Snapshot finalizado com sucesso — todos os shards foram copiados para o repositório.' },
+  FAILED:       { label: 'Falhou',        desc: 'Ocorreu um erro durante a criação do snapshot. Verifique os logs do nó master e o estado do repositório.' },
+  ABORTED:      { label: 'Abortado',      desc: 'Snapshot cancelado (via API DELETE) antes de ser concluído.' },
+  MISSING:      { label: 'Ausente',       desc: 'Snapshot não encontrado no repositório configurado — pode ter sido excluído externamente.' },
+  INCOMPATIBLE: { label: 'Incompatível',  desc: 'Snapshot criado em uma versão do Elasticsearch incompatível com a versão atual do cluster.' },
+};
 
 async function loadRecovery() {
   const body = document.getElementById('recoveryBody');
@@ -1740,6 +1780,7 @@ const DETAIL_RENDERERS = {
   pending_tasks: tablePendingTasks,
   index_shards: tableIndexShards,
   read_only_indices: tableReadOnly,
+  slm_policies: tableSlmPolicies,
 };
 
 // Métricas cuja modal de detalhe usa largura estendida (~96vw) por terem tabelas largas
@@ -2004,6 +2045,55 @@ function tableReadOnly(rows) {
     </tr>`;
     }).join('')}</tbody>
   </table>`;
+}
+
+const SLM_STATE_BADGE = { ok: ['badge-green', 'OK'], failed: ['badge-red', 'Falha'], never: ['badge-gray', 'Nunca executou'] };
+
+function slmStateBadge(state) {
+  const [cls, label] = SLM_STATE_BADGE[state] || ['badge-gray', state || '-'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function tableSlmPolicies(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="name">Política <span class="sort-icon">↕</span></th>
+      <th data-col="state">Estado <span class="sort-icon">↕</span></th>
+      <th data-col="repository">Repositório <span class="sort-icon">↕</span></th>
+      <th data-col="last_success_time" data-type="num">Último Sucesso <span class="sort-icon">↕</span></th>
+      <th data-col="last_failure_time" data-type="num">Última Falha <span class="sort-icon">↕</span></th>
+      <th data-col="next_execution_millis" data-type="num">Próx. Execução <span class="sort-icon">↕</span></th>
+      <th data-col="snapshots_taken" data-type="num">Snapshots <span class="sort-icon">↕</span></th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const success = r.last_success_time
+        ? `<span style="color:var(--green)">${fmtMillisDate(r.last_success_time)}</span>`
+        : '<span style="color:var(--text-dim)">—</span>';
+      const successTitle = r.last_success_time && r.last_success_snapshot && r.last_success_snapshot !== '-'
+        ? ` title="Snapshot: ${escHtml(r.last_success_snapshot)}"` : '';
+      const failure = r.last_failure_time
+        ? `<span style="color:var(--red)">${fmtMillisDate(r.last_failure_time)}</span>`
+        : '<span style="color:var(--text-dim)">—</span>';
+      const failureTitle = r.last_failure_time && r.last_failure_reason && r.last_failure_reason !== '-'
+        ? ` title="${escHtml(r.last_failure_reason)}"` : '';
+      const snaps = `<span style="color:var(--green)">${fmtNum(r.snapshots_taken)}</span>${r.snapshots_failed > 0 ? ` / <span style="color:var(--red)">${fmtNum(r.snapshots_failed)}</span>` : ''}`;
+      return `<tr class="task-row" data-name="${escHtml(r.name)}" onclick="showSlmJson(this.dataset.name)">
+        <td style="font-family:monospace;font-size:12px;font-weight:600">${escHtml(r.name)}${r.in_progress ? ' <span class="badge badge-blue" style="font-size:10px">em execução</span>' : ''}</td>
+        <td>${slmStateBadge(r.state)}</td>
+        <td style="font-family:monospace;font-size:12px">${escHtml(r.repository)}</td>
+        <td style="font-size:12px"${successTitle}>${success}</td>
+        <td style="font-size:12px"${failureTitle}>${failure}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${r.next_execution_millis ? fmtMillisDate(r.next_execution_millis) : '—'}</td>
+        <td style="font-size:12px">${snaps}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function showSlmJson(name) {
+  const row = currentRows.find(r => r.name === name);
+  if (!row) return;
+  showJsonModal('Detalhes da Política SLM', name, row.raw || row);
 }
 
 // Abre o JSON completo da entrada de _ilm/explain para o índice clicado
@@ -2581,6 +2671,73 @@ function openDiskModal() {
 function closeDiskModal() {
   document.getElementById('diskModal').style.display = 'none';
   document.body.style.overflow = '';
+}
+
+// ─── Modal: Snapshots em Execução ────────────────────────
+function openSnapshotModal() {
+  document.getElementById('snapshotModalBody').innerHTML =
+    `<div class="loading-state section-loading"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando...</span></div>`;
+  document.getElementById('snapshotModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  loadSnapshots();
+}
+
+function closeSnapshotModal() {
+  document.getElementById('snapshotModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function loadSnapshots() {
+  const body = document.getElementById('snapshotModalBody');
+  if (!body) return;
+  try {
+    const res = await fetch('/api/snapshots');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderSnapshots(data);
+  } catch (e) {
+    body.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${e.message}</p></div>`;
+  }
+}
+
+function renderSnapshots(rows) {
+  const body = document.getElementById('snapshotModalBody');
+  if (!body) return;
+
+  if (!rows || rows.length === 0) {
+    body.innerHTML = `<div class="empty-state" style="padding:28px 16px">
+      <i class="fas fa-circle-check"></i>
+      <p>Nenhum snapshot em execução no momento.</p></div>`;
+    return;
+  }
+
+  body.innerHTML = `<div class="recovery-list">${rows.map(r => {
+    const pct = Math.min(100, Math.max(0, r.percent || 0));
+    const fillColor = pct >= 100 ? 'green' : 'blue';
+    const stateMeta = SNAPSHOT_STATES[r.state] || { label: r.state || 'Em andamento', desc: '' };
+    const stateTitle = `Estado: ${r.state}${stateMeta.desc ? ` — ${stateMeta.desc}` : ''}`;
+    const failedNote = r.shards_failed > 0
+      ? ` · <span style="color:var(--red)">${fmtNum(r.shards_failed)} falharam</span>`
+      : '';
+    return `
+      <div class="recovery-item">
+        <div class="recovery-head">
+          <span class="recovery-index">${escHtml(r.snapshot)}</span>
+          <span class="recovery-shard">repo: ${escHtml(r.repository)}</span>
+          <span class="recovery-op" title="${escHtml(stateTitle)}">${stateMeta.label}</span>
+          <span class="recovery-time"><i class="far fa-clock"></i> ${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
+        </div>
+        <div class="recovery-progress">
+          <div class="recovery-track"><div class="recovery-fill" style="width:${pct}%;background:var(--${fillColor})"></div></div>
+          <span class="recovery-pct">${pct.toFixed(1)}%</span>
+          <span class="recovery-bytes">${formatBytes(r.bytes_processed)} / ${formatBytes(r.bytes_total)}</span>
+        </div>
+        <div class="recovery-sub">
+          <span>Shards ${fmtNum(r.shards_done)} / ${fmtNum(r.shards_total)}${failedNote}</span>
+          <span>${fmtNum(r.indices_count)} índice(s) / data stream(s)</span>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
 }
 
 function tableNodes(rows) {
@@ -3332,6 +3489,8 @@ document.addEventListener('keydown', e => {
     if (jm && jm.style.display === 'flex') { closeJsonModal(); return; }
     const dm = document.getElementById('diskModal');
     if (dm && dm.style.display === 'flex') { closeDiskModal(); return; }
+    const sm = document.getElementById('snapshotModal');
+    if (sm && sm.style.display === 'flex') { closeSnapshotModal(); return; }
     const nm = document.getElementById('nodeModal');
     if (nm && nm.style.display === 'flex') { closeNodeModal(); return; }
     closeDetailModal(); closeTaskJsonModal(); closeAliasModal(); closeConfirmModal();

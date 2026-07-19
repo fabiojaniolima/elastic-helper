@@ -13,6 +13,7 @@ As rotas Flask em `app.py` apenas validam a requisição, chamam estas funções
 serializam o retorno (dados Python nativos) — nenhuma lógica de ES vive lá.
 """
 from concurrent.futures import ThreadPoolExecutor
+import json
 import logging
 import warnings
 
@@ -180,6 +181,18 @@ def fetch_nodes_stats():
     return _client.nodes.stats(metric='jvm,thread_pool,breaker,indexing_pressure').body
 
 
+def fetch_slm():
+    """Políticas de snapshot (SLM). Pode falhar por permissão ou licença — o
+    chamador trata o None como 'indisponível' e não levanta falso alarme."""
+    return _client.slm.get_lifecycle().body
+
+
+def fetch_snapshots_status():
+    """Snapshots em execução agora (_snapshot/_status). Pode falhar por permissão
+    ou licença — o chamador trata o None como 'indisponível' sem falso alarme."""
+    return _client.snapshot.status().body
+
+
 # ─── Helpers ──────────────────────────────────────────────
 def safe_int(val, default=0):
     try:
@@ -283,6 +296,41 @@ def build_indexing_pressure_map(nodes_stats_body):
     return imap
 
 
+def build_slm_summary(body):
+    """Resumo das políticas de snapshot (SLM) a partir de _slm/policy.
+    `available=False` quando a consulta falhou (sem permissão/licença) — nesse
+    caso não há como afirmar que faltam backups, então não se alerta."""
+    if body is None:
+        return {'available': False, 'configured': False, 'policy_count': 0, 'failed': 0}
+    policies = body if isinstance(body, dict) else {}
+    failed = 0
+    for p in policies.values():
+        last_success = p.get('last_success')
+        last_failure = p.get('last_failure')
+        # Falha = houve falha e ela é mais recente que o último sucesso (ou nunca houve sucesso)
+        if last_failure and (not last_success or
+                             safe_int(last_failure.get('time')) > safe_int(last_success.get('time'))):
+            failed += 1
+    return {
+        'available': True,
+        'configured': len(policies) > 0,
+        'policy_count': len(policies),
+        'failed': failed,
+    }
+
+
+def build_snapshots_summary(body):
+    """Resumo de snapshots em execução a partir de _snapshot/_status.
+    `available=False` quando a consulta falhou (sem permissão/licença) — nesse
+    caso não há como afirmar que nada está rodando, então não se alerta."""
+    if body is None:
+        return {'available': False, 'running': 0}
+    return {
+        'available': True,
+        'running': len(body.get('snapshots', [])),
+    }
+
+
 def _is_true(v):
     return v in (True, 'true', 'True')
 
@@ -335,6 +383,8 @@ DASHBOARD_SOURCES = {
     'index_settings':   (fetch_index_settings, {}),
     'nodes_info':       (fetch_nodes_info, {}),
     'nodes_stats':      (fetch_nodes_stats, {}),
+    'slm':              (fetch_slm, None),
+    'snapshots':        (fetch_snapshots_status, None),
 }
 
 
@@ -522,6 +572,14 @@ def _block_nodes(raw):
     }
 
 
+def _block_slm(raw):
+    return {'slm': build_slm_summary(raw['slm'])}
+
+
+def _block_snapshots(raw):
+    return {'snapshots_running': build_snapshots_summary(raw['snapshots'])}
+
+
 # Bloco → (fontes que ele consome, builder).
 DASHBOARD_BLOCKS = {
     'health':           (('health',), _block_health),
@@ -531,6 +589,8 @@ DASHBOARD_BLOCKS = {
     'ilm_errors':       (('ilm_errors',), _block_ilm_errors),
     'index_settings':   (('index_settings',), _block_index_settings),
     'nodes':            (('cat_nodes', 'nodes_info', 'nodes_stats'), _block_nodes),
+    'slm':              (('slm',), _block_slm),
+    'snapshots':        (('snapshots',), _block_snapshots),
 }
 
 # Seção da interface → blocos que a alimentam. É o contrato de ?sections= da
@@ -539,10 +599,10 @@ DASHBOARD_BLOCKS = {
 DASHBOARD_SECTIONS = {
     # Página Sinais Vitais
     'health':    ('health', 'indices'),
-    'signals':   ('health', 'ilm_errors', 'index_settings', 'nodes'),
+    'signals':   ('health', 'ilm_errors', 'index_settings', 'nodes', 'slm'),
     'resources': ('nodes',),
     # Página Inventário
-    'volume':    ('health', 'indices', 'nodes'),
+    'volume':    ('health', 'indices', 'nodes', 'snapshots'),
     'tierdisk':  ('nodes',),
     'indices':   ('health', 'indices', 'shards', 'index_settings', 'ilm'),
     'topology':  ('nodes',),
@@ -839,6 +899,65 @@ def _detail_read_only_indices():
     return result
 
 
+def _slm_failure_reason(details):
+    """`last_failure.details` vem como string JSON com {type, reason}. Extrai um
+    texto curto e legível (ou o próprio valor se não for JSON)."""
+    if not details:
+        return '-'
+    d = details if isinstance(details, dict) else None
+    if d is None:
+        try:
+            d = json.loads(details)
+        except (ValueError, TypeError):
+            return str(details)
+    if not isinstance(d, dict):
+        return str(details)
+    return d.get('reason') or d.get('type') or str(details)
+
+
+def _detail_slm_policies():
+    """Políticas de snapshot (SLM): estado, repositório, agendamento, último
+    sucesso/falha, próxima execução e contadores. Busca _slm/policy na hora, a
+    mesma chamada que alimenta o resumo de SLM no dashboard."""
+    body = fetch_slm()
+    if not isinstance(body, dict):
+        return []
+    result = []
+    for name, p in body.items():
+        policy = p.get('policy', {}) or {}
+        last_success = p.get('last_success') or {}
+        last_failure = p.get('last_failure') or {}
+        stats = p.get('stats', {}) or {}
+        ls_time = safe_int(last_success.get('time'))
+        lf_time = safe_int(last_failure.get('time'))
+        # Falha = última falha mais recente que o último sucesso (ou nunca houve sucesso)
+        if lf_time and (not ls_time or lf_time > ls_time):
+            state = 'failed'
+        elif ls_time:
+            state = 'ok'
+        else:
+            state = 'never'
+        result.append({
+            'name': name,
+            'state': state,
+            'repository': policy.get('repository', '-'),
+            'schedule': policy.get('schedule', '-'),
+            'snapshot_name': policy.get('name', '-'),
+            'last_success_time': ls_time,
+            'last_success_snapshot': last_success.get('snapshot_name', '-'),
+            'last_failure_time': lf_time,
+            'last_failure_reason': _slm_failure_reason(last_failure.get('details')),
+            'next_execution_millis': safe_int(p.get('next_execution_millis')),
+            'snapshots_taken': safe_int(stats.get('snapshots_taken')),
+            'snapshots_failed': safe_int(stats.get('snapshots_failed')),
+            'in_progress': bool(p.get('in_progress')),
+            'raw': p,
+        })
+    order = {'failed': 0, 'never': 1, 'ok': 2}
+    result.sort(key=lambda x: (order.get(x['state'], 3), x['name']))
+    return result
+
+
 _DETAIL_DISPATCH = {
     'cluster_health': _detail_cluster_health,
     'all_indices': _detail_all_indices,
@@ -853,6 +972,7 @@ _DETAIL_DISPATCH = {
     'circuit_breakers': _detail_circuit_breakers,
     'pending_tasks': _detail_pending_tasks,
     'read_only_indices': _detail_read_only_indices,
+    'slm_policies': _detail_slm_policies,
 }
 
 
@@ -1119,4 +1239,48 @@ def recovery():
             })
     # Menos avançados primeiro: o que ainda precisa de atenção fica no topo.
     result.sort(key=lambda x: (x['bytes_percent'], x['index'], x['shard']))
+    return result
+
+
+# ─── Snapshots em criação agora ───────────────────────────
+def snapshots_in_progress():
+    """Snapshots em criação neste momento (_snapshot/_status sem filtro = só ativos).
+
+    O progresso é volátil e vem fresco a cada abertura do modal. Para cada
+    snapshot retorna repositório, estado, tempo decorrido, progresso por bytes e
+    por shards e o JSON bruto. Percentual calculado por bytes; fallback por shards
+    quando bytes ainda não estão disponíveis (ex.: estágio inicial)."""
+    body = _client.snapshot.status().body
+    result = []
+    for snap in body.get('snapshots', []):
+        shards_stats = snap.get('shards_stats', {})
+        stats = snap.get('stats', {})
+        processed = stats.get('processed', {})
+        total_stats = stats.get('total', {})
+        bytes_processed = safe_int(processed.get('size_in_bytes'))
+        bytes_total = safe_int(total_stats.get('size_in_bytes'))
+        shards_done = safe_int(shards_stats.get('done'))
+        shards_total = safe_int(shards_stats.get('total'))
+        # Percentual por bytes; fallback por shards se bytes indisponível
+        if bytes_total > 0:
+            percent = bytes_processed / bytes_total * 100
+        elif shards_total > 0:
+            percent = shards_done / shards_total * 100
+        else:
+            percent = 0.0
+        result.append({
+            'snapshot': snap.get('snapshot', ''),
+            'repository': snap.get('repository', ''),
+            'state': (snap.get('state', '') or '').upper(),
+            'time_ms': safe_int(stats.get('time_in_millis')),
+            'shards_done': shards_done,
+            'shards_total': shards_total,
+            'shards_failed': safe_int(shards_stats.get('failed')),
+            'bytes_processed': bytes_processed,
+            'bytes_total': bytes_total,
+            'percent': round(min(100.0, max(0.0, percent)), 1),
+            'indices_count': len(snap.get('indices', {})),
+            'raw': snap,
+        })
+    result.sort(key=lambda x: (x['percent'], x['snapshot']))
     return result

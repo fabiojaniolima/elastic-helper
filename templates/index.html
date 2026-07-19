@@ -375,6 +375,22 @@
   </div>
 </div>
 
+<!-- ════════════════ SNAPSHOTS EM EXECUÇÃO MODAL ═══════════ -->
+<div class="modal-overlay detail-overlay" id="snapshotModal" style="display:none" onclick="if(event.target===this)closeSnapshotModal()">
+  <div class="detail-card" onclick="event.stopPropagation()">
+    <div class="detail-header">
+      <div>
+        <h2 class="detail-title">Snapshots em Execução</h2>
+        <p class="detail-subtitle">Criação de snapshot em andamento por repositório</p>
+      </div>
+      <button class="btn-icon" onclick="closeSnapshotModal()" title="Fechar (Esc)" style="flex-shrink:0">
+        <i class="fas fa-xmark" style="font-size:17px"></i>
+      </button>
+    </div>
+    <div class="detail-body" id="snapshotModalBody"></div>
+  </div>
+</div>
+
 <!-- ════════════════ DETALHE DE NÓ MODAL ══════════════════ -->
 <div class="modal-overlay detail-overlay" id="nodeModal" style="display:none" onclick="if(event.target===this)closeNodeModal()">
   <div class="detail-card" onclick="event.stopPropagation()">

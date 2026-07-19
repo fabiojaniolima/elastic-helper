@@ -281,6 +281,17 @@ def api_node(node_name):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/snapshots')
+def api_snapshots():
+    err = require_es()
+    if err:
+        return err
+    try:
+        return jsonify(es_service.snapshots_in_progress())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
     # Debugger/reloader do Flask só quando LOG_LEVEL=DEBUG.
