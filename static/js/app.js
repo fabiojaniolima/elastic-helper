@@ -1471,6 +1471,27 @@ const EXPORT_CONFIG = {
       documentos: r['docs.count'],
     }),
   },
+  cluster_settings: {
+    filename: 'Configurações de Cluster de Risco',
+    extract: r => ({
+      severidade: r.severity,
+      escopo: r.scope,
+      configuração: r.key,
+      valor: r.value,
+      motivo: r.message,
+    }),
+  },
+  deprecations: {
+    filename: 'Deprecations',
+    extract: r => ({
+      nível: r.level,
+      categoria: r.category_label,
+      recurso: r.resource,
+      aviso: r.message,
+      detalhes: r.details,
+      documentação: r.url,
+    }),
+  },
   slm_policies: {
     filename: 'Políticas de Snapshot (SLM)',
     extract: r => ({
@@ -1780,6 +1801,8 @@ const DETAIL_RENDERERS = {
   pending_tasks: tablePendingTasks,
   index_shards: tableIndexShards,
   read_only_indices: tableReadOnly,
+  cluster_settings: tableClusterSettings,
+  deprecations: tableDeprecations,
   slm_policies: tableSlmPolicies,
 };
 
@@ -2042,6 +2065,51 @@ function tableReadOnly(rows) {
       <td>${healthBadge(r.health)}</td>
       <td>${r['store.size'] || '-'}</td>
       <td>${fmtNum(r['docs.count'])}</td>
+    </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+const SEVERITY_BADGE = { red: 'badge-red', yellow: 'badge-yellow', blue: 'badge-blue' };
+const SCOPE_BADGE = { persistent: 'badge-blue', transient: 'badge-yellow' };
+
+function tableClusterSettings(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="severity">Severidade <span class="sort-icon">↕</span></th>
+      <th data-col="scope">Escopo <span class="sort-icon">↕</span></th>
+      <th data-col="key">Configuração <span class="sort-icon">↕</span></th>
+      <th data-col="value">Valor <span class="sort-icon">↕</span></th>
+      <th data-col="message">Por que importa</th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td><span class="badge ${SEVERITY_BADGE[r.severity] || 'badge-gray'}">${r.severity === 'red' ? 'Crítico' : r.severity === 'yellow' ? 'Atenção' : 'Info'}</span></td>
+      <td><span class="badge ${SCOPE_BADGE[r.scope] || 'badge-gray'}">${escHtml(r.scope)}</span></td>
+      <td style="font-family:monospace;font-size:12px">${escHtml(r.key)}</td>
+      <td style="font-family:monospace;font-size:12px;font-weight:600">${escHtml(r.value)}</td>
+      <td style="color:var(--text-muted);font-size:12px;max-width:520px;white-space:normal">${escHtml(r.message)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+const DEP_LEVEL_BADGE = { critical: 'badge-red', warning: 'badge-yellow' };
+
+function tableDeprecations(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="level">Nível <span class="sort-icon">↕</span></th>
+      <th data-col="category_label">Categoria <span class="sort-icon">↕</span></th>
+      <th data-col="resource">Recurso <span class="sort-icon">↕</span></th>
+      <th data-col="message">Aviso</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const details = r.details ? `<div style="color:var(--text-dim);font-size:11px;margin-top:4px">${escHtml(r.details)}</div>` : '';
+      const url = r.url ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:11px;margin-top:4px;display:inline-block"><i class="fas fa-up-right-from-square"></i> Documentação</a>` : '';
+      return `<tr>
+      <td><span class="badge ${DEP_LEVEL_BADGE[r.level] || 'badge-gray'}">${r.level === 'critical' ? 'Crítico' : 'Aviso'}</span></td>
+      <td><span class="badge badge-blue">${escHtml(r.category_label)}</span></td>
+      <td style="font-family:monospace;font-size:12px">${escHtml(r.resource)}</td>
+      <td style="max-width:560px;white-space:normal"><div>${escHtml(r.message)}</div>${details}${url}</td>
     </tr>`;
     }).join('')}</tbody>
   </table>`;

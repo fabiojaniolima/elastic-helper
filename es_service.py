@@ -193,6 +193,18 @@ def fetch_snapshots_status():
     return _client.snapshot.status().body
 
 
+def fetch_cluster_settings():
+    """Configurações de cluster sobrescritas (persistent + transient), sem defaults.
+    flat_settings deixa as chaves no formato pontilhado (ex.: cluster.routing...)."""
+    return _client.cluster.get_settings(flat_settings=True, include_defaults=False).body
+
+
+def fetch_deprecations():
+    """Deprecation Info API (_migration/deprecations). Pode falhar por licença ou
+    permissão — o chamador trata None como 'indisponível'."""
+    return _client.migration.deprecations().body
+
+
 # ─── Helpers ──────────────────────────────────────────────
 def safe_int(val, default=0):
     try:
@@ -331,8 +343,154 @@ def build_snapshots_summary(body):
     }
 
 
+# ─── Configurações de cluster sobrescritas ────────────────
 def _is_true(v):
     return v in (True, 'true', 'True')
+
+
+def analyze_cluster_settings(body):
+    """Lista sobrescritas de cluster que são pontos de atenção (alocação desligada,
+    watermarks customizados, cluster read-only, etc.) a partir de _cluster/settings.
+
+    Cada item: {scope, key, value, severity (red/yellow/blue), message}.
+    `available=False` quando a consulta falhou (sem permissão)."""
+    if body is None:
+        return None
+    findings = []
+
+    def scan(scope, settings):
+        if not settings:
+            return
+        g = settings.get
+
+        v = g('cluster.routing.allocation.enable')
+        if v and v != 'all':
+            findings.append({'scope': scope, 'key': 'cluster.routing.allocation.enable', 'value': v,
+                'severity': 'red',
+                'message': f"Alocação de shards restrita a '{v}' — shards novos ou movidos podem não alocar, mantendo o cluster YELLOW/RED. Reative com 'all' após a manutenção."})
+
+        v = g('cluster.routing.rebalance.enable')
+        if v and v != 'all':
+            findings.append({'scope': scope, 'key': 'cluster.routing.rebalance.enable', 'value': v,
+                'severity': 'yellow',
+                'message': f"Rebalanceamento restrito a '{v}' — o cluster pode ficar com shards mal distribuídos entre os nós."})
+
+        v = g('cluster.routing.allocation.disk.threshold_enabled')
+        if v is not None and not _is_true(v):
+            findings.append({'scope': scope, 'key': 'cluster.routing.allocation.disk.threshold_enabled', 'value': str(v),
+                'severity': 'red',
+                'message': "Watermarks de disco desabilitados — o ES não vai impedir alocação em nós cheios; risco de encher o disco e travar índices."})
+
+        for block in ('cluster.blocks.read_only', 'cluster.blocks.read_only_allow_delete'):
+            v = g(block)
+            if _is_true(v):
+                findings.append({'scope': scope, 'key': block, 'value': 'true',
+                    'severity': 'red',
+                    'message': "Cluster inteiro em modo read-only — nenhuma escrita ou alteração de metadados é aceita. Costuma ser resquício de incidente de disco."})
+
+        for wk in ('low', 'high', 'flood_stage'):
+            key = f'cluster.routing.allocation.disk.watermark.{wk}'
+            v = g(key)
+            if v:
+                findings.append({'scope': scope, 'key': key, 'value': v,
+                    'severity': 'blue',
+                    'message': f"Watermark de disco '{wk}' customizado ({v}) — confira se o valor é intencional e condiz com a capacidade dos nós."})
+
+        v = g('cluster.max_shards_per_node')
+        if v:
+            findings.append({'scope': scope, 'key': 'cluster.max_shards_per_node', 'value': str(v),
+                'severity': 'blue',
+                'message': f"Limite de shards por nó customizado ({v}) — atingi-lo faz a criação de novos índices falhar."})
+
+        v = g('action.destructive_requires_name')
+        if v is not None and not _is_true(v):
+            findings.append({'scope': scope, 'key': 'action.destructive_requires_name', 'value': str(v),
+                'severity': 'yellow',
+                'message': "Operações destrutivas por wildcard liberadas — um DELETE com '*' pode apagar índices em massa sem nomear cada um."})
+
+    scan('persistent', body.get('persistent', {}))
+    scan('transient', body.get('transient', {}))
+    # Transient settings são descontinuados no ES 8 — sinaliza se houver algum.
+    if body.get('transient'):
+        findings.append({'scope': 'transient', 'key': '(uso de transient settings)', 'value': str(len(body['transient'])),
+            'severity': 'yellow',
+            'message': "Configurações transient estão descontinuadas (perdem-se no restart do cluster). Migre para persistent."})
+
+    order = {'red': 0, 'yellow': 1, 'blue': 2}
+    findings.sort(key=lambda f: (order.get(f['severity'], 3), f['key']))
+    return findings
+
+
+def summarize_cluster_settings(findings):
+    if findings is None:
+        return {'available': False, 'red': 0, 'yellow': 0, 'total': 0}
+    red = sum(1 for f in findings if f['severity'] == 'red')
+    yellow = sum(1 for f in findings if f['severity'] == 'yellow')
+    return {'available': True, 'red': red, 'yellow': yellow, 'total': len(findings)}
+
+
+# ─── Deprecations (prontidão para upgrade) ────────────────
+DEPRECATION_CATEGORIES = {
+    'cluster_settings': 'Cluster',
+    'node_settings': 'Nó',
+    'index_settings': 'Índice',
+    'ml_settings': 'Machine Learning',
+    'data_streams': 'Data Stream',
+    'templates': 'Template',
+    'index_template_settings': 'Template de Índice',
+    'component_template_settings': 'Component Template',
+    'ilm_policies': 'Política de ILM',
+}
+DEPRECATION_LEVELS = ('critical', 'warning')
+
+
+def flatten_deprecations(body):
+    """Achata a resposta de _migration/deprecations numa lista plana.
+
+    O payload mistura listas (cluster_settings, node_settings…) e dicionários
+    indexados por recurso (index_settings: {índice: [issues]}). Só itens de nível
+    critical/warning são mantidos (os acionáveis)."""
+    items = []
+
+    def add(category, resource, d):
+        level = (d.get('level') or '').lower()
+        if level not in DEPRECATION_LEVELS:
+            return
+        items.append({
+            'category': category,
+            'category_label': DEPRECATION_CATEGORIES.get(category, category),
+            'resource': resource or '-',
+            'level': level,
+            'message': d.get('message', '-'),
+            'details': d.get('details', ''),
+            'url': d.get('url', ''),
+        })
+
+    for category, val in (body or {}).items():
+        if isinstance(val, list):
+            for d in val:
+                if isinstance(d, dict):
+                    add(category, None, d)
+        elif isinstance(val, dict):
+            for resource, lst in val.items():
+                for d in (lst or []):
+                    if isinstance(d, dict):
+                        add(category, resource, d)
+
+    items.sort(key=lambda i: (0 if i['level'] == 'critical' else 1, i['category'], i['resource']))
+    return items
+
+
+def summarize_deprecations(body):
+    if body is None:
+        return {'available': False, 'critical': 0, 'warning': 0, 'total': 0}
+    items = flatten_deprecations(body)
+    return {
+        'available': True,
+        'critical': sum(1 for i in items if i['level'] == 'critical'),
+        'warning': sum(1 for i in items if i['level'] == 'warning'),
+        'total': len(items),
+    }
 
 
 # ─── Blocos de escrita por índice (read-only) ─────────────
@@ -385,6 +543,8 @@ DASHBOARD_SOURCES = {
     'nodes_stats':      (fetch_nodes_stats, {}),
     'slm':              (fetch_slm, None),
     'snapshots':        (fetch_snapshots_status, None),
+    'cluster_settings': (fetch_cluster_settings, None),
+    'deprecations':     (fetch_deprecations, None),
 }
 
 
@@ -580,6 +740,17 @@ def _block_snapshots(raw):
     return {'snapshots_running': build_snapshots_summary(raw['snapshots'])}
 
 
+def _block_cluster_settings(raw):
+    # Configurações de cluster sobrescritas (alocação, watermarks, read-only…)
+    findings = analyze_cluster_settings(raw['cluster_settings'])
+    return {'cluster_settings_risks': summarize_cluster_settings(findings)}
+
+
+def _block_deprecations(raw):
+    # Deprecations (prontidão para upgrade)
+    return {'deprecations': summarize_deprecations(raw['deprecations'])}
+
+
 # Bloco → (fontes que ele consome, builder).
 DASHBOARD_BLOCKS = {
     'health':           (('health',), _block_health),
@@ -591,6 +762,8 @@ DASHBOARD_BLOCKS = {
     'nodes':            (('cat_nodes', 'nodes_info', 'nodes_stats'), _block_nodes),
     'slm':              (('slm',), _block_slm),
     'snapshots':        (('snapshots',), _block_snapshots),
+    'cluster_settings': (('cluster_settings',), _block_cluster_settings),
+    'deprecations':     (('deprecations',), _block_deprecations),
 }
 
 # Seção da interface → blocos que a alimentam. É o contrato de ?sections= da
@@ -899,6 +1072,17 @@ def _detail_read_only_indices():
     return result
 
 
+def _detail_cluster_settings():
+    """Sobrescritas de cluster que merecem atenção (ver analyze_cluster_settings)."""
+    findings = analyze_cluster_settings(fetch_cluster_settings())
+    return findings or []
+
+
+def _detail_deprecations():
+    """Avisos de deprecação (critical/warning) do _migration/deprecations."""
+    return flatten_deprecations(fetch_deprecations())
+
+
 def _slm_failure_reason(details):
     """`last_failure.details` vem como string JSON com {type, reason}. Extrai um
     texto curto e legível (ou o próprio valor se não for JSON)."""
@@ -972,6 +1156,8 @@ _DETAIL_DISPATCH = {
     'circuit_breakers': _detail_circuit_breakers,
     'pending_tasks': _detail_pending_tasks,
     'read_only_indices': _detail_read_only_indices,
+    'cluster_settings': _detail_cluster_settings,
+    'deprecations': _detail_deprecations,
     'slm_policies': _detail_slm_policies,
 }
 
