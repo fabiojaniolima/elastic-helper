@@ -15,6 +15,7 @@ serializam o retorno (dados Python nativos) — nenhuma lógica de ES vive lá.
 from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
+import time
 import warnings
 
 from elasticsearch import Elasticsearch, ElasticsearchWarning
@@ -203,6 +204,11 @@ def fetch_deprecations():
     """Deprecation Info API (_migration/deprecations). Pode falhar por licença ou
     permissão — o chamador trata None como 'indisponível'."""
     return _client.migration.deprecations().body
+
+
+def fetch_license():
+    """Licença do cluster (_license). Pode falhar por permissão — trata None."""
+    return _client.license.get().body
 
 
 # ─── Helpers ──────────────────────────────────────────────
@@ -493,6 +499,26 @@ def summarize_deprecations(body):
     }
 
 
+# ─── Licença ──────────────────────────────────────────────
+def build_license_summary(body):
+    """Resumo da licença a partir de _license. `available=False` quando a consulta
+    falhou. Licença basic é perpétua (sem expiração)."""
+    if body is None:
+        return {'available': False}
+    lic = body.get('license', body) if isinstance(body, dict) else {}
+    expiry = safe_int(lic.get('expiry_date_in_millis'), default=0)
+    days_left = None
+    if expiry > 0:
+        days_left = int((expiry / 1000 - time.time()) // 86400)
+    return {
+        'available': True,
+        'type': lic.get('type', '-'),
+        'status': (lic.get('status') or '-').lower(),
+        'expiry_millis': expiry,
+        'days_left': days_left,
+    }
+
+
 # ─── Blocos de escrita por índice (read-only) ─────────────
 READ_ONLY_BLOCKS = (
     ('index.blocks.read_only_allow_delete', 'read_only_allow_delete (flood-stage)'),
@@ -545,6 +571,7 @@ DASHBOARD_SOURCES = {
     'snapshots':        (fetch_snapshots_status, None),
     'cluster_settings': (fetch_cluster_settings, None),
     'deprecations':     (fetch_deprecations, None),
+    'license':          (fetch_license, None),
 }
 
 
@@ -751,6 +778,10 @@ def _block_deprecations(raw):
     return {'deprecations': summarize_deprecations(raw['deprecations'])}
 
 
+def _block_license(raw):
+    return {'license': build_license_summary(raw['license'])}
+
+
 # Bloco → (fontes que ele consome, builder).
 DASHBOARD_BLOCKS = {
     'health':           (('health',), _block_health),
@@ -764,6 +795,7 @@ DASHBOARD_BLOCKS = {
     'snapshots':        (('snapshots',), _block_snapshots),
     'cluster_settings': (('cluster_settings',), _block_cluster_settings),
     'deprecations':     (('deprecations',), _block_deprecations),
+    'license':          (('license',), _block_license),
 }
 
 # Seção da interface → blocos que a alimentam. É o contrato de ?sections= da
@@ -771,7 +803,7 @@ DASHBOARD_BLOCKS = {
 # (refreshSection / SECTION_RENDERERS em static/js/app.js).
 DASHBOARD_SECTIONS = {
     # Página Sinais Vitais
-    'health':    ('health', 'indices'),
+    'health':    ('health', 'indices', 'license'),
     'signals':   ('health', 'ilm_errors', 'index_settings', 'nodes', 'slm'),
     'resources': ('nodes',),
     # Página Inventário
@@ -1083,6 +1115,103 @@ def _detail_deprecations():
     return flatten_deprecations(fetch_deprecations())
 
 
+MAX_ALLOCATION_EXPLAIN = 50   # teto de chamadas a allocation/explain (1 por grupo)
+MAX_ALLOCATION_ROWS = 200     # teto de linhas no resultado (evita payload gigante)
+
+
+def _detail_allocation_explain():
+    """Diagnóstico de shards não alocados via _cluster/allocation/explain.
+
+    A API explica UM shard por chamada e roda no master — cara em loop. Para
+    cortar o custo, agrupamos os UNASSIGNED por (índice, primário, motivo):
+    shards do mesmo índice parados pelo mesmo motivo recebem o mesmo veredito
+    dos deciders, então explicamos só um representante por grupo e replicamos o
+    diagnóstico aos demais. Nº de chamadas = nº de grupos (teto
+    MAX_ALLOCATION_EXPLAIN). Sem cache: cada abertura do detalhe refaz o
+    diagnóstico — é o custo de mostrar o estado de alocação do momento."""
+    return _compute_allocation_explain()
+
+
+def _compute_allocation_explain():
+    shards = list(_client.cat.shards(
+        h='index,shard,prirep,state,unassigned.reason', format='json'))
+    unassigned = [s for s in shards if s.get('state') == 'UNASSIGNED']
+
+    # Agrupa por (índice, primário, motivo) — shards equivalentes do ponto de
+    # vista da decisão de alocação. O motivo (unassigned.reason) já vem no cat.shards.
+    groups = {}
+    for s in unassigned:
+        key = (s.get('index', ''), s.get('prirep') == 'p', s.get('unassigned.reason', '') or '-')
+        groups.setdefault(key, []).append(s)
+    for members in groups.values():
+        members.sort(key=lambda s: safe_int(s.get('shard')))
+    ordered_keys = sorted(groups.keys(), key=lambda k: (k[0], not k[1], k[2]))
+
+    result = []
+    explained = 0
+    for key in ordered_keys:
+        members = groups[key]
+        index, is_primary, reason = key
+        rep_shard = safe_int(members[0].get('shard'))
+
+        if explained >= MAX_ALLOCATION_EXPLAIN:
+            diag = {'can_allocate': '-', 'decider_messages': [], 'raw': {},
+                    'explanation': 'Não diagnosticado: limite de consultas a '
+                                   'allocation/explain atingido.'}
+        else:
+            explained += 1
+            diag = _explain_shard(index, rep_shard, is_primary)
+
+        for s in members:
+            s_shard = safe_int(s.get('shard'))
+            is_rep = s_shard == rep_shard
+            result.append({
+                'index': index,
+                'shard': s_shard,
+                'primary': is_primary,
+                'reason': reason,
+                'can_allocate': diag['can_allocate'],
+                'explanation': diag['explanation'],
+                'decider_messages': diag['decider_messages'],
+                # Só o representante carrega o JSON bruto completo; os herdados
+                # recebem uma nota leve (evita repetir o payload pesado por shard).
+                'raw': diag['raw'] if is_rep else {
+                    'note': f'Diagnóstico herdado do shard {rep_shard} '
+                            f'(mesmo índice e mesmo motivo de não alocação).',
+                    'representative_shard': rep_shard,
+                    'can_allocate': diag['can_allocate'],
+                    'explanation': diag['explanation'],
+                },
+            })
+            if len(result) >= MAX_ALLOCATION_ROWS:
+                return result
+    return result
+
+
+def _explain_shard(index, shard, is_primary):
+    """Consulta allocation/explain para um shard e consolida razão/deciders."""
+    try:
+        exp = _client.cluster.allocation_explain(
+            index=index, shard=shard, primary=is_primary).body
+    except Exception as e:
+        return {'can_allocate': '-', 'decider_messages': [], 'raw': {},
+                'explanation': f'Falha ao consultar allocation/explain: {e}'}
+    # Coleta as explicações dos deciders que recusam ('NO'/'THROTTLE'), sem repetir.
+    decider_msgs = []
+    for nd in exp.get('node_allocation_decisions', []) or []:
+        for dec in nd.get('deciders', []) or []:
+            if dec.get('decision') in ('NO', 'THROTTLE'):
+                msg = dec.get('explanation', '')
+                if msg and msg not in decider_msgs:
+                    decider_msgs.append(msg)
+    return {
+        'can_allocate': exp.get('can_allocate', '-'),
+        'explanation': exp.get('allocate_explanation', '-'),
+        'decider_messages': decider_msgs,
+        'raw': exp,
+    }
+
+
 def _slm_failure_reason(details):
     """`last_failure.details` vem como string JSON com {type, reason}. Extrai um
     texto curto e legível (ou o próprio valor se não for JSON)."""
@@ -1158,6 +1287,7 @@ _DETAIL_DISPATCH = {
     'read_only_indices': _detail_read_only_indices,
     'cluster_settings': _detail_cluster_settings,
     'deprecations': _detail_deprecations,
+    'allocation_explain': _detail_allocation_explain,
     'slm_policies': _detail_slm_policies,
 }
 

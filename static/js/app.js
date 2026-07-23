@@ -992,6 +992,25 @@ async function refreshSection(sectionId) {
   }
 }
 
+// Rodapé do card de Saúde: tipo da licença + status, com alerta de expiração.
+// Retorna um stat {label, val, color} ou null (licença indisponível).
+function licenseFooterStat(license) {
+  if (!license || !license.available) return null;
+  const type = (license.type || '-').toUpperCase();
+  const expired = license.status === 'expired';
+  const days = license.days_left;
+  let color = 'text';
+  let suffix = '';
+  if (expired) {
+    color = 'red';
+    suffix = ' · expirada';
+  } else if (days != null && days <= 30) {
+    color = days <= 7 ? 'red' : 'yellow';
+    suffix = ` · expira em ${days}d`;
+  }
+  return { label: 'Licença', val: `${escHtml(type)}${suffix}`, color };
+}
+
 function cardHealth(h, version, license) {
   const status = h.status;
   const color = healthColor(status);
@@ -1002,6 +1021,8 @@ function cardHealth(h, version, license) {
   const stats = [
     { label: 'Versão do Cluster', val: version ? `v${escHtml(version)}` : '-', color: 'text' },
   ];
+  const lic = licenseFooterStat(license);
+  if (lic) stats.push(lic);
 
   return `<div class="metric-card card-health-hero status-${color}" onclick="openDetail('cluster_health','Saúde por Índice','Status e shards por índice')">
     <div class="card-header">
@@ -1492,6 +1513,18 @@ const EXPORT_CONFIG = {
       documentação: r.url,
     }),
   },
+  allocation_explain: {
+    filename: 'Diagnóstico de Alocação',
+    extract: r => ({
+      índice: r.index,
+      shard: r.shard,
+      tipo: r.primary ? 'primário' : 'réplica',
+      motivo: r.reason,
+      pode_alocar: r.can_allocate,
+      diagnóstico: r.explanation,
+      deciders: (r.decider_messages || []).join(' | '),
+    }),
+  },
   slm_policies: {
     filename: 'Políticas de Snapshot (SLM)',
     extract: r => ({
@@ -1575,6 +1608,7 @@ function openShardsDetail() {
         <span class="shards-notice-main">${unassignedLabel}</span>
         <span class="shards-notice-sub">Pode incluir restaurações de snapshot e réplicas pendentes. Consulte o diagnóstico para ver o motivo de cada shard.${delayedNote}</span>
       </div>
+      <button class="btn btn-ghost shards-notice-btn" onclick="openDetail('allocation_explain','Diagnóstico de Alocação','Por que cada shard não aloca')"><i class="fas fa-arrow-right"></i> Ver diagnóstico</button>
     </div>` : '';
 
   document.getElementById('detailBody').innerHTML = `
@@ -1803,6 +1837,7 @@ const DETAIL_RENDERERS = {
   read_only_indices: tableReadOnly,
   cluster_settings: tableClusterSettings,
   deprecations: tableDeprecations,
+  allocation_explain: tableAllocationExplain,
   slm_policies: tableSlmPolicies,
 };
 
@@ -2113,6 +2148,42 @@ function tableDeprecations(rows) {
     </tr>`;
     }).join('')}</tbody>
   </table>`;
+}
+
+function tableAllocationExplain(rows) {
+  return `<table class="data-table">
+    <thead><tr>
+      <th data-col="index">Índice <span class="sort-icon">↕</span></th>
+      <th data-col="shard" data-type="num">Shard <span class="sort-icon">↕</span></th>
+      <th data-col="primary">Tipo <span class="sort-icon">↕</span></th>
+      <th data-col="reason">Motivo <span class="sort-icon">↕</span></th>
+      <th data-col="can_allocate">Pode Alocar <span class="sort-icon">↕</span></th>
+      <th data-col="explanation">Diagnóstico</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const deciders = (r.decider_messages || []).length
+        ? `<ul style="margin:6px 0 0;padding-left:16px;color:var(--text-dim);font-size:11px">${r.decider_messages.map(m => `<li>${escHtml(m)}</li>`).join('')}</ul>`
+        : '';
+      const canColor = r.can_allocate === 'yes' ? 'green' : (r.can_allocate === 'no' ? 'red' : 'yellow');
+      return `<tr class="task-row" data-idx="${escHtml(r.index)}" data-shard="${escHtml(r.shard)}" data-pri="${escHtml(r.primary)}" onclick="showAllocationJson(this.dataset.idx, this.dataset.shard, this.dataset.pri)">
+      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td style="font-weight:700;color:var(--text-muted)">${r.shard ?? '-'}</td>
+      <td>${shardTypeBadge(r.primary ? 'p' : 'r')}</td>
+      <td><span class="badge badge-gray">${escHtml(r.reason)}</span></td>
+      <td><span class="badge badge-${canColor}">${escHtml(r.can_allocate)}</span></td>
+      <td style="max-width:560px;white-space:normal;font-size:12px"><div>${escHtml(r.explanation)}</div>${deciders}</td>
+      <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><i class="fas fa-code"></i></td>
+    </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function showAllocationJson(idx, shard, pri) {
+  const row = currentRows.find(r =>
+    r.index === idx && String(r.shard) === String(shard) && String(r.primary) === String(pri));
+  if (!row) return;
+  showJsonModal('Diagnóstico de Alocação', `${idx} [shard ${shard}]`, row.raw || row);
 }
 
 const SLM_STATE_BADGE = { ok: ['badge-green', 'OK'], failed: ['badge-red', 'Falha'], never: ['badge-gray', 'Nunca executou'] };
