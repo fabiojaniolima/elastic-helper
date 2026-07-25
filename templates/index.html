@@ -188,6 +188,12 @@
         <i class="fas fa-lightbulb nav-item-icon"></i>
         <span class="nav-item-text">Diagnóstico<span class="nav-badge" id="insightsBadge" hidden></span></span>
       </div>
+      <!-- Só aparece com o Kibana ativado na Configuração (applyKibanaNav) -->
+      <div class="nav-item" id="nav-kibana" onclick="showPage('kibana')" style="display:none">
+        <span class="nav-item-bar"></span>
+        <i class="fas fa-chart-line nav-item-icon"></i>
+        <span class="nav-item-text">Kibana</span>
+      </div>
 
       <div class="nav-group-label">Suporte</div>
       <div class="nav-item" id="nav-config" onclick="showPage('config')">
@@ -272,7 +278,12 @@
       <!-- Conteúdo gerado por renderInsights() em app.js a partir de dashboardData/tasksList -->
       <section class="page page-insights" id="page-insights" hidden></section>
 
+      <!-- ========== KIBANA ========== -->
+      <!-- Conteúdo gerado por renderKibana() a partir de /api/kibana/dashboard -->
+      <section class="page page-kibana" id="page-kibana" hidden></section>
+
       <!-- ========== CONFIGURAÇÃO ========== -->
+      <!-- Conteúdo gerado por renderConfig() a partir de /api/kibana/config -->
       <section class="page page-config" id="page-config" hidden></section>
 
       <!-- ========== AJUDA (documentação) ========== -->

@@ -69,10 +69,18 @@ def connect(params):
         'host': params['host'],
         'port': params['port'],
         'alias': params.get('alias', ''),
+        # Id da conexão salva equivalente (ou None em conexão ad-hoc não salva).
+        # É a chave da config de Kibana — ver kibana_service.
+        'connection_id': params.get('connection_id'),
         'cluster_name': info['cluster_name'],
         'version': info['version']['number'],
     }
     return dict(_info)
+
+
+def connection_id():
+    """Id da conexão salva ativa, ou None se a conexão é ad-hoc."""
+    return _info.get('connection_id')
 
 
 def test_connection(params):

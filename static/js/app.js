@@ -196,6 +196,9 @@ async function doConnect(payload, btn) {
       document.getElementById('app').style.display = 'flex';
       setClusterInfo(data);
       loadDashboard();
+      // Config de Kibana é por conexão: recarrega ao trocar de cluster.
+      kibanaConfig = kibanaDraft = kibanaData = null;
+      fetchKibanaConfig().then(applyKibanaNav).catch(() => {});
       showPage(pageFromHash());
       return true;
     }
@@ -571,13 +574,14 @@ const PAGE_META = {
   overview: { title: 'Sinais Vitais do Cluster', subtitle: 'Está tudo funcionando agora? Saúde, recursos e disponibilidade ao vivo' },
   capacity: { title: 'Inventário', subtitle: 'Nós, volume de dados e higiene de configuração dos índices' },
   insights: { title: 'Diagnóstico', subtitle: 'Leitura interpretada dos dados do cluster — o que merece atenção' },
+  kibana:   { title: 'Kibana', subtitle: 'Instâncias, Task Manager, frota do Fleet e APM Server' },
   config:   { title: 'Configuração', subtitle: 'Integrações e preferências desta conexão' },
   help:     { title: 'Ajuda', subtitle: 'O que cada métrica significa e como agir' },
 };
 
-const PAGES = ['overview', 'capacity', 'insights', 'config', 'help'];
+const PAGES = ['overview', 'capacity', 'insights', 'kibana', 'config', 'help'];
 // Páginas com dados ao vivo: ganham timestamp e botão de refresh na topbar.
-const REFRESHABLE_PAGES = new Set(['overview', 'capacity']);
+const REFRESHABLE_PAGES = new Set(['overview', 'capacity', 'kibana']);
 
 function showPage(page) {
   if (!PAGE_META[page]) return;
@@ -601,6 +605,9 @@ function showPage(page) {
     if (dashboardData) renderCapacity();
     else if (!dashboardInFlight.size) loadCapacity();
   }
+  // Kibana e Configuração têm fonte própria (/api/kibana/*).
+  if (page === 'kibana') loadKibana();
+  if (page === 'config') renderConfig();
   // Reflete a página na URL (hash) para preservar no refresh e permitir compartilhar o link.
   if (location.hash.slice(1) !== page) {
     history.replaceState(null, '', '#' + page);
@@ -737,6 +744,7 @@ async function loadCapacity() {
 
 // Refresh da topbar e do atalho R: cada página recarrega a sua própria fonte.
 function refreshCurrentPage() {
+  if (currentPage === 'kibana') return loadKibana();
   if (currentPage === 'capacity') return loadCapacity();
   return loadDashboard();
 }
@@ -3621,6 +3629,501 @@ function renderNodeDetail(d) {
   </div>`;
 }
 
+// ═══════════════════ KIBANA ═══════════════════════════════
+// A página tem fonte própria (/api/kibana/dashboard) e não depende do
+// dashboardData do cluster. Ver docs/kibana.md.
+
+let kibanaData = null;
+let kibanaConfig = null;      // config persistida (sem senha)
+let kibanaDraft = null;       // edição em andamento na página Configuração
+
+// Rótulo da origem de cada métrica, exibido no title da célula. A precedência
+// (agente → self-monitoring → API) é resolvida no backend, por métrica.
+const KIBANA_SOURCE_LABEL = {
+  agent: 'Elastic Agent (metrics-system.*)',
+  monitoring: 'Self-monitoring (.monitoring-kibana-*)',
+  api: 'API do Kibana (/api/stats)',
+};
+
+// CPU e disco não existem na API do Kibana nem no self-monitoring — só a
+// integração `system` do Elastic Agent os coleta, do host. Sem agente naquele
+// host não há fonte, e a célula fica vazia em vez de mostrar um zero enganoso.
+const NO_AGENT_HINT = 'Sem fonte: CPU e disco vêm da integração "system" do ' +
+  'Elastic Agent no host desta instância. A API do Kibana não expõe esses dados.';
+
+const KIBANA_STATUS_BADGE = {
+  green: ['badge-green', 'Disponível'],
+  available: ['badge-green', 'Disponível'],
+  yellow: ['badge-yellow', 'Degradado'],
+  degraded: ['badge-yellow', 'Degradado'],
+  red: ['badge-red', 'Crítico'],
+  critical: ['badge-red', 'Crítico'],
+  unavailable: ['badge-red', 'Indisponível'],
+};
+
+function kibanaStatusBadge(status) {
+  const [cls, label] = KIBANA_STATUS_BADGE[status] || ['badge-gray', status || 'desconhecido'];
+  return `<span class="badge ${cls}">${escHtml(label)}</span>`;
+}
+
+// Célula percentual com a origem no tooltip nativo; traço quando não há fonte.
+function kibanaMetricCell(metric, emptyHint) {
+  if (!metric || metric.value == null) {
+    return `<span class="kb-no-source" title="${escHtml(emptyHint || 'Sem dado disponível')}">&mdash;</span>`;
+  }
+  const src = KIBANA_SOURCE_LABEL[metric.source] || metric.source;
+  return `<div title="Fonte: ${escHtml(src)}">${pctBar(metric.value)}</div>`;
+}
+
+function kibanaNumCell(metric, suffix, digits = 1) {
+  if (!metric || metric.value == null) return '<span class="kb-no-source">&mdash;</span>';
+  const src = KIBANA_SOURCE_LABEL[metric.source] || metric.source;
+  const val = Number(metric.value).toFixed(digits).replace(/\.0+$/, '');
+  return `<span title="Fonte: ${escHtml(src)}">${val}${suffix || ''}</span>`;
+}
+
+async function fetchKibanaConfig() {
+  const res = await fetch('/api/kibana/config');
+  if (res.status === 401) { location.reload(); throw new Error('unauthorized'); }
+  kibanaConfig = await res.json();
+  return kibanaConfig;
+}
+
+// Mostra/esconde o item Kibana da sidebar conforme a integração está ativa.
+function applyKibanaNav() {
+  const nav = document.getElementById('nav-kibana');
+  if (nav) nav.style.display = (kibanaConfig && kibanaConfig.enabled) ? '' : 'none';
+}
+
+async function loadKibana() {
+  const page = document.getElementById('page-kibana');
+  const icon = document.getElementById('refreshIcon');
+  if (icon) icon.classList.add('spin');
+  page.innerHTML = `<div class="loading-state">
+    <i class="fas fa-circle-notch fa-spin"></i>
+    <span>Carregando dados do Kibana...</span>
+  </div>`;
+
+  try {
+    const res = await fetch('/api/kibana/dashboard');
+    if (res.status === 401) { location.reload(); return; }
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    kibanaData = data;
+    renderKibana(data);
+    document.getElementById('lastUpdated').textContent =
+      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) {
+    page.innerHTML = `<div class="error-state">
+      <i class="fas fa-triangle-exclamation"></i>
+      <p>${escHtml(e.message)}</p>
+    </div>`;
+  } finally {
+    if (icon) icon.classList.remove('spin');
+  }
+}
+
+function renderKibana(d = kibanaData) {
+  const page = document.getElementById('page-kibana');
+  if (!page || !d) return;
+
+  if (!d.instances.length) {
+    page.innerHTML = `<div class="empty-state" style="padding:40px">
+      <i class="fas fa-chart-line"></i>
+      <p>Nenhuma instância Kibana encontrada.</p>
+      <p style="font-size:13px;color:var(--text-dim);max-width:520px;margin:8px auto 0">
+        ${d.has_urls
+          ? 'As URLs cadastradas não responderam e não há dados de self-monitoring recentes neste cluster.'
+          : 'Cadastre a URL de uma instância na <strong>Configuração</strong>, ou habilite o self-monitoring do Kibana para que as instâncias sejam descobertas automaticamente.'}
+      </p>
+      <button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="showPage('config')">
+        <i class="fas fa-sliders"></i> Abrir Configuração
+      </button>
+    </div>`;
+    return;
+  }
+
+  page.innerHTML = `<div class="metrics-grid">
+    ${section('Visão Geral')}
+    <!-- auto-fit em vez das 4 colunas fixas: são 3 cards e o grid rígido deixaria buraco -->
+    <div class="section-signals-cards">${kibanaOverviewCards(d)}</div>
+
+    ${section('Utilização por Instância')}
+    ${kibanaInstancesTable(d)}
+  </div>`;
+}
+
+function kibanaOverviewCards(d) {
+  const instances = d.instances || [];
+  const healthy = instances.filter(i => ['green', 'available'].includes(i.status)).length;
+  const allOk = healthy === instances.length;
+  const statusColor = instances.length === 0 ? 'muted' : (allOk ? 'green' : 'yellow');
+
+  const unreachable = instances.filter(i => i.configured && !i.reachable).length;
+  const versions = d.versions || [];
+  // Mais de uma versão indica upgrade em andamento ou incompleto — instâncias
+  // em versões diferentes atrás do mesmo load balancer divergem de comportamento.
+  const versionStat = versions.length
+    ? [{
+        label: versions.length > 1 ? 'Versões' : 'Versão',
+        val: escHtml(versions.join(' · ')),
+        color: versions.length > 1 ? 'yellow' : null,
+      }]
+    : [];
+
+  const tip = 'Instâncias cujo status geral é <strong>disponível</strong>. O status vem do ' +
+    '<code>/api/status</code> quando a URL está cadastrada; caso contrário, do self-monitoring.<br><br>' +
+    'O rodapé traz a <strong>versão</strong> das instâncias — quando aparece mais de uma, fica ' +
+    '<span style="color:var(--yellow)">amarela</span>: é sinal de upgrade em andamento ou incompleto.';
+
+  return [
+    cardStat(null, 'Instâncias Saudáveis', 'fa-circle-check',
+      `${healthy}/${instances.length}`, allOk ? 'todas disponíveis' : 'alguma degradada',
+      statusColor, tip,
+      [
+        ...versionStat,
+        ...(unreachable > 0 ? [{ label: 'Inacessíveis', val: fmtNum(unreachable), color: 'red' }] : []),
+      ],
+      'help-kibana-instances'),
+  ].join('');
+}
+
+// Tabela de utilização — mesmo layout do card "Utilização por Nó" dos Sinais
+// Vitais, com as colunas possíveis para o Kibana.
+function kibanaInstancesTable(d) {
+  const tip = 'Utilização por instância do Kibana. Cada célula mostra no tooltip a <strong>origem</strong> ' +
+    'do número, seguindo a precedência <strong>Elastic Agent → self-monitoring → API</strong>.<br><br>' +
+    '<strong>CPU</strong> e <strong>Disco</strong> são do <em>host</em> e só existem quando há a integração ' +
+    '<code>system</code> do Elastic Agent nele — a API do Kibana não expõe nenhum dos dois. Sem agente, a ' +
+    'célula fica com um traço.<br>' +
+    '<strong>RAM</strong>: memória do host onde a instância roda.<br>' +
+    '<strong>Heap</strong>: heap do processo Node.js sobre o <code>size_limit</code> (o ' +
+    '<code>--max-old-space-size</code>) — o denominador correto, já que o V8 cresce o heap sob demanda.<br>' +
+    '<strong>ELU</strong> (Event Loop Utilization): fração do intervalo de coleta em que o event loop ficou ' +
+    'ativo. Como o Kibana é single-threaded, é o indicador mais fiel de saturação de CPU do processo — ' +
+    'acima de ~80% as requisições começam a enfileirar.<br>' +
+    '<strong>Delay</strong>: atraso do event loop em milissegundos. Valores altos indicam bloqueio do loop.';
+
+  const rows = (d.instances || []).map(inst => {
+    const offline = inst.configured && !inst.reachable;
+    const sub = [inst.version, inst.host].filter(Boolean).map(escHtml).join(' · ');
+    const errorNote = offline
+      ? `<div class="kb-inst-error" title="${escHtml(inst.error || '')}"><i class="fas fa-triangle-exclamation"></i> inacessível</div>`
+      : '';
+    const noUrlNote = !inst.configured
+      ? '<div class="kb-inst-note" title="Descoberta pelo self-monitoring. Cadastre a URL para ver Task Manager e Fleet.">só self-monitoring</div>'
+      : '';
+    return `<tr>
+      <td>
+        <div class="kb-inst-name">${escHtml(inst.name || '(sem nome)')}</div>
+        ${sub ? `<div class="kb-inst-sub">${sub}</div>` : ''}
+        ${errorNote}${noUrlNote}
+      </td>
+      <td>${kibanaStatusBadge(inst.status)}</td>
+      <td>${kibanaMetricCell(inst.metrics.cpu, NO_AGENT_HINT)}</td>
+      <td>${kibanaMetricCell(inst.metrics.disk, NO_AGENT_HINT)}</td>
+      <td>${kibanaMetricCell(inst.metrics.ram)}</td>
+      <td>${kibanaMetricCell(inst.metrics.heap)}</td>
+      <td>${kibanaMetricCell(inst.metrics.elu)}</td>
+      <td style="text-align:right">${kibanaNumCell(inst.metrics.event_loop_delay, ' ms')}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="metric-card metric-card-static card-full">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon"><i class="fas fa-gauge-high"></i></div>
+        <div class="card-title">Utilização por Instância</div>
+      </div>
+      ${tooltip(tip, 'help-kibana-utilization')}
+    </div>
+    <div class="resource-table-wrap">
+      <table class="data-table resource-table">
+        <thead><tr>
+          <th>Instância</th>
+          <th>Status</th>
+          <th>CPU</th>
+          <th>Disco</th>
+          <th>RAM</th>
+          <th>Heap</th>
+          <th>ELU</th>
+          <th style="text-align:right">Delay</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════ CONFIGURAÇÃO ═════════════════════════
+async function renderConfig() {
+  const page = document.getElementById('page-config');
+  if (!page) return;
+  if (!kibanaConfig) {
+    page.innerHTML = `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando configuração...</span></div>`;
+    try {
+      await fetchKibanaConfig();
+    } catch (e) {
+      page.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p></div>`;
+      return;
+    }
+  }
+  // Draft parte da config salva; edições ficam aqui até o Salvar.
+  if (!kibanaDraft) {
+    kibanaDraft = {
+      enabled: kibanaConfig.enabled,
+      username: kibanaConfig.username,
+      instances: (kibanaConfig.instances || []).map(i => ({ url: i.url })),
+      passwordDirty: false,
+      password: '',
+    };
+  }
+  page.innerHTML = configPageHtml();
+}
+
+function configPageHtml() {
+  const cfg = kibanaConfig || {};
+  const draft = kibanaDraft;
+  const locked = cfg.has_password && !draft.passwordDirty;
+
+  const notPersistable = cfg.persistable === false
+    ? `<div class="kb-warning">
+         <i class="fas fa-circle-info"></i>
+         <div>${escHtml(cfg.reason || '')}</div>
+       </div>`
+    : '';
+
+  const urlRows = draft.instances.length
+    ? draft.instances.map((inst, idx) => `
+      <div class="cfg-instance">
+        <div class="cfg-instance-row">
+          <span class="cfg-instance-num">${idx + 1}</span>
+          <input type="text" value="${escHtml(inst.url)}" data-url-idx="${idx}"
+            placeholder="https://kibana.exemplo:5601"
+            oninput="kibanaUrlChanged(${idx}, this.value)">
+          <button class="btn btn-ghost btn-sm" onclick="kibanaTestUrl(${idx})" title="Testar esta instância">
+            <i class="fas fa-vial"></i> Testar
+          </button>
+          <button class="btn-icon" onclick="kibanaRemoveUrl(${idx})" title="Remover">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        <div class="kb-url-result" id="kbUrlResult-${idx}"></div>
+      </div>`).join('')
+    : `<div class="cfg-empty">
+         Nenhuma instância cadastrada. Sem URL, a página Kibana ainda funciona com o que vier do
+         <strong>self-monitoring</strong> — mas fica sem Task Manager, Fleet e APM Server.
+       </div>`;
+
+  return `<div class="config-page">
+    ${notPersistable}
+
+    <section class="cfg-section">
+      <div class="cfg-section-info">
+        <div class="cfg-section-title">
+          <i class="fas fa-chart-line"></i>
+          <span>Kibana</span>
+          ${tooltip('Ativa a página <strong>Kibana</strong> na barra lateral. As instâncias são descobertas automaticamente pelo <strong>self-monitoring</strong> do cluster conectado; as URLs cadastradas aqui acrescentam o que só a API do Kibana entrega: <strong>Task Manager</strong>, <strong>Fleet</strong> e <strong>APM Server</strong>.', 'help-kibana-config')}
+        </div>
+        <p class="cfg-section-desc">
+          Monitoramento das instâncias de Kibana desta conexão. Desativado, o item some da barra
+          lateral e nenhuma consulta é feita.
+        </p>
+      </div>
+      <div class="cfg-section-fields">
+        <label class="cfg-switch">
+          <input type="checkbox" id="kbEnabled" ${draft.enabled ? 'checked' : ''}
+            onchange="kibanaToggleEnabled(this.checked)">
+          <span class="cfg-switch-track"></span>
+          <span class="cfg-switch-text" id="kbEnabledLabel">${draft.enabled ? 'Ativado' : 'Desativado'}</span>
+        </label>
+      </div>
+    </section>
+
+    <div id="kbFields" ${draft.enabled ? '' : 'hidden'}>
+      <section class="cfg-section">
+        <div class="cfg-section-info">
+          <div class="cfg-section-title"><i class="fas fa-key"></i><span>Acesso</span></div>
+          <p class="cfg-section-desc">
+            Credenciais usadas nas chamadas à API do Kibana. Todas as instâncias usam o mesmo
+            usuário e senha.
+          </p>
+        </div>
+        <div class="cfg-section-fields">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Usuário</label>
+              <input type="text" id="kbUsername" value="${escHtml(draft.username || '')}"
+                placeholder="elastic" autocomplete="username"
+                oninput="kibanaDraft.username = this.value">
+            </div>
+            <div class="form-group">
+              <label>Senha</label>
+              ${locked
+                ? `<button type="button" class="btn btn-ghost btn-full" onclick="kibanaEnablePasswordChange()">
+                     <i class="fas fa-key"></i> Alterar senha
+                   </button>`
+                : `<input type="password" id="kbPassword" value="${escHtml(draft.password || '')}"
+                     placeholder="••••••••" autocomplete="current-password"
+                     oninput="kibanaDraft.password = this.value; kibanaDraft.passwordDirty = true">`}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cfg-section">
+        <div class="cfg-section-info">
+          <div class="cfg-section-title"><i class="fas fa-server"></i><span>Instâncias</span></div>
+          <p class="cfg-section-desc">
+            URLs de cada Kibana do ambiente. O botão <strong>Testar</strong> valida a URL sem
+            gravar nada.
+          </p>
+        </div>
+        <div class="cfg-section-fields">
+          <div class="cfg-instance-list">${urlRows}</div>
+          <button class="btn btn-ghost btn-sm cfg-add-btn" onclick="kibanaAddUrl()">
+            <i class="fas fa-plus"></i> Adicionar instância
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div class="cfg-footer">
+      <div class="error-msg" id="kbConfigMsg"></div>
+      <div class="cfg-footer-actions">
+        <button class="btn btn-ghost" onclick="kibanaResetDraft()">
+          <i class="fas fa-rotate-left"></i> Descartar alterações
+        </button>
+        <button class="btn btn-primary" id="kbSaveBtn" onclick="saveKibanaConfig()">
+          <i class="fas fa-floppy-disk"></i> Salvar
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function kibanaToggleEnabled(checked) {
+  kibanaDraft.enabled = checked;
+  const fields = document.getElementById('kbFields');
+  if (fields) fields.hidden = !checked;
+  const label = document.getElementById('kbEnabledLabel');
+  if (label) label.textContent = checked ? 'Ativado' : 'Desativado';
+}
+
+function kibanaEnablePasswordChange() {
+  kibanaDraft.passwordDirty = true;
+  kibanaDraft.password = '';
+  renderConfig();
+}
+
+function kibanaUrlChanged(idx, value) {
+  if (kibanaDraft.instances[idx]) kibanaDraft.instances[idx].url = value;
+}
+
+function kibanaAddUrl() {
+  kibanaDraft.instances.push({ url: '' });
+  renderConfig();
+  // foco no campo recém-criado
+  const inputs = document.querySelectorAll('[data-url-idx]');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+async function kibanaRemoveUrl(idx) {
+  const url = kibanaDraft.instances[idx] ? kibanaDraft.instances[idx].url : '';
+  const ok = !url || await showConfirm({
+    title: 'Remover instância',
+    message: `Remover "${url}" da lista? A alteração só vale depois de salvar.`,
+    confirmLabel: 'Remover',
+    danger: true,
+  });
+  if (!ok) return;
+  kibanaDraft.instances.splice(idx, 1);
+  renderConfig();
+}
+
+function kibanaResetDraft() {
+  kibanaDraft = null;
+  renderConfig();
+}
+
+async function kibanaTestUrl(idx) {
+  const inst = kibanaDraft.instances[idx];
+  const out = document.getElementById(`kbUrlResult-${idx}`);
+  if (!inst || !out) return;
+  if (!inst.url.trim()) {
+    out.className = 'kb-url-result error';
+    out.textContent = 'Informe a URL antes de testar.';
+    return;
+  }
+  out.className = 'kb-url-result';
+  out.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Testando...';
+
+  try {
+    const res = await fetch('/api/kibana/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: inst.url,
+        username: kibanaDraft.username,
+        // Senha só vai quando foi digitada agora; senão o back usa a salva.
+        ...(kibanaDraft.passwordDirty ? { password: kibanaDraft.password } : {}),
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      out.className = 'kb-url-result success';
+      out.innerHTML = `<i class="fas fa-circle-check"></i> ${escHtml(data.name || 'instância')} · v${escHtml(data.version || '?')} · ${escHtml(data.status || '')}`;
+    } else {
+      out.className = 'kb-url-result error';
+      out.innerHTML = `<i class="fas fa-circle-xmark"></i> ${escHtml(data.error || 'falhou')}`;
+    }
+  } catch (e) {
+    out.className = 'kb-url-result error';
+    out.innerHTML = `<i class="fas fa-circle-xmark"></i> ${escHtml(e.message)}`;
+  }
+}
+
+async function saveKibanaConfig() {
+  const btn = document.getElementById('kbSaveBtn');
+  const msg = document.getElementById('kbConfigMsg');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+
+  const payload = {
+    enabled: kibanaDraft.enabled,
+    username: kibanaDraft.username,
+    instances: kibanaDraft.instances.filter(i => i.url.trim()).map(i => ({ url: i.url.trim() })),
+  };
+  if (kibanaDraft.passwordDirty) payload.password = kibanaDraft.password;
+
+  try {
+    const res = await fetch('/api/kibana/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showMsg(msg, data.error || 'Não foi possível salvar', 'error');
+      return;
+    }
+    kibanaConfig = data.config;
+    kibanaDraft = null;
+    applyKibanaNav();
+    // renderConfig recria o DOM da página: só depois dá para escrever a mensagem.
+    await renderConfig();
+    showTempMsg(document.getElementById('kbConfigMsg'), 'Configuração salva', 'success');
+    // A página Kibana precisa refletir as URLs novas na próxima visita.
+    kibanaData = null;
+  } catch (e) {
+    showMsg(msg, e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
 // ─── Keyboard Shortcuts ───────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
@@ -3665,6 +4168,9 @@ document.addEventListener('mouseover', e => {
       document.getElementById('app').style.display = 'flex';
       setClusterInfo(data.info);
       loadDashboard();
+      // A config do Kibana decide se o item Kibana aparece na sidebar. Falha
+      // aqui não pode impedir o dashboard do cluster de carregar.
+      fetchKibanaConfig().then(applyKibanaNav).catch(() => {});
       showPage(pageFromHash());
     } else {
       loadConnections();

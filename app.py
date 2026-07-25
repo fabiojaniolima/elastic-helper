@@ -7,6 +7,7 @@ import os
 
 import db
 import es_service
+import kibana_service
 
 load_dotenv()
 
@@ -80,9 +81,13 @@ def _resolve_params(data):
 
     # Alias da conexão salva (via connection_id ou casando host+porta+usuário)
     alias = (saved.get('alias') or '').strip() or (db.find_duplicate(host, port, username) or '')
+    # Mesmo raciocínio para o id: uma conexão ad-hoc que casa com uma salva
+    # herda o registro dela — é o que amarra a config de Kibana ao cluster.
+    resolved_id = conn_id or db.find_connection_id(host, port, username)
 
     return {'host': host, 'port': port, 'username': username,
-            'password': password, 'use_ssl': use_ssl, 'alias': alias}, None
+            'password': password, 'use_ssl': use_ssl, 'alias': alias,
+            'connection_id': resolved_id}, None
 
 
 @app.route('/api/connect', methods=['POST'])
@@ -288,6 +293,102 @@ def api_snapshots():
         return err
     try:
         return jsonify(es_service.snapshots_in_progress())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ─── Kibana (config por conexão + métricas) ───────────────
+# A config é gravada por conexão ES salva. Numa conexão ad-hoc que não casa com
+# nenhuma salva não há onde persistir: as rotas respondem com persistable=False
+# e o front orienta a salvar a conexão. Ver docs/kibana.md.
+NOT_PERSISTABLE = ('Esta conexão não está salva. Salve-a na tela de conexão para '
+                   'guardar a configuração do Kibana.')
+
+
+def _validate_kibana_payload(data):
+    """Retorna None se válido ou uma mensagem de erro.
+
+    Lista de URLs vazia é válida: sem nenhuma, a página ainda funciona com o
+    que vem do self-monitoring — só fica sem Task Manager, Fleet e APM.
+    """
+    if not data.get('enabled'):
+        return None                       # desativado não precisa de credencial
+    if not (data.get('username') or '').strip():
+        return 'O usuário do Kibana é obrigatório'
+    return None
+
+
+@app.route('/api/kibana/config', methods=['GET'])
+def api_kibana_config_get():
+    err = require_es()
+    if err:
+        return err
+    conn_id = es_service.connection_id()
+    if conn_id is None:
+        return jsonify({'persistable': False, 'reason': NOT_PERSISTABLE,
+                        'enabled': False, 'username': '', 'has_password': False,
+                        'instances': []})
+    config = db.get_kibana_config(conn_id)
+    config['persistable'] = True
+    return jsonify(config)
+
+
+@app.route('/api/kibana/config', methods=['PUT'])
+def api_kibana_config_save():
+    err = require_es()
+    if err:
+        return err
+    conn_id = es_service.connection_id()
+    if conn_id is None:
+        return jsonify({'success': False, 'error': NOT_PERSISTABLE}), 409
+
+    data = request.get_json() or {}
+    msg = _validate_kibana_payload(data)
+    if msg:
+        return jsonify({'success': False, 'error': msg}), 400
+    config = db.save_kibana_config(conn_id, data)
+    config['persistable'] = True
+    return jsonify({'success': True, 'config': config})
+
+
+@app.route('/api/kibana/test', methods=['POST'])
+def api_kibana_test():
+    """Testa uma URL isolada, sem gravar nada (espelha /api/test_connection).
+
+    Senha vazia no payload reaproveita a já salva, para testar sem redigitar.
+    """
+    err = require_es()
+    if err:
+        return err
+    data = request.get_json() or {}
+    url = (data.get('url') or '').strip()
+    if not url:
+        return jsonify({'success': False, 'error': 'A URL da instância é obrigatória'}), 400
+
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+    if not password:
+        conn_id = es_service.connection_id()
+        if conn_id is not None:
+            saved = db.get_kibana_config(conn_id, include_password=True)
+            password = saved.get('password') or ''
+            username = username or saved.get('username') or ''
+    try:
+        return jsonify({'success': True, **kibana_service.test_instance(url, username, password)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/kibana/dashboard')
+def api_kibana_dashboard():
+    err = require_es()
+    if err:
+        return err
+    conn_id = es_service.connection_id()
+    config = (db.get_kibana_config(conn_id, include_password=True)
+              if conn_id is not None else {'enabled': False, 'instances': []})
+    try:
+        return jsonify(kibana_service.dashboard(config))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
