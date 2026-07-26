@@ -3750,6 +3750,9 @@ function renderKibana(d = kibanaData) {
 
     ${section('Utilização por Instância')}
     ${kibanaInstancesTable(d)}
+
+    ${kibanaTaskManagerSection(d)}
+    ${kibanaFleetSection(d)}
   </div>`;
 }
 
@@ -3785,7 +3788,80 @@ function kibanaOverviewCards(d) {
         ...(unreachable > 0 ? [{ label: 'Inacessíveis', val: fmtNum(unreachable), color: 'red' }] : []),
       ],
       'help-kibana-instances'),
+
+    kibanaFleetCard(d.fleet || {}),
+    kibanaApmCard(d.apm || {}),
   ].join('');
+}
+
+// Card da frota do Fleet: total de agentes com o detalhamento por estado no
+// rodapé — online, offline, error e updating.
+function kibanaFleetCard(fleet) {
+  const tip = 'Resumo da frota de <strong>Elastic Agents</strong> gerenciada pelo Fleet ' +
+    '(<code>/api/fleet/agent_status</code>). Os estados usam os mesmos rótulos da <strong>UI do ' +
+    'Fleet</strong>.<br><br>' +
+    '<strong>Healthy</strong>: agentes com check-in recente e sem problema. ' +
+    '<strong>Unhealthy</strong>: agente rodando mas com erro ou degradado (política inválida, ' +
+    'integração quebrada, permissão insuficiente). <strong>Offline</strong>: sem check-in há pelo ' +
+    'menos 5 minutos — host desligado, rede ou agente parado. ' +
+    '<strong>Updating</strong>: aplicando política, atualizando o binário ou concluindo ' +
+    'enrollment.<br><br>' +
+    'Exige a URL de uma instância cadastrada e o privilégio <code>fleet-agents-read</code>.';
+
+  if (!fleet.available) {
+    return cardStat(null, 'Fleet — Agentes', 'fa-satellite-dish', '&mdash;',
+      fleet.error ? 'indisponível' : 'não configurado', 'muted',
+      tip + (fleet.error ? `<br><br><strong>Motivo:</strong> ${escHtml(fleet.error)}` : ''),
+      [], 'help-kibana-fleet');
+  }
+
+  return cardStat(null, 'Fleet — Agentes', 'fa-satellite-dish', fmtNum(fleet.total || 0),
+    ...agentSummary(fleet), tip, agentFooterStats(fleet), 'help-kibana-fleet');
+}
+
+// Legenda + cor compartilhadas pelos cards de Fleet e APM Server.
+// Retorna [unidade, cor] para o cardStat.
+function agentSummary(a) {
+  const problem = (a.offline || 0) + (a.unhealthy || 0);
+  const color = a.unhealthy > 0 ? 'red' : (a.offline > 0 ? 'yellow' : 'green');
+  return [problem > 0 ? `${fmtNum(problem)} fora de operação` : 'todos operacionais', color];
+}
+
+// Rodapé no vocabulário da UI do Fleet (Healthy / Unhealthy / Offline / Updating).
+function agentFooterStats(a) {
+  return [
+    { label: 'Healthy', val: fmtNum(a.healthy || 0), color: 'green' },
+    { label: 'Unhealthy', val: fmtNum(a.unhealthy || 0), color: a.unhealthy > 0 ? 'red' : null },
+    { label: 'Offline', val: fmtNum(a.offline || 0), color: a.offline > 0 ? 'yellow' : null },
+    { label: 'Updating', val: fmtNum(a.updating || 0), color: a.updating > 0 ? 'blue' : null },
+  ];
+}
+
+// APM Server pela ótica do Fleet: agentes que rodam a integração `apm`.
+function kibanaApmCard(apm) {
+  const tip = 'Saúde do <strong>APM Server</strong> vista pelo Fleet: agentes que executam a ' +
+    'integração <code>apm</code>. Descobre as package policies do pacote e conta os agentes de ' +
+    'cada agent policy que a contém.<br><br>' +
+    'Mede a <strong>disponibilidade do coletor</strong> — se ele está de pé para receber dados dos ' +
+    'agentes APM das aplicações. Não analisa os dados de APM em si.';
+
+  if (!apm.available) {
+    return cardStat(null, 'APM Server', 'fa-diagram-project', '&mdash;',
+      apm.error ? 'indisponível' : 'não configurado', 'muted',
+      tip + (apm.error ? `<br><br><strong>Motivo:</strong> ${escHtml(apm.error)}` : ''),
+      [], 'help-kibana-apm');
+  }
+  if (!apm.configured) {
+    return cardStat(null, 'APM Server', 'fa-diagram-project', '0',
+      'nenhuma integração APM', 'muted',
+      tip + '<br><br>Nenhuma package policy do pacote <code>apm</code> foi encontrada neste Fleet.',
+      [], 'help-kibana-apm');
+  }
+
+  const [, color] = agentSummary(apm);
+  return cardStat(null, 'APM Server', 'fa-diagram-project', fmtNum(apm.total || 0),
+    'agente(s) com a integração APM', color, tip,
+    agentFooterStats(apm), 'help-kibana-apm');
 }
 
 // Tabela de utilização — mesmo layout do card "Utilização por Nó" dos Sinais
@@ -3848,6 +3924,104 @@ function kibanaInstancesTable(d) {
           <th>Heap</th>
           <th>ELU</th>
           <th style="text-align:right">Delay</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// Task Manager: só existe via API, então aparece apenas para instâncias com URL.
+function kibanaTaskManagerSection(d) {
+  const withTm = (d.instances || []).filter(i => i.task_manager);
+  if (!withTm.length) return '';
+
+  const tip = 'Saúde do <strong>Task Manager</strong> de cada instância ' +
+    '(<code>/api/task_manager/_health</code>) — o motor por trás de <strong>Alerting</strong>, ' +
+    '<strong>Actions</strong> e <strong>Reporting</strong>. Consultar não gera carga: o Kibana devolve ' +
+    'o último health check já calculado.<br><br>' +
+    '<strong>Load</strong>: ocupação dos workers de tarefas <em>do Kibana</em> (não é o load average do ' +
+    'host). Perto de 100% significa que não há capacidade sobrando para executar tarefas no horário.<br>' +
+    '<strong>Drift</strong>: atraso entre o horário agendado da tarefa e sua execução real. Drift alto ' +
+    'significa alertas e relatórios saindo atrasados.<br>' +
+    '<strong>Capacidade</strong>: estimativa do próprio Kibana sobre a suficiência da capacidade atual.<br>' +
+    '<strong>Atrasadas</strong>: tarefas que já passaram do horário e ainda não rodaram.';
+
+  const rows = withTm.map(inst => {
+    const tm = inst.task_manager;
+    if (!tm.available) {
+      return `<tr>
+        <td><div class="kb-inst-name">${escHtml(inst.name || inst.url)}</div></td>
+        <td colspan="5" style="color:var(--text-dim)">
+          <i class="fas fa-circle-info"></i> indisponível${tm.error ? ` — ${escHtml(tm.error)}` : ''}
+        </td>
+      </tr>`;
+    }
+    const statusCls = { OK: 'badge-green', Warning: 'badge-yellow', Error: 'badge-red' }[tm.status] || 'badge-gray';
+    return `<tr>
+      <td><div class="kb-inst-name">${escHtml(inst.name || inst.url)}</div></td>
+      <td><span class="badge ${statusCls}">${escHtml(tm.status || '-')}</span></td>
+      <td>${tm.load_pct != null ? pctBar(tm.load_pct) : '<span class="kb-no-source">&mdash;</span>'}</td>
+      <td>${tm.drift_p50 != null ? fmtDuration(tm.drift_p50) : '<span class="kb-no-source">&mdash;</span>'}
+          ${tm.drift_p99 != null ? `<span class="kb-inst-sub">p99 ${fmtDuration(tm.drift_p99)}</span>` : ''}</td>
+      <td>${tm.capacity_status
+            ? `<span class="badge ${{ OK: 'badge-green', Warning: 'badge-yellow', Error: 'badge-red' }[tm.capacity_status] || 'badge-gray'}">${escHtml(tm.capacity_status)}</span>`
+            : '<span class="kb-no-source">&mdash;</span>'}</td>
+      <td style="text-align:right;${tm.overdue > 0 ? 'color:var(--yellow);font-weight:700' : ''}">${tm.overdue != null ? fmtNum(tm.overdue) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `${section('Task Manager')}
+  <div class="metric-card metric-card-static card-full">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon"><i class="fas fa-list-check"></i></div>
+        <div class="card-title">Alerting, Actions e Reporting</div>
+      </div>
+      ${tooltip(tip, 'help-kibana-task-manager')}
+    </div>
+    <div class="resource-table-wrap">
+      <table class="data-table resource-table">
+        <thead><tr>
+          <th>Instância</th><th>Status</th><th>Load</th><th>Drift</th>
+          <th>Capacidade</th><th style="text-align:right">Atrasadas</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// Detalhamento das policies com integração APM (só quando há mais de uma).
+function kibanaFleetSection(d) {
+  const apm = d.apm || {};
+  if (!apm.available || !apm.configured || !(apm.policies || []).length) return '';
+
+  const rows = apm.policies.map(p => `<tr>
+    <td><div class="kb-inst-name">${escHtml(p.name || '(sem nome)')}</div>
+        <div class="kb-inst-sub">${escHtml(p.policy_id)}</div></td>
+    <td>${escHtml(p.package_version || '-')}</td>
+    <td style="text-align:right">${fmtNum(p.total || 0)}</td>
+    <td style="text-align:right;color:var(--green)">${fmtNum(p.healthy || 0)}</td>
+    <td style="text-align:right;${p.unhealthy > 0 ? 'color:var(--red);font-weight:700' : ''}">${fmtNum(p.unhealthy || 0)}</td>
+    <td style="text-align:right;${p.offline > 0 ? 'color:var(--yellow)' : ''}">${fmtNum(p.offline || 0)}</td>
+  </tr>`).join('');
+
+  return `${section('APM Server por Policy')}
+  <div class="metric-card metric-card-static card-full">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon"><i class="fas fa-diagram-project"></i></div>
+        <div class="card-title">Policies com integração APM</div>
+      </div>
+      ${tooltip('Cada <strong>agent policy</strong> que contém a integração <code>apm</code> e quantos agentes a executam. Útil para saber se o coletor de APM está de pé em todos os grupos esperados.', 'help-kibana-apm')}
+    </div>
+    <div class="resource-table-wrap">
+      <table class="data-table resource-table">
+        <thead><tr>
+          <th>Policy</th><th>Versão do pacote</th>
+          <th style="text-align:right">Agentes</th><th style="text-align:right">Healthy</th>
+          <th style="text-align:right">Unhealthy</th><th style="text-align:right">Offline</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>

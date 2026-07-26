@@ -204,6 +204,7 @@ def _collect_instance(url, auth):
         result['status_summary'] = dig(status_body, 'status', 'overall', 'summary')
         result['degraded'] = _degraded_services(status_body)
 
+    result['task_manager'] = _collect_task_manager(url, auth)
     return result
 
 
@@ -222,6 +223,139 @@ def _degraded_services(status_body):
                 })
     return sorted(out, key=lambda x: (x['level'] != 'critical', x['name']))
 
+
+def _collect_task_manager(url, auth):
+    """`/api/task_manager/_health` — valores já calculados pelo Kibana.
+
+    O `load` daqui é a ocupação dos workers do Task Manager (do Kibana), não o
+    load average do host; e `drift` é o atraso das tarefas em relação ao
+    horário agendado. Consultar não gera carga adicional no Kibana.
+    """
+    body, err = _http_get(url, '/api/task_manager/_health', auth)
+    if body is None:
+        return {'available': False, 'error': err}
+
+    runtime = dig(body, 'stats', 'runtime', 'value') or {}
+    drift = runtime.get('drift') or {}
+    load = runtime.get('load') or {}
+    return {
+        'available': True,
+        'status': body.get('status'),
+        'load_pct': load.get('p50') if isinstance(load, dict) else None,
+        'load_p99': load.get('p99') if isinstance(load, dict) else None,
+        'drift_p50': drift.get('p50') if isinstance(drift, dict) else None,
+        'drift_p99': drift.get('p99') if isinstance(drift, dict) else None,
+        'capacity_status': dig(body, 'stats', 'capacity_estimation', 'status'),
+        'workload_status': dig(body, 'stats', 'workload', 'status'),
+        'overdue': dig(body, 'stats', 'workload', 'value', 'overdue'),
+    }
+
+
+def _agent_total(res):
+    """Total de agentes **sem contar os unenrolled**.
+
+    Na resposta do Fleet: `all` conta todos os status (inclui unenrolled),
+    `total` está deprecated e `active` são os agentes efetivamente enrolled e
+    fazendo check-in. Usamos `active` — é o que exclui unenrolled e o que casa
+    com a visão padrão do Fleet. Sem esse campo, cai para `all` menos os
+    unenrolled explicitamente.
+    """
+    unenrolled = int(res.get('unenrolled') or 0)
+    active = res.get('active')
+    if isinstance(active, (int, float)) and not isinstance(active, bool):
+        return int(active)          # já exclui unenrolled
+    for key in ('all', 'total'):    # `total` é deprecated, mas melhor que descartar
+        val = res.get(key)
+        if isinstance(val, (int, float)) and not isinstance(val, bool):
+            return max(0, int(val) - unenrolled)
+    return 0
+
+
+def _agent_states(res):
+    """Contagem por estado no vocabulário da **UI do Fleet**, não no da API.
+
+    A UI mostra `Healthy`/`Unhealthy`; a API responde `online`/`error`. E
+    `Unhealthy` agrega os agentes **com erro e os degradados** — em versões que
+    expõem `degraded` separado, somar os dois é o que reproduz o número da UI.
+    """
+    def num(key):
+        val = res.get(key)
+        return int(val) if isinstance(val, (int, float)) and not isinstance(val, bool) else 0
+
+    return {
+        'healthy': num('online'),
+        'unhealthy': num('error') + num('degraded'),
+        'offline': num('offline'),
+        'updating': num('updating'),
+        'inactive': num('inactive'),
+        'unenrolled': num('unenrolled'),
+    }
+
+
+def _collect_fleet(url, auth):
+    """Resumo da frota de agentes (`/api/fleet/agent_status`).
+
+    Exige o privilégio `fleet-agents-read`; sem ele degrada para indisponível,
+    como já é feito com SLM e licença no dashboard do ES.
+    """
+    body, err = _http_get(url, '/api/fleet/agent_status', auth)
+    if body is None:
+        return {'available': False, 'error': err}
+    res = body.get('results') or body
+    result = {'available': True, 'total': _agent_total(res)}
+    result.update(_agent_states(res))
+    return result
+
+
+def _collect_apm(url, auth):
+    """Saúde do APM Server pela ótica do Fleet.
+
+    Descobre as package policies do pacote `apm` (filtro feito em Python — mais
+    robusto entre versões que a sintaxe kuery) e, para cada agent policy que as
+    contém, pede o resumo de agentes com `?policyId=`, sem varrer a lista toda.
+    """
+    body, err = _http_get(url, '/api/fleet/package_policies', auth,
+                          params={'perPage': 500})
+    if body is None:
+        return {'available': False, 'error': err}
+
+    policies = []
+    for pp in body.get('items') or []:
+        if dig(pp, 'package', 'name') != 'apm':
+            continue
+        # policy_ids (8.x+, múltiplas) ou policy_id (formato antigo)
+        ids = pp.get('policy_ids') or ([pp['policy_id']] if pp.get('policy_id') else [])
+        for pid in ids:
+            policies.append({
+                'policy_id': pid,
+                'name': pp.get('name', ''),
+                'package_version': dig(pp, 'package', 'version'),
+            })
+
+    STATE_KEYS = ('healthy', 'unhealthy', 'offline', 'updating')
+    if not policies:
+        empty = {'available': True, 'configured': False, 'policies': [], 'total': 0}
+        empty.update({k: 0 for k in STATE_KEYS})
+        return empty
+
+    totals = dict({'total': 0}, **{k: 0 for k in STATE_KEYS})
+    for pol in policies:
+        st, st_err = _http_get(url, '/api/fleet/agent_status', auth,
+                               params={'policyId': pol['policy_id']})
+        res = (st or {}).get('results') or st or {}
+        pol['error_msg'] = st_err
+        # Mesmos critérios do card do Fleet: unenrolled fora da contagem e
+        # estados no vocabulário da UI (Healthy/Unhealthy).
+        pol['total'] = _agent_total(res)
+        totals['total'] += pol['total']
+        states = _agent_states(res)
+        for key in STATE_KEYS:
+            pol[key] = states[key]
+            totals[key] += states[key]
+
+    result = {'available': True, 'configured': True, 'policies': policies}
+    result.update(totals)
+    return result
 
 def _instance_payload(api):
     """Formato de saída de uma instância, a partir apenas da API.
@@ -258,6 +392,7 @@ def _instance_payload(api):
         'ram_used': api.get('ram_used'),
         'ram_total': api.get('ram_total'),
         'uptime_ms': api.get('uptime_ms'),
+        'task_manager': api.get('task_manager'),
     }
 
 
@@ -274,6 +409,10 @@ def dashboard(config):
 
     with ThreadPoolExecutor(max_workers=max(4, len(urls) + 3)) as pool:
         f_instances = [pool.submit(_collect_instance, u, auth) for u in urls]
+        # Fleet e APM só precisam de uma instância que responda; a primeira
+        # cadastrada é a porta de entrada (todas falam com o mesmo cluster).
+        f_fleet = pool.submit(_collect_fleet, urls[0], auth) if urls else None
+        f_apm = pool.submit(_collect_apm, urls[0], auth) if urls else None
 
     instances = [_instance_payload(f.result()) for f in f_instances]
     instances.sort(key=lambda i: (i.get('name') or '').lower())
@@ -283,4 +422,8 @@ def dashboard(config):
         'total_instances': len(instances),
         'versions': sorted({i['version'] for i in instances if i.get('version')}),
         'has_urls': bool(urls),
+        'fleet': f_fleet.result() if f_fleet else {'available': False,
+                                                   'error': 'Nenhuma instância cadastrada'},
+        'apm': f_apm.result() if f_apm else {'available': False,
+                                             'error': 'Nenhuma instância cadastrada'},
     }
