@@ -83,6 +83,12 @@ def connection_id():
     return _info.get('connection_id')
 
 
+def client():
+    """Cliente ES ativo (None se desconectado). Usado pelo kibana_service para
+    ler self-monitoring e métricas do Elastic Agent do mesmo cluster."""
+    return _client
+
+
 def test_connection(params):
     """Valida credenciais sem ativar a conexão. Retorna {cluster_name, version}."""
     info = _make_client(params).info()

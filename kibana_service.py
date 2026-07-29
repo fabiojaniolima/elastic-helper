@@ -4,6 +4,20 @@ Espelha a estrutura de `es_service.py`: estado em variáveis de módulo, coleta
 paralela e **sem cache** — cada atualização da página consulta as fontes de novo.
 As rotas Flask apenas validam e serializam.
 
+Três fontes alimentam as métricas, nesta ordem de precedência (por métrica):
+
+  1. **Elastic Agent** — `metrics-system.*` (CPU/disco/RAM do host) e
+     `metrics-kibana.stack_monitoring.*`, lidos do cluster ES já conectado;
+  2. **Self-monitoring** — `.monitoring-kibana-*` no mesmo cluster;
+  3. **API do Kibana** — `/api/stats` de cada URL cadastrada.
+
+CPU e disco **só existem na fonte 1**: nem a API do Kibana nem o self-monitoring
+expõem esses dados (o módulo Kibana do Metricbeat e a integração Kibana também
+não os coletam — ambos leem a mesma API). Sem Elastic Agent no host da
+instância, essas colunas ficam sem valor, por ausência de fonte.
+
+Já Task Manager e Fleet **só existem na fonte 3**: exigem URL cadastrada.
+
 Ver `docs/kibana.md`.
 """
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +26,8 @@ import logging
 import requests
 import urllib3
 
+import es_service
+
 logger = logging.getLogger('elastic-helper')
 
 # A ferramenta é local e o cliente ES já roda com verify_certs=False; manter o
@@ -19,6 +35,14 @@ logger = logging.getLogger('elastic-helper')
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 HTTP_TIMEOUT = 8          # segundos por chamada à API do Kibana
+MONITORING_WINDOW = '15m'  # janela de busca do self-monitoring / agente
+MAX_INSTANCES = 50
+
+# Índices de monitoramento do Kibana: legacy (self-monitoring) + Elastic Agent.
+MONITORING_INDICES = '.monitoring-kibana-*,metrics-kibana.stack_monitoring.stats-*'
+SYSTEM_CPU_INDICES = 'metrics-system.cpu-*'
+SYSTEM_MEMORY_INDICES = 'metrics-system.memory-*'
+SYSTEM_FS_INDICES = 'metrics-system.filesystem-*'
 
 
 # ─── Helpers ──────────────────────────────────────────────
@@ -357,49 +381,282 @@ def _collect_apm(url, auth):
     result.update(totals)
     return result
 
-def _instance_payload(api):
-    """Formato de saída de uma instância, a partir apenas da API.
 
-    Andaime da Fase 9.1: dá lugar a `_merge_instance` na 9.3, quando passam a
-    existir outras fontes para a mesma métrica. O formato `{value, source}` já
-    é o final — é o front que exibe a origem no tooltip de cada célula.
+# ─── Fontes no Elasticsearch (self-monitoring / Elastic Agent) ─────
+def _es_search(index, body):
+    """Busca tolerante: índice ausente ou sem permissão vira lista vazia.
+
+    `body` (size/query/sort) é expandido em argumentos nomeados: o parâmetro
+    `body=` do `search()` está deprecado no cliente v8 e foi removido no v9.
     """
+    client = es_service.client()
+    if client is None:
+        return []
+    try:
+        resp = client.search(index=index, ignore_unavailable=True,
+                             allow_no_indices=True, **body)
+        return [h for h in dig(resp.body, 'hits', 'hits') or []]
+    except Exception as e:
+        logger.debug('Busca em %s falhou: %s', index, e)
+        return []
+
+
+def _monitoring_doc_fields(hit):
+    """Extrai os campos de um doc de monitoramento, tolerando os dois layouts:
+    `kibana_stats.*` (self-monitoring legacy) e `kibana.stats.*` (Elastic Agent).
+    A origem é inferida do índice, para o front mostrar de onde veio o número."""
+    src = hit.get('_source') or {}
+    stats = dig(src, 'kibana_stats') or dig(src, 'kibana', 'stats')
+    if not stats:
+        return None
+
+    index = hit.get('_index') or ''
+    source = 'agent' if index.startswith('metrics-') or '.ds-metrics-' in index else 'monitoring'
+    kb = stats.get('kibana') or {}
+    heap = dig(stats, 'process', 'memory', 'heap') or {}
+    os_mem = dig(stats, 'os', 'memory') or {}
+
+    # O legacy usa *_in_bytes escalar; o do agente aninha em .bytes/.ms.
+    heap_used = _scalar(heap.get('used_in_bytes')) or _scalar(heap.get('used'), 'bytes')
+    heap_limit = _scalar(heap.get('size_limit'), 'bytes')
+    ram_total = _scalar(os_mem.get('total_in_bytes')) or _scalar(os_mem.get('total'), 'bytes')
+    ram_free = _scalar(os_mem.get('free_in_bytes')) or _scalar(os_mem.get('free'), 'bytes')
+    ram_used = None
+    if ram_total is not None and ram_free is not None:
+        ram_used = ram_total - ram_free
+
+    elu = _scalar(dig(stats, 'process', 'event_loop_utilization', 'utilization'))
+    delay = _scalar(dig(stats, 'process', 'event_loop_delay'), 'ms')
+
     return {
-        'uuid': api.get('uuid', ''),
-        'name': api.get('name', ''),
-        'version': api.get('version', ''),
-        'status': api.get('status', ''),
-        'host': api.get('host', ''),
+        'source': source,
+        'uuid': kb.get('uuid', ''),
+        'name': kb.get('name', ''),
+        'version': kb.get('version', ''),
+        'status': kb.get('status', ''),
+        'host': kb.get('host', ''),
+        'transport_address': kb.get('transport_address', ''),
+        'timestamp': src.get('timestamp') or src.get('@timestamp'),
+        'heap_pct': _pct(heap_used, heap_limit),
+        'heap_used': heap_used,
+        'heap_limit': heap_limit,
+        'ram_pct': _pct(ram_used, ram_total),
+        'ram_used': ram_used,
+        'ram_total': ram_total,
+        'elu_pct': _ratio_to_pct(elu),
+        'event_loop_delay': delay,
+        'concurrent_connections': _scalar(stats.get('concurrent_connections')),
+        'response_time_avg': _scalar(dig(stats, 'response_times', 'average'), 'ms'),
+        'response_time_max': _scalar(dig(stats, 'response_times', 'max'), 'ms'),
+    }
+
+
+def _load_monitoring_kibana():
+    """Doc mais recente por instância nos índices de monitoramento.
+
+    Sem agregação de propósito: o nome do campo de uuid difere entre os dois
+    layouts, então busca-se a janela recente ordenada por tempo e deduplica-se
+    por instância em Python — funciona igual nos dois formatos.
+    """
+    hits = _es_search(MONITORING_INDICES, {
+        'size': 500,
+        'query': {'bool': {'filter': [
+            {'range': {'timestamp': {'gte': 'now-%s' % MONITORING_WINDOW}}},
+        ]}},
+        'sort': [{'timestamp': {'order': 'desc', 'unmapped_type': 'date'}}],
+    })
+    if not hits:
+        # Formato do Elastic Agent usa @timestamp; repete a busca por ele.
+        hits = _es_search(MONITORING_INDICES, {
+            'size': 500,
+            'query': {'bool': {'filter': [
+                {'range': {'@timestamp': {'gte': 'now-%s' % MONITORING_WINDOW}}},
+            ]}},
+            'sort': [{'@timestamp': {'order': 'desc', 'unmapped_type': 'date'}}],
+        })
+
+    by_instance = {}
+    for hit in hits:
+        doc = _monitoring_doc_fields(hit)
+        if not doc:
+            continue
+        key = doc['uuid'] or doc['name']
+        if key and key not in by_instance:   # hits vêm ordenados: o 1º é o atual
+            by_instance[key] = doc
+        if len(by_instance) >= MAX_INSTANCES:
+            break
+    return by_instance
+
+
+def fetch_monitoring_kibana():
+    return _load_monitoring_kibana()
+
+
+def _host_filter(hosts):
+    """Casa o host da instância Kibana com o host reportado pelo Elastic Agent.
+    O nome do Kibana costuma ser o hostname, mas cai para o IP quando não."""
+    values = [h for h in hosts if h]
+    if not values:
+        return None
+    return {'bool': {'should': [
+        {'terms': {'host.name': values}},
+        {'terms': {'host.hostname': values}},
+        {'terms': {'host.ip': values}},
+    ], 'minimum_should_match': 1}}
+
+
+def _host_keys(src):
+    """Chaves pelas quais um doc do agente pode ser encontrado."""
+    host = dig(src, 'host') or {}
+    keys = [host.get('name'), host.get('hostname')]
+    ips = host.get('ip')
+    if isinstance(ips, list):
+        keys.extend(ips)
+    elif ips:
+        keys.append(ips)
+    return [k for k in keys if k]
+
+
+def _load_system_metrics(hosts):
+    """CPU/RAM e disco por host, vindos da integração `system` do Elastic Agent.
+
+    Esta é a **única** fonte de CPU e disco: a API do Kibana não expõe nenhum
+    dos dois. Ausência de agente no host → sem valor (e o front mostra traço).
+    """
+    host_filter = _host_filter(hosts)
+    if host_filter is None:
+        return {}
+
+    out = {}
+
+    def _register(src, field, value):
+        if value is None:
+            return
+        for key in _host_keys(src):
+            entry = out.setdefault(key, {})
+            # Docs vêm do mais recente para o mais antigo: o primeiro vence.
+            entry.setdefault(field, value)
+
+    # CPU + memória: já normalizados pelo agente (razão 0..1), sem baseline.
+    for index, extract in (
+        (SYSTEM_CPU_INDICES, lambda s: ('cpu', _ratio_to_pct(dig(s, 'system', 'cpu', 'total', 'norm', 'pct')))),
+        (SYSTEM_MEMORY_INDICES, lambda s: ('ram', _ratio_to_pct(dig(s, 'system', 'memory', 'actual', 'used', 'pct')))),
+    ):
+        for hit in _es_search(index, {
+            'size': 200,
+            'query': {'bool': {'filter': [
+                host_filter,
+                {'range': {'@timestamp': {'gte': 'now-%s' % MONITORING_WINDOW}}},
+            ]}},
+            'sort': [{'@timestamp': {'order': 'desc'}}],
+        }):
+            src = hit.get('_source') or {}
+            field, value = extract(src)
+            _register(src, field, value)
+
+    # Disco: vários mounts por host — fica o mais cheio (é o que causa problema).
+    for hit in _es_search(SYSTEM_FS_INDICES, {
+        'size': 500,
+        'query': {'bool': {'filter': [
+            host_filter,
+            {'range': {'@timestamp': {'gte': 'now-%s' % MONITORING_WINDOW}}},
+        ]}},
+        'sort': [{'@timestamp': {'order': 'desc'}}],
+    }):
+        src = hit.get('_source') or {}
+        pct = _ratio_to_pct(dig(src, 'system', 'filesystem', 'used', 'pct'))
+        if pct is None:
+            continue
+        mount = dig(src, 'system', 'filesystem', 'mount_point') or ''
+        for key in _host_keys(src):
+            entry = out.setdefault(key, {})
+            if entry.get('disk') is None or pct > entry['disk']:
+                entry['disk'] = pct
+                entry['disk_mount'] = mount
+    return out
+
+
+def fetch_system_metrics(hosts):
+    return _load_system_metrics(hosts)
+
+
+# ─── Consolidação ─────────────────────────────────────────
+def _merge_instance(api, mon, sysm):
+    """Aplica a precedência agente → self-monitoring → API, métrica a métrica.
+
+    `mon` já traz sua própria origem ('agent' quando veio dos índices do Elastic
+    Agent, 'monitoring' quando veio do self-monitoring legacy).
+    """
+    api = api or {}
+    mon = mon or {}
+    sysm = sysm or {}
+    mon_src = mon.get('source', 'monitoring')
+
+    identity = {}
+    for field in ('uuid', 'name', 'version', 'host'):
+        identity[field] = mon.get(field) or api.get(field) or ''
+    # Status é a exceção à precedência das métricas: vale a leitura ao vivo do
+    # `/api/status`, não a do self-monitoring (que pode estar minutos atrasado e
+    # não diz *o que* degradou). Sem URL cadastrada, cai para o monitoramento.
+    identity['status'] = api.get('status') or mon.get('status') or ''
+
+    return {
+        'uuid': identity['uuid'],
+        'name': identity['name'],
+        'version': identity['version'],
+        'status': identity['status'],
+        'host': identity['host'],
         'url': api.get('url', ''),
         'configured': bool(api.get('url')),
         'reachable': api.get('reachable', False),
         'error': api.get('error'),
+        'last_seen': mon.get('timestamp'),
         'status_summary': api.get('status_summary'),
         'degraded': api.get('degraded') or [],
         'metrics': {
-            # CPU e disco são do host e não existem na API do Kibana.
-            'cpu': None,
-            'disk': None,
-            'ram': _metric(api.get('ram_pct'), 'api'),
-            'heap': _metric(api.get('heap_pct'), 'api'),
-            'elu': _metric(api.get('elu_pct'), 'api'),
-            'event_loop_delay': _metric(api.get('event_loop_delay'), 'api'),
-            'response_time_avg': _metric(api.get('response_time_avg'), 'api'),
-            'concurrent_connections': _metric(api.get('concurrent_connections'), 'api'),
+            # CPU e disco: exclusivos do Elastic Agent.
+            'cpu': _metric(sysm.get('cpu'), 'agent'),
+            'disk': _metric(sysm.get('disk'), 'agent'),
+            'ram': _pick((sysm.get('ram'), 'agent'),
+                         (mon.get('ram_pct'), mon_src),
+                         (api.get('ram_pct'), 'api')),
+            'heap': _pick((mon.get('heap_pct'), mon_src), (api.get('heap_pct'), 'api')),
+            'elu': _pick((mon.get('elu_pct'), mon_src), (api.get('elu_pct'), 'api')),
+            'event_loop_delay': _pick((mon.get('event_loop_delay'), mon_src),
+                                      (api.get('event_loop_delay'), 'api')),
+            'response_time_avg': _pick((mon.get('response_time_avg'), mon_src),
+                                       (api.get('response_time_avg'), 'api')),
+            'concurrent_connections': _pick((mon.get('concurrent_connections'), mon_src),
+                                            (api.get('concurrent_connections'), 'api')),
         },
-        'heap_used': api.get('heap_used'),
-        'heap_limit': api.get('heap_limit'),
-        'ram_used': api.get('ram_used'),
-        'ram_total': api.get('ram_total'),
+        'disk_mount': sysm.get('disk_mount'),
+        'heap_used': mon.get('heap_used') or api.get('heap_used'),
+        'heap_limit': mon.get('heap_limit') or api.get('heap_limit'),
+        'ram_used': mon.get('ram_used') or api.get('ram_used'),
+        'ram_total': mon.get('ram_total') or api.get('ram_total'),
         'uptime_ms': api.get('uptime_ms'),
         'task_manager': api.get('task_manager'),
     }
+
+
+def _match_monitoring(api_inst, monitoring):
+    """Casa uma instância cadastrada com seu doc de monitoramento (uuid → nome)."""
+    if api_inst.get('uuid') and api_inst['uuid'] in monitoring:
+        return monitoring[api_inst['uuid']]
+    for doc in monitoring.values():
+        if doc.get('uuid') and doc['uuid'] == api_inst.get('uuid'):
+            return doc
+        if doc.get('name') and doc['name'] == api_inst.get('name'):
+            return doc
+    return None
 
 
 def dashboard(config):
     """Payload consolidado da página Kibana.
 
     `config` vem de `db.get_kibana_config(..., include_password=True)`.
+    Funciona sem nenhuma URL cadastrada: nesse caso a lista de instâncias sai
+    inteira do self-monitoring, sem Task Manager, Fleet nem APM.
     """
     urls = [normalize_url(i['url']) for i in config.get('instances') or []]
     urls = [u for u in urls if u]
@@ -407,23 +664,52 @@ def dashboard(config):
     password = config.get('password') or ''
     auth = (username, password) if username else None
 
+    # API das instâncias + self-monitoring, tudo em paralelo.
     with ThreadPoolExecutor(max_workers=max(4, len(urls) + 3)) as pool:
+        f_monitoring = pool.submit(fetch_monitoring_kibana)
         f_instances = [pool.submit(_collect_instance, u, auth) for u in urls]
         # Fleet e APM só precisam de uma instância que responda; a primeira
         # cadastrada é a porta de entrada (todas falam com o mesmo cluster).
         f_fleet = pool.submit(_collect_fleet, urls[0], auth) if urls else None
         f_apm = pool.submit(_collect_apm, urls[0], auth) if urls else None
 
-    instances = [_instance_payload(f.result()) for f in f_instances]
+    monitoring = f_monitoring.result()
+    api_instances = [f.result() for f in f_instances]
+
+    # Hosts candidatos para casar com as métricas do Elastic Agent.
+    hosts = set()
+    for inst in api_instances:
+        hosts.update([inst.get('name'), inst.get('host')])
+    for doc in monitoring.values():
+        hosts.update([doc.get('name'), doc.get('host')])
+    system = fetch_system_metrics({h for h in hosts if h})
+
+    instances = []
+    used_monitoring = set()
+    for api_inst in api_instances:
+        mon = _match_monitoring(api_inst, monitoring)
+        if mon:
+            used_monitoring.add(mon.get('uuid') or mon.get('name'))
+        sysm = system.get(api_inst.get('name')) or system.get(api_inst.get('host')) or {}
+        instances.append(_merge_instance(api_inst, mon, sysm))
+
+    # Instâncias vistas só pelo self-monitoring (sem URL cadastrada).
+    for key, doc in monitoring.items():
+        if key in used_monitoring:
+            continue
+        sysm = system.get(doc.get('name')) or system.get(doc.get('host')) or {}
+        instances.append(_merge_instance(None, doc, sysm))
+
     instances.sort(key=lambda i: (i.get('name') or '').lower())
 
     return {
         'instances': instances,
         'total_instances': len(instances),
         'versions': sorted({i['version'] for i in instances if i.get('version')}),
-        'has_urls': bool(urls),
         'fleet': f_fleet.result() if f_fleet else {'available': False,
                                                    'error': 'Nenhuma instância cadastrada'},
         'apm': f_apm.result() if f_apm else {'available': False,
                                              'error': 'Nenhuma instância cadastrada'},
+        'has_urls': bool(urls),
+        'has_monitoring': bool(monitoring),
     }
