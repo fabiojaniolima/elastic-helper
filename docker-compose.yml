@@ -1,0 +1,15 @@
+services:
+  elastic-helper:
+    build: .
+    container_name: elastic-helper
+    ports:
+      - "${PORT:-5001}:5001"
+    environment:
+      - PORT=5001
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DB_PATH=/app/connections.db
+    volumes:
+      # Bind do arquivo do banco: crie-o antes do primeiro `up`
+      # (`touch connections.db`), senão o Docker cria um diretório no lugar.
+      - ./connections.db:/app/connections.db
+    restart: unless-stopped

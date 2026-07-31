@@ -1,0 +1,8 @@
+.venv
+.git
+.gitignore
+.env
+connections.db
+__pycache__/
+*.pyc
+.DS_Store
