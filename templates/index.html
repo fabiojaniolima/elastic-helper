@@ -287,7 +287,41 @@
       <section class="page page-config" id="page-config" hidden></section>
 
       <!-- ========== AJUDA (documentação) ========== -->
-      <section class="page page-help" id="page-help" hidden></section>
+      <section class="page page-help" id="page-help" hidden>
+        <div class="help-docs">
+
+          <!-- Conteúdo -->
+          <div class="help-main">
+            <p class="help-lead">Referência dos cards e métricas dos <strong>Sinais Vitais</strong> e do <strong>Inventário</strong>: o que cada card mostra, o significado de cada dado e o que ele pode indicar. Use o índice ao lado ou o "?" de cada card para chegar direto ao tópico.</p>
+
+            <div class="help-search">
+              <i class="fas fa-magnifying-glass"></i>
+              <input type="text" id="helpSearch" placeholder="Buscar nos termos e métricas… (ex: shard, ILM, circuit breaker)" oninput="filterHelp(this.value)">
+            </div>
+
+            <!-- Seções geradas por renderHelp() em app.js (uma entrada por card dos Sinais Vitais e do Inventário) -->
+            <div id="helpGroups"></div>
+
+            <div class="help-no-results" id="helpNoResults" hidden>
+              <i class="fas fa-magnifying-glass"></i>
+              Nenhum termo encontrado para a busca.
+            </div>
+          </div>
+
+          <!-- Índice lateral (gerado por renderHelp()) -->
+          <aside class="help-toc">
+            <div class="help-toc-title">Nesta página</div>
+            <nav class="help-toc-nav" id="helpToc"></nav>
+          </aside>
+
+        </div>
+      </section>
+
+      <!-- ========== RODAPÉ (rola com o conteúdo, sem posição fixa) ========== -->
+      <footer class="app-footer">
+        Desenvolvido por
+        <a href="https://fabiojanio.com" target="_blank" rel="noopener noreferrer">fabiojanio.com</a>
+      </footer>
 
     </div>
   </main>

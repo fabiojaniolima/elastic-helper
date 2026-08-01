@@ -649,6 +649,19 @@ input[type="checkbox"] {
 .page { max-width: 1400px; margin: 0 auto; }
 .page[hidden] { display: none; }
 
+/* Rodapé: rola junto com a página, aparece só ao chegar no fim */
+.app-footer {
+  max-width: 1400px;
+  margin: 40px auto 0;
+  padding: 16px 0 24px;
+  border-top: 1px solid var(--border-subtle);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.app-footer a { color: var(--text-muted); text-decoration: none; transition: color var(--transition); }
+.app-footer a:hover { color: var(--blue); text-decoration: underline; }
+
 /* ─── Grid ─── */
 .metrics-grid {
   display: grid;
@@ -1243,6 +1256,10 @@ input[type="checkbox"] {
 .progress-yellow { background: var(--yellow); }
 .progress-red { background: var(--red); }
 
+/* ─── Spinning ─── */
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ─── Empty state ─── */
 .empty-state {
   padding: 48px 24px;
@@ -1772,6 +1789,10 @@ input[type="checkbox"] {
 @media (max-width: 560px) {
   .tier-disk-pct { width: 44px; }
 }
+
+/* ═══ Seção: Topologia do Cluster ═══ */
+
+/* Container geral do diagrama de fluxo */
 /* ── TOPOLOGIA: paleta própria para maior contraste ──────────────────────────
    As cores abaixo são locais e independentes do tema geral.
    Hierarquia: flow (fundo escuro) → layer (camada) → card (nó, mais claro). */
@@ -2109,6 +2130,179 @@ input[type="checkbox"] {
   .shards-notice-btn { align-self: stretch; justify-content: center; }
 }
 
+/* ═══════════════════ PÁGINA: AJUDA ═══════════════════ */
+/* ═══════════════ AJUDA (documentação) ═══════════════ */
+.page-help { max-width: 1180px; }
+
+.help-docs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 216px;
+  gap: 44px;
+  align-items: start;
+}
+
+/* ─── Índice lateral (sumário "Nesta página") ─── */
+.help-toc {
+  position: sticky;
+  top: 4px;
+  align-self: start;
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+}
+.help-toc-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+  padding-left: 13px;
+}
+.help-toc-nav { display: flex; flex-direction: column; gap: 20px; }
+.help-toc-section { display: flex; flex-direction: column; gap: 1px; }
+.help-toc-group {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 13px 5px;
+}
+.help-toc-link {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  padding: 5px 13px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  line-height: 1.35;
+  transition: color var(--transition), border-color var(--transition);
+}
+.help-toc-link:hover { color: var(--text); }
+.help-toc-link.active {
+  color: var(--blue);
+  border-left-color: var(--blue);
+  font-weight: 600;
+}
+
+/* ─── Coluna de conteúdo ─── */
+.help-main { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+.help-lead {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+
+.help-search { position: relative; }
+.help-search i {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.help-search input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 13px 16px 13px 40px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+}
+.help-search input:focus {
+  border-color: var(--blue-dim);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+/* ─── Seções e artigos ─── */
+.help-section[hidden] { display: none; }
+.help-section + .help-section { margin-top: 34px; }
+.help-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  scroll-margin-top: 12px;
+}
+.help-section-title i { font-size: 13px; color: var(--blue); }
+
+.help-article {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  scroll-margin-top: 12px;
+}
+.help-section .help-article:last-child { border-bottom: none; padding-bottom: 4px; }
+.help-article[hidden] { display: none; }
+.help-article-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.help-summary { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.65; }
+.help-data-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  margin: 16px 0 9px;
+}
+.help-data-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.help-data-list li { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.help-data-list li::marker { color: var(--text-dim); }
+.help-data-label { font-weight: 600; color: var(--text); }
+.help-article code,
+.help-summary code,
+.help-data-list code {
+  font-size: 11.5px;
+  background: var(--surface-hover);
+  color: var(--blue);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Destaque temporário ao chegar via "?" de um card */
+.help-flash { animation: helpFlash 1.6s ease; border-radius: 8px; }
+@keyframes helpFlash {
+  0%, 100% { background: transparent; }
+  18%, 55% { background: var(--blue-bg); }
+}
+
+.help-no-results {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.help-no-results[hidden] { display: none; }
+.help-no-results i { font-size: 22px; display: block; margin-bottom: 12px; opacity: 0.5; }
+
+@media (max-width: 880px) {
+  .help-docs { grid-template-columns: 1fr; gap: 0; }
+  .help-toc { display: none; }
+}
+
+/* ═══════════════ KIBANA / CONFIGURAÇÃO ═══════════════ */
+
 /* Métrica sem fonte disponível (ex.: CPU/disco sem Elastic Agent no host).
    Traço discreto em vez de zero — ausência de dado não é dado zerado. */
 .kb-no-source {
@@ -2157,6 +2351,8 @@ input[type="checkbox"] {
   margin-bottom: 16px;
 }
 .kb-warning i { color: var(--blue); margin-top: 2px; }
+
+/* ─── Página Configuração: seções (rótulo à esquerda, controles à direita) ─── */
 /* Sem max-width próprio: as seções ocupam toda a largura da área de conteúdo. */
 .cfg-section {
   display: grid;
