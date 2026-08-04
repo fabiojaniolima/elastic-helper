@@ -717,9 +717,10 @@ const HELP_CONTENT = [
       },
       {
         id: 'help-data-volume', q: 'Volume de Dados',
-        summary: 'Soma do tamanho <strong>em disco</strong> (store) de todos os índices, incluindo réplicas e índices de sistema. É a métrica mais direta do tamanho do cluster. O uso de disco agregado por <strong>tier</strong> (HOT / WARM / COLD / FROZEN) fica no card <strong>Capacidade por tier</strong>, logo abaixo, na seção Disco por Tier.',
+        summary: 'Soma do tamanho <strong>em disco</strong> (store) de todos os índices, incluindo réplicas e índices de sistema. É a métrica mais direta do tamanho do cluster. O rodapé traz o total de <strong>documentos indexados</strong>. O uso de disco agregado por <strong>tier</strong> (HOT / WARM / COLD / FROZEN) fica no card <strong>Capacidade por tier</strong>, logo abaixo, na seção Disco por Tier.',
         data: [
           { label: 'Volume em disco (store)', desc: 'Tamanho ocupado por todos os shards (primários + réplicas). Difere do volume "lógico" dos dados, pois inclui as cópias.' },
+          { label: 'Documentos (rodapé)', desc: 'Soma de <code>docs.count</code> de todos os índices — o total de documentos vivos no cluster. Não conta documentos marcados para exclusão que ainda não passaram por merge. Serve como ordem de grandeza do conteúdo indexado: cresce com a ingestão e diminui com expurgo/ILM.' },
         ],
       },
       {
@@ -743,13 +744,6 @@ const HELP_CONTENT = [
           { label: 'IP do nó', desc: 'Endereço IP do nó, conforme reportado pelo <code>_cat/nodes</code>. Útil para correlacionar com logs, monitoramento e alertas de infra.' },
           { label: 'Barra de disco (rodapé do card)', desc: 'Uso de disco do nó em percentual. Cor verde < 70%, amarelo ≥ 70%, vermelho ≥ 85% — os mesmos limiares das demais telas.' },
           { label: 'Clique no card de nó', desc: 'Abre um <strong>modal de detalhe</strong> com informações da instância carregadas sob demanda (só para o nó clicado, sem impacto no dashboard): sistema operacional e versão do kernel, arquitetura, número de vCPUs, CPU ao vivo, load average, RAM (total / usada / livre), swap, heap JVM (usada / máx.), versão e uptime da JVM, uso de disco por mount e file descriptors do processo.' },
-        ],
-      },
-      {
-        id: 'help-total-docs', q: 'Documentos',
-        summary: 'Soma de <code>docs.count</code> de todos os índices — o total de documentos vivos no cluster. Útil como ordem de grandeza do conteúdo indexado; cresce com a ingestão e diminui com expurgo/ILM.',
-        data: [
-          { label: 'Documentos indexados', desc: 'Total de documentos não deletados. Não conta documentos marcados para exclusão que ainda não passaram por merge.' },
         ],
       },
       {
@@ -1754,11 +1748,10 @@ function sectionCardsVolume(d) {
   return [
     cardNodes(d.total_nodes, h, d.dedicated_master_nodes || 0, d.nodes_summary || []),
     cardStat(null, 'Volume de Dados', 'fa-database', formatBytes(d.total_store_bytes || 0), 'em disco (store, com réplicas)', 'blue',
-      'Soma do tamanho em disco de todos os índices (primários + réplicas, incluindo índices de sistema).',
-      [], 'help-data-volume'),
-    cardStat(null, 'Documentos', 'fa-file-lines', fmtNum(d.total_docs || 0), 'documentos indexados', 'blue',
-      'Soma de <code>docs.count</code> de todos os índices — o total de documentos vivos no cluster.',
-      [], 'help-total-docs'),
+      'Soma do tamanho em disco de todos os índices (primários + réplicas, incluindo índices de sistema). ' +
+      'No rodapé, o total de <strong>documentos indexados</strong>: a soma de <code>docs.count</code>, ' +
+      'que não conta os documentos marcados para exclusão ainda não expurgados por merge.',
+      [{ label: 'Documentos', val: fmtNum(d.total_docs || 0), color: null }], 'help-data-volume'),
     cardCount('all_indices', 'Total de Índices', 'fa-layer-group', d.total_indices,
       'índices', 'blue', 'blue',
       'Contagem total de índices do cluster, incluindo índices de sistema (prefixo <code>.</code>). Uma contagem elevada pode impactar o desempenho — avalie o uso de data streams para séries temporais. Clique para listar todos os índices.',
