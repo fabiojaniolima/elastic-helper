@@ -439,11 +439,33 @@ input[type="checkbox"] {
   color: var(--blue);
   font-size: 15px;
 }
+.sidebar-brand-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
 .sidebar-brand-text {
   font-size: 14.5px;
   font-weight: 700;
   letter-spacing: -0.2px;
   white-space: nowrap;
+}
+
+/* Selo de estágio ao lado do nome do produto (sidebar e tela de conexão).
+   Especificidade maior que `.connect-logo span`, que fixa o tamanho do nome. */
+.brand-badge,
+.connect-logo .brand-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 20px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--yellow);
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow-dim);
 }
 
 .sidebar-cluster {
@@ -596,7 +618,7 @@ input[type="checkbox"] {
 .sidebar-disconnect:hover { background: rgba(248, 81, 73, 0.14); }
 
 /* Recolhida: esconde textos e centraliza ícones */
-.sidebar.collapsed .sidebar-brand-text,
+.sidebar.collapsed .sidebar-brand-name,
 .sidebar.collapsed .sidebar-cluster,
 .sidebar.collapsed .nav-group-label,
 .sidebar.collapsed .nav-item-text { display: none; }
