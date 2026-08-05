@@ -725,12 +725,13 @@ const HELP_CONTENT = [
       },
       {
         id: 'help-tier-disk', q: 'Disco por Tier',
-        summary: 'Gráfico de barras horizontais com a capacidade de disco por <strong>tier de dados</strong> (HOT / WARM / COLD / FROZEN) — uma barra por tier, somando todos os data nodes daquele tier. O <strong>trilho cinza</strong> é a capacidade total do tier e o <strong>preenchimento colorido</strong> é o uso; o <strong>% de uso</strong> fica à direita e os bytes (usado · total · livre) logo abaixo da barra. Só conta nós com role de tier (<code>data_hot/warm/cold/frozen</code>).',
+        summary: 'Gráfico de barras horizontais com a capacidade de disco por <strong>tier de dados</strong> (HOT / WARM / COLD) — uma barra por tier, somando todos os data nodes daquele tier. O <strong>trilho cinza</strong> é a capacidade total do tier e o <strong>preenchimento colorido</strong> é o uso; o <strong>% de uso</strong> fica à direita e os bytes (usado · total · livre) logo abaixo da barra. Só conta nós com role de tier (<code>data_hot/warm/cold</code>).',
         data: [
           { label: 'Barra (trilho cinza)', desc: 'Capacidade total de disco do tier — a soma de todos os data nodes daquela camada.' },
           { label: 'Preenchimento colorido', desc: 'Espaço em uso. A cor segue o uso: verde < 70%, amarelo ≥ 70%, vermelho ≥ 85%.' },
           { label: '% à direita', desc: 'Percentual de uso da barra (usado ÷ total).' },
           { label: 'Usado · Total · Livre (abaixo)', desc: 'Os valores absolutos, centralizados sob a barra, com o <strong>percentual livre</strong> entre parênteses. Livre = total − usado. Watermarks padrão do ES: low 85% / high 90% / flood 95%.' },
+          { label: 'Por que FROZEN não aparece', desc: 'O disco de um nó frozen não é capacidade de armazenamento: é o <strong>cache dos searchable snapshots</strong> (<code>xpack.searchable.snapshot.shared_cache.size</code>), pré-alocado num tamanho fixo e mantido cheio pelo Elasticsearch. Ele opera perto de 100% mesmo com o repositório inteiro à disposição, então somá-lo aos demais tiers criaria uma barra permanentemente vermelha sem significar falta de espaço. Os dados do tier frozen vivem no repositório de snapshots. Pelo mesmo motivo, o disco desses nós aparece como <strong>—</strong> em toda visão por nó: "Utilização por Nó", modal "Nós do Cluster", caixinha da Topologia, modal de detalhe do nó e os alertas de disco do Diagnóstico.' },
         ],
       },
       {
@@ -1565,6 +1566,9 @@ function tierDiskAgg(nodes) {
   for (const n of nodes) {
     const t = nodeTier(n.roles);
     if (!t || !n.disk_total) continue;
+    // FROZEN fica fora: o disco desses nós é cache, não capacidade (ver isDedicatedFrozen).
+    // Somá-lo daria um tier permanentemente "cheio" ao lado de tiers reais.
+    if (t === 'FROZEN') continue;
     tiers[t] = tiers[t] || { used: 0, total: 0 };
     tiers[t].used += n.disk_used || 0;
     tiers[t].total += n.disk_total || 0;
@@ -1595,13 +1599,14 @@ function tierDiskRow(tier, agg) {
 
 function sectionCardsTierDisk(d) {
   const tiers = tierDiskAgg((d || {}).nodes_summary || []);
-  const order = ['HOT', 'WARM', 'COLD', 'FROZEN'].filter(t => tiers[t]);
-  const tip = 'Capacidade de disco por <strong>tier de dados</strong> (HOT / WARM / COLD / FROZEN), somando todos os data nodes de cada tier.<br><br>' +
+  const order = ['HOT', 'WARM', 'COLD'].filter(t => tiers[t]);
+  const tip = 'Capacidade de disco por <strong>tier de dados</strong> (HOT / WARM / COLD), somando todos os data nodes de cada tier.<br><br>' +
     'Em cada barra, o trilho <strong>cinza</strong> é a capacidade <strong>total</strong> do tier e o preenchimento <strong>colorido</strong> mostra o quanto está em uso. O <strong>% de uso</strong> fica à direita e os volumes (usado · total · livre) logo abaixo da barra.<br><br>' +
-    'Cor por uso: amarelo a partir de <strong>70%</strong>, vermelho a partir de <strong>85%</strong>. Watermarks padrão do ES: low 85% / high 90% / flood 95%.';
+    'Cor por uso: amarelo a partir de <strong>70%</strong>, vermelho a partir de <strong>85%</strong>. Watermarks padrão do ES: low 85% / high 90% / flood 95%.<br><br>' +
+    '<strong>FROZEN não entra:</strong> ' + FROZEN_DISK_NOTE;
   const body = order.length
     ? `<div class="tier-disk-list">${order.map(t => tierDiskRow(t, tiers[t])).join('')}</div>`
-    : `<div class="empty-state" style="padding:16px"><i class="fas fa-circle-info"></i><p>Sem dados de disco por tier — nenhum data node com role de tier (<code>data_hot/warm/cold/frozen</code>) reportou capacidade.</p></div>`;
+    : `<div class="empty-state" style="padding:16px"><i class="fas fa-circle-info"></i><p>Sem dados de disco por tier — nenhum data node com role de tier (<code>data_hot/warm/cold</code>) reportou capacidade. Nós <strong>frozen</strong> não entram: o disco deles é cache de searchable snapshots.</p></div>`;
   return `<div class="metric-card metric-card-static card-full">
     <div class="card-header">
       <div class="card-icon-title">
@@ -1649,7 +1654,10 @@ function groupNodesByLayer(nodes) {
 // Card individual de nó: nome e IP. Clicável — abre o modal de detalhe do nó.
 function topologyNodeCard(n, electedName) {
   const isMaster = n.name === electedName;
-  const titleAttr = rolesTitle(n.roles, isMaster);
+  const frozen = isDedicatedFrozen(n.roles);
+  // A caixinha é pequena demais para a explicação: ela vai no title (a modal do
+  // nó, que abre no clique, traz o texto completo).
+  const titleAttr = rolesTitle(n.roles, isMaster) + (frozen ? ` — ${FROZEN_DISK_NOTE_TEXT}` : '');
   const star = isMaster ? '<span class="topology-master-star" title="Master eleito">★</span>' : '';
   const nameEsc = escHtml(n.name || '').replace(/'/g, '&#39;');
   const metricRow = (label, val) => {
@@ -1667,7 +1675,12 @@ function topologyNodeCard(n, electedName) {
     <div class="topo-metrics">
       ${metricRow('CPU', n.cpu)}
       ${metricRow('Heap', n.heap_percent)}
-      ${metricRow('Disco', n.disk_used_percent)}
+      ${frozen
+        ? `<div class="topo-metric-row">
+             <span class="topo-metric-label">Disco</span>
+             <span class="topo-metric-na">— cache frozen</span>
+           </div>`
+        : metricRow('Disco', n.disk_used_percent)}
     </div>
   </div>`;
 }
@@ -1777,7 +1790,7 @@ function cardResourceTable(d) {
     return `<tr>
       <td>${nodeNameCell(n.name, n.roles || [], n.is_master)}</td>
       <td>${pctBar(n.cpu)}</td>
-      <td>${pctBar(n.disk_used_percent)}</td>
+      <td>${isDedicatedFrozen(n.roles) ? frozenDiskMark() : pctBar(n.disk_used_percent)}</td>
       <td>${pctBar(n.mem_pressure)}</td>
       <td>${pctBar(n.parent_cb_pct || 0)}</td>
       <td>${pctBar(n.write_pressure_pct || 0)}</td>
@@ -2754,6 +2767,34 @@ function nodeTier(roles) {
   return null;
 }
 
+// Nó dedicado ao tier frozen. O disco desses nós NÃO é capacidade de armazenamento:
+// é o cache local dos searchable snapshots (xpack.searchable.snapshot.shared_cache.size),
+// pré-alocado num tamanho fixo e mantido cheio pelo ES. Fica perto de 100% em operação
+// normal, mesmo com o repositório inteiro à disposição — ler isso como "disco no limite"
+// é falso alarme. Por isso o disco é omitido das visões de capacidade destes nós.
+const NON_FROZEN_DATA_ROLES = ['data', 'data_hot', 'data_warm', 'data_cold', 'data_content'];
+function isDedicatedFrozen(roles) {
+  const r = Array.isArray(roles) ? roles : [];
+  return r.includes('data_frozen') && !NON_FROZEN_DATA_ROLES.some(x => r.includes(x));
+}
+
+// Texto único da explicação acima, reaproveitado em todo ponto que omite o disco.
+const FROZEN_DISK_NOTE = 'Nós do tier <strong>frozen</strong> não expõem capacidade de armazenamento: ' +
+  'o disco local é o <strong>cache dos searchable snapshots</strong>, de tamanho fixo e mantido cheio ' +
+  'pelo Elasticsearch. Os dados ficam no repositório de snapshots. O percentual reflete a ocupação ' +
+  'desse cache — <strong>não</strong> falta de espaço.';
+// Mesma explicação sem marcação, para atributos title="" (caixinha da topologia).
+const FROZEN_DISK_NOTE_TEXT = FROZEN_DISK_NOTE.replace(/<[^>]+>/g, '');
+
+// Marca que substitui a barra de disco de um nó frozen em tabelas e cards.
+function frozenDiskMark() {
+  return `<div class="tooltip-wrap" style="display:inline-flex;align-items:center;gap:6px;cursor:help">
+    <span style="color:var(--text-dim)">—</span>
+    <span style="font-size:11px;color:var(--text-dim)">cache frozen</span>
+    <div class="tooltip-box" style="width:340px;font-weight:400;text-transform:none;letter-spacing:0">${FROZEN_DISK_NOTE}</div>
+  </div>`;
+}
+
 // Ordem padrão da coluna "Nó" nas tabelas de utilização/detalhe: MASTER dedicado >
 // OUTROS (sem master, sem tier/data_content) > HOT/DATA_CONTENT > WARM > COLD > FROZEN,
 // e alfabético dentro de cada grupo.
@@ -2888,9 +2929,12 @@ function renderInsights() {
     const tier = nodeTier(n.roles);
     const disk = n.disk_used_percent;
     if (tier == null || disk == null || disk < 70) continue;
+    // Nó frozen opera com o cache cheio por design: alertaria sempre, e o texto
+    // ("flood-stage", "read-only") seria falso — não há watermark sobre cache.
+    if (isDedicatedFrozen(n.roles)) continue;
     (byTier[tier] = byTier[tier] || []).push(n);
   }
-  for (const tier of ['HOT', 'WARM', 'COLD', 'FROZEN']) {
+  for (const tier of ['HOT', 'WARM', 'COLD']) {
     const hot = byTier[tier];
     if (!hot || !hot.length) continue;
     hot.sort((a, b) => b.disk_used_percent - a.disk_used_percent);
@@ -3199,7 +3243,7 @@ function renderInsights() {
 function diskByNodeContent() {
   const nodes = (dashboardData && dashboardData.nodes_summary) || [];
   const diskNodes = nodes
-    .filter(n => (n.disk_used_percent ?? 0) >= 70)
+    .filter(n => (n.disk_used_percent ?? 0) >= 70 && !isDedicatedFrozen(n.roles))
     .sort((a, b) => b.disk_used_percent - a.disk_used_percent);
   if (!diskNodes.length) return '';
   const rows = diskNodes.map(n => {
@@ -3334,10 +3378,12 @@ A cor reflete a proporção entre o load e o número de processadores disponíve
       <td>${gcOverheadBar(r.gc_overhead)}</td>
       <td style="text-align:center;color:var(--text-muted);font-variant-numeric:tabular-nums">${r.available_processors || '-'}</td>
       <td>${loadBadge(r.load_1m, r.available_processors)} / ${loadBadge(r.load_5m, r.available_processors)} / ${loadBadge(r.load_15m, r.available_processors)}</td>
-      <td><div style="display:flex;align-items:center;gap:10px">
+      <td>${isDedicatedFrozen(r.roles)
+        ? frozenDiskMark()
+        : `<div style="display:flex;align-items:center;gap:10px">
         <div style="flex:1;min-width:90px">${pctBar(r['disk.used_percent'])}</div>
         <span style="flex-shrink:0;width:120px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap">${r['disk.used'] || '-'} / ${r['disk.total'] || '-'}</span>
-      </div></td>
+      </div>`}</td>
       <td style="text-align:right;color:${(r.tp_queue||0)>0?'var(--yellow)':'var(--text-muted)'};font-weight:${(r.tp_queue||0)>0?'700':'400'}">${fmtNum(r.tp_queue??0)}</td>
       <td style="text-align:right;color:${(r.rejections||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.rejections||0)>0?'700':'400'}">${fmtNum(r.rejections??0)}</td>
       <td style="text-align:right;color:${(r.indexing_rejections||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.indexing_rejections||0)>0?'700':'400'}">${fmtNum(r.indexing_rejections??0)}</td>
@@ -3925,11 +3971,16 @@ function renderNodeDetail(d) {
   const showMounts = mounts.length > 1 || mounts.some(m => isNetworkFs(m.type));
   // Disco único: o tipo do fs vai no próprio "Uso geral" (sem sub-lista)
   const singleType = (!showMounts && mounts.length === 1) ? mounts[0].type : '';
-  const dskRows = [
+  // Em nó frozen o uso do disco é a ocupação do cache, não capacidade — mostrar a
+  // barra aqui induziria à leitura de "disco cheio". Explica em vez de medir.
+  const frozenNode = isDedicatedFrozen(id.roles);
+  const dskRows = frozenNode ? [
+    `<div class="nd-note"><i class="fas fa-snowflake"></i><span>${FROZEN_DISK_NOTE}</span></div>`,
+  ] : [
     dsk.total ? pctRow('Uso geral', dg.pct,
       `${singleType ? fsTypeTag(singleType) + ' · ' : ''}${formatBytes(dg.used ?? 0)} de ${formatBytes(dsk.total)} · livre ${formatBytes(dg.avail ?? 0)}`) : '',
   ];
-  if (showMounts) {
+  if (showMounts && !frozenNode) {
     for (const m of mounts) {
       if (!m.total) continue;
       const mu = diskUsage(m.total, m.available, m.free);
