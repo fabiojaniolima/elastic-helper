@@ -3,9 +3,11 @@
 Ferramenta local sem autenticação: senhas são gravadas em texto plano.
 O arquivo do banco fica na raiz do projeto e é ignorado pelo git.
 
-Guarda também a configuração das instâncias Kibana, **vinculada à conexão ES
-salva** (FK para `connections.id`, ON DELETE CASCADE): cada cluster tem suas
-próprias instâncias. Ver `docs/kibana.md`.
+Guarda também a configuração das integrações de monitoramento (**Kibana** e
+**Logstash**), cada uma **vinculada à conexão ES salva** (FK para
+`connections.id`, ON DELETE CASCADE): cada cluster tem suas próprias instâncias.
+As duas têm o mesmo desenho de tabelas e são tratadas pelo mesmo código, por
+prefixo. Ver `docs/kibana.md` e `docs/logstash.md`.
 """
 import os
 import sqlite3
@@ -16,11 +18,17 @@ DB_PATH = os.getenv(
 )
 
 
+# Integrações com config por conexão. O nome é usado para compor o nome das
+# tabelas (`<prefixo>_config` / `<prefixo>_instances`), então é uma lista
+# fechada no código — nunca vem de payload.
+INTEGRATIONS = ('kibana', 'logstash')
+
+
 def _connect():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     # SQLite ignora FKs por padrão; sem isso o ON DELETE CASCADE das tabelas
-    # de Kibana não roda e a config fica órfã ao excluir a conexão.
+    # das integrações não roda e a config fica órfã ao excluir a conexão.
     conn.execute('PRAGMA foreign_keys = ON')
     return conn
 
@@ -45,29 +53,31 @@ def init_db():
                 updated_at TEXT DEFAULT (datetime('now'))
             )
         """)
-        # Config de Kibana por conexão ES (1:1). Credenciais compartilhadas por
-        # todas as instâncias daquele cluster.
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS kibana_config (
-                connection_id INTEGER PRIMARY KEY
-                              REFERENCES connections(id) ON DELETE CASCADE,
-                enabled       INTEGER DEFAULT 0,
-                username      TEXT DEFAULT '',
-                password      TEXT DEFAULT '',
-                updated_at    TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        # Instâncias Kibana (1:N). Só as URLs — as credenciais vivem no config.
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS kibana_instances (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                connection_id INTEGER NOT NULL
-                              REFERENCES connections(id) ON DELETE CASCADE,
-                url           TEXT NOT NULL,
-                created_at    TEXT DEFAULT (datetime('now')),
-                UNIQUE (connection_id, url)
-            )
-        """)
+        # Config de cada integração por conexão ES (1:1) + suas instâncias
+        # (1:N). Mesmo desenho para Kibana e Logstash; credenciais compartilhadas
+        # por todas as instâncias daquele cluster.
+        for prefix in INTEGRATIONS:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS %s_config (
+                    connection_id INTEGER PRIMARY KEY
+                                  REFERENCES connections(id) ON DELETE CASCADE,
+                    enabled       INTEGER DEFAULT 0,
+                    username      TEXT DEFAULT '',
+                    password      TEXT DEFAULT '',
+                    updated_at    TEXT DEFAULT (datetime('now'))
+                )
+            """ % prefix)
+            # Só as URLs — as credenciais vivem no config.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS %s_instances (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    connection_id INTEGER NOT NULL
+                                  REFERENCES connections(id) ON DELETE CASCADE,
+                    url           TEXT NOT NULL,
+                    created_at    TEXT DEFAULT (datetime('now')),
+                    UNIQUE (connection_id, url)
+                )
+            """ % prefix)
 
 
 def _row_to_public(row):
@@ -200,17 +210,25 @@ def find_connection_id(host, port, username):
     return row['id'] if row else None
 
 
-# ─── Config de Kibana (por conexão ES) ────────────────────
-def get_kibana_config(conn_id, include_password=False):
-    """Config + instâncias de uma conexão. Sempre retorna um dict utilizável
-    (defaults vazios quando nunca foi configurada). A senha só sai com
+# ─── Config das integrações (por conexão ES) ───────────────
+def _check_prefix(prefix):
+    """Barra qualquer nome fora da lista fechada antes de montar SQL com ele."""
+    if prefix not in INTEGRATIONS:
+        raise ValueError('Integração desconhecida: %s' % prefix)
+    return prefix
+
+
+def get_integration_config(prefix, conn_id, include_password=False):
+    """Config + instâncias de uma integração numa conexão. Sempre retorna um dict
+    utilizável (defaults vazios quando nunca foi configurada). A senha só sai com
     `include_password=True` — uso interno na coleta, nunca no frontend."""
+    _check_prefix(prefix)
     with _connect() as conn:
         row = conn.execute(
-            'SELECT * FROM kibana_config WHERE connection_id = ?', (conn_id,)
+            'SELECT * FROM %s_config WHERE connection_id = ?' % prefix, (conn_id,)
         ).fetchone()
         instances = conn.execute(
-            'SELECT id, url FROM kibana_instances WHERE connection_id = ? ORDER BY id',
+            'SELECT id, url FROM %s_instances WHERE connection_id = ? ORDER BY id' % prefix,
             (conn_id,),
         ).fetchall()
 
@@ -227,13 +245,14 @@ def get_kibana_config(conn_id, include_password=False):
     return data
 
 
-def save_kibana_config(conn_id, data):
+def save_integration_config(prefix, conn_id, data):
     """Grava config + lista de instâncias (substitui a lista inteira).
 
     A senha só é sobrescrita quando a chave 'password' vem no payload — mesma
     convenção de `update_connection`, para edições não apagarem a senha salva.
     """
-    existing = get_kibana_config(conn_id, include_password=True)
+    _check_prefix(prefix)
+    existing = get_integration_config(prefix, conn_id, include_password=True)
     password = data['password'] if 'password' in data else existing['password']
     urls = []
     for raw in data.get('instances') or []:
@@ -244,11 +263,11 @@ def save_kibana_config(conn_id, data):
 
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO kibana_config (connection_id, enabled, username, password, updated_at)
+            """INSERT INTO %s_config (connection_id, enabled, username, password, updated_at)
                VALUES (?, ?, ?, ?, datetime('now'))
                ON CONFLICT(connection_id) DO UPDATE SET
                  enabled = excluded.enabled, username = excluded.username,
-                 password = excluded.password, updated_at = datetime('now')""",
+                 password = excluded.password, updated_at = datetime('now')""" % prefix,
             (
                 conn_id,
                 1 if data.get('enabled') else 0,
@@ -256,9 +275,9 @@ def save_kibana_config(conn_id, data):
                 password or '',
             ),
         )
-        conn.execute('DELETE FROM kibana_instances WHERE connection_id = ?', (conn_id,))
+        conn.execute('DELETE FROM %s_instances WHERE connection_id = ?' % prefix, (conn_id,))
         conn.executemany(
-            'INSERT INTO kibana_instances (connection_id, url) VALUES (?, ?)',
+            'INSERT INTO %s_instances (connection_id, url) VALUES (?, ?)' % prefix,
             [(conn_id, u) for u in urls],
         )
-    return get_kibana_config(conn_id)
+    return get_integration_config(prefix, conn_id)

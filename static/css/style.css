@@ -2343,7 +2343,10 @@ input[type="checkbox"] {
   .help-toc { display: none; }
 }
 
-/* ═══════════════ KIBANA / CONFIGURAÇÃO ═══════════════ */
+/* ═════════ INTEGRAÇÕES (KIBANA, LOGSTASH) / CONFIGURAÇÃO ═════════ */
+/* As classes .kb-* nasceram na página Kibana e hoje são compartilhadas pelas
+   duas páginas de integração e pela Configuração — o prefixo ficou por
+   compatibilidade, como os ids `overview`/`capacity`/`insights`. */
 
 /* Métrica sem fonte disponível (ex.: CPU/disco sem Elastic Agent no host).
    Traço discreto em vez de zero — ausência de dado não é dado zerado. */

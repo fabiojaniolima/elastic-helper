@@ -59,6 +59,21 @@ function fmtDuration(ms) {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+// Custo por evento do Logstash: valores tipicamente entre frações de ms e
+// alguns ms, onde fmtDuration (que arredonda para 0s) não serve.
+function fmtMs(ms) {
+  if (ms == null) return '-';
+  const n = Number(ms);
+  if (!isFinite(n)) return '-';
+  if (n >= 100) return Math.round(n).toLocaleString('pt-BR') + ' ms';
+  // Abaixo da resolução exibida, dizer "0 ms" seria falso: o plugin gastou tempo.
+  if (n > 0 && n < 0.001) return '< 0,001 ms';
+  // Custos submilissegundo precisam de 3 casas para não virar 0; zeros à
+  // direita são cortados para 0,5 ms não sair como 0,500 ms.
+  const digits = n >= 1 ? 1 : 3;
+  return n.toFixed(digits).replace(/0+$/, '').replace(/[.,]$/, '').replace('.', ',') + ' ms';
+}
+
 function escHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -196,9 +211,9 @@ async function doConnect(payload, btn) {
       document.getElementById('app').style.display = 'flex';
       setClusterInfo(data);
       loadDashboard();
-      // Config de Kibana é por conexão: recarrega ao trocar de cluster.
-      kibanaConfig = kibanaDraft = kibanaData = null;
-      fetchKibanaConfig().then(applyKibanaNav).catch(() => {});
+      // Config das integrações é por conexão: recarrega ao trocar de cluster.
+      resetIntegrations();
+      loadIntegrations();
       showPage(pageFromHash());
       return true;
     }
@@ -575,13 +590,14 @@ const PAGE_META = {
   capacity: { title: 'Inventário', subtitle: 'Nós, volume de dados e higiene de configuração dos índices' },
   insights: { title: 'Diagnóstico', subtitle: 'Leitura interpretada dos dados do cluster — o que merece atenção' },
   kibana:   { title: 'Kibana', subtitle: 'Instâncias, Task Manager, frota do Fleet e APM Server' },
+  logstash: { title: 'Logstash', subtitle: 'Instâncias, vazão de eventos, pipelines, filas e DLQ' },
   config:   { title: 'Configuração', subtitle: 'Integrações e preferências desta conexão' },
   help:     { title: 'Ajuda', subtitle: 'O que cada métrica significa e como agir' },
 };
 
-const PAGES = ['overview', 'capacity', 'insights', 'kibana', 'config', 'help'];
+const PAGES = ['overview', 'capacity', 'insights', 'kibana', 'logstash', 'config', 'help'];
 // Páginas com dados ao vivo: ganham timestamp e botão de refresh na topbar.
-const REFRESHABLE_PAGES = new Set(['overview', 'capacity', 'kibana']);
+const REFRESHABLE_PAGES = new Set(['overview', 'capacity', 'kibana', 'logstash']);
 
 function showPage(page) {
   if (!PAGE_META[page]) return;
@@ -605,8 +621,9 @@ function showPage(page) {
     if (dashboardData) renderCapacity();
     else if (!dashboardInFlight.size) loadCapacity();
   }
-  // Kibana e Configuração têm fonte própria (/api/kibana/*).
+  // As integrações e a Configuração têm fonte própria (/api/<integração>/*).
   if (page === 'kibana') loadKibana();
+  if (page === 'logstash') loadLogstash();
   if (page === 'config') renderConfig();
   // Reflete a página na URL (hash) para preservar no refresh e permitir compartilhar o link.
   if (location.hash.slice(1) !== page) {
@@ -1001,6 +1018,104 @@ const HELP_CONTENT = [
       },
     ],
   },
+  {
+    label: 'Página Logstash', icon: 'fa-diagram-project',
+    topics: [
+      {
+        id: 'help-logstash-config', q: 'Configuração e de onde vêm os dados',
+        summary: 'A página <strong>Logstash</strong> é ativada em <strong>Configuração</strong> e usa <strong>três fontes</strong>: <strong>Elastic Agent</strong> (RAM e disco do host), <strong>self-monitoring</strong> do cluster conectado e a <strong>API de monitoramento</strong> de cada instância (porta 9600). O tooltip de cada célula mostra a origem usada. As instâncias são <strong>descobertas pelo self-monitoring</strong>; cadastrar a URL é o que acrescenta <strong>pipelines, filas, DLQ e o custo por plugin</strong>, que só existem na API.',
+        data: [
+          { label: 'Ativação', desc: 'O item <strong>Logstash</strong> só aparece na barra lateral com a integração ativada, logo abaixo do Kibana. A configuração é gravada <strong>por conexão salva</strong>: cada cluster tem suas próprias instâncias. Numa conexão ad-hoc que não corresponda a nenhuma salva não há onde gravar — salve a conexão primeiro.' },
+          { label: 'Usuário e senha são opcionais', desc: 'A API de monitoramento do Logstash é <strong>aberta por padrão</strong> (<code>api.auth.type: none</code>): sem credencial, as chamadas vão sem autenticação. Preencha só quando o ambiente usar <code>api.auth.type: basic</code>. A senha fica gravada em texto plano no <code>connections.db</code>, mesma condição das credenciais do Elasticsearch.' },
+          { label: 'URL da instância', desc: 'É o endereço da <strong>API de monitoramento</strong>, não o do pipeline: normalmente <code>http://host:9600</code>. Sem esquema escrito, assume-se <strong>http</strong> — ao contrário do Kibana, essa API não usa TLS por padrão (só com <code>api.ssl.enabled: true</code>).' },
+          { label: 'Sem nenhuma URL cadastrada', desc: 'A página continua listando as instâncias vistas pelo self-monitoring, com CPU, heap, FDs e vazão. Ficam de fora pipelines, filas, DLQ e plugins — o self-monitoring só traz os totais do nó.' },
+          { label: 'Versões', desc: 'Feita para <strong>Logstash 8.x e 9.x</strong>. O <code>/_health_report</code>, usado para o status, existe só nas versões mais recentes; sem ele a página cai para o campo <code>status</code> do <code>/_node/stats</code>, sem perder mais nada.' },
+        ],
+      },
+      {
+        id: 'help-logstash-instances', q: 'Instâncias Saudáveis',
+        summary: 'Card de topo: quantas instâncias estão com status verde, com a <strong>versão</strong> e as inacessíveis no rodapé.',
+        data: [
+          { label: 'Valor principal', desc: 'Proporção de instâncias com status <strong>verde</strong>. Com URL cadastrada, o status vem do <code>/_health_report</code> — a avaliação do próprio Logstash, que enxerga pipeline parado e falha de reload, coisas que o campo <code>status</code> do <code>/_node/stats</code> ignora. Sem o endpoint (versões antigas) ou sem URL, cai para esse campo ou para o self-monitoring.' },
+          { label: 'Versão (rodapé)', desc: 'Versão das instâncias. Mais de uma fica <span style="color:var(--yellow)">amarela</span> — upgrade em andamento ou incompleto. Instâncias em versões diferentes processando o mesmo pipeline podem se comportar de forma distinta.' },
+          { label: 'Inacessíveis (rodapé)', desc: 'Instâncias com URL cadastrada que não responderam: timeout, porta 9600 fechada (a API só escuta em <code>127.0.0.1</code> quando <code>api.http.host</code> não é configurado), credencial inválida ou processo fora do ar. O motivo exato fica no tooltip da linha correspondente na tabela.' },
+        ],
+      },
+      {
+        id: 'help-logstash-throughput', q: 'Vazão de Eventos',
+        summary: 'Vazão somando todas as instâncias. Os contadores do Logstash são <strong>acumulados desde o start</strong> do processo, então o valor é a <strong>média desde o start</strong> (eventos de saída ÷ uptime) — não a taxa deste instante, que exigiria duas coletas. Ler a média como se fosse "agora" é o erro mais comum aqui: um pico de ontem continua diluído nela.',
+        data: [
+          { label: 'Eventos/s (média desde o start)', desc: 'Eventos de saída divididos pelo uptime da JVM. Serve para dimensionar ordem de grandeza e comparar instâncias entre si, não para detectar um pico agora.' },
+          { label: 'Entrada / Saída / Filtrados', desc: 'Totais acumulados. <strong>Saída</strong> bem abaixo da <strong>entrada</strong>, sem um <code>drop</code> intencional no pipeline, significa eventos retidos na fila ou perdidos para a DLQ. <strong>Filtrados</strong> é quanto passou pela seção de filtros.' },
+          { label: 'ms/evento', desc: 'Custo médio de processamento por evento (tempo total ÷ eventos de saída). É o número comparável entre pipelines de volumes diferentes: dobrar o volume não muda o ms/evento, mas um <code>grok</code> mal escrito muda. O detalhe por plugin fica na tabela <strong>Plugins mais lentos</strong>.' },
+        ],
+      },
+      {
+        id: 'help-logstash-queue', q: 'Fila Persistente',
+        summary: 'Situação das filas dos pipelines. A <strong>fila persistente</strong> (PQ) grava os eventos em disco antes de processá-los — absorve picos e sobrevive a restart; a de <strong>memória</strong> não tem teto em bytes e perde o que estiver em trânsito se o processo cair.',
+        data: [
+          { label: 'Valor principal', desc: 'Ocupação da <strong>fila mais cheia</strong> entre as persistentes (bytes em uso ÷ <code>queue.max_bytes</code>). Só nelas existe um máximo para dividir, por isso é o pior caso entre as persistentes e não uma média.' },
+          { label: 'Por que importa', desc: 'Fila persistente cheia faz o Logstash aplicar <strong>backpressure</strong> na entrada: o input para de aceitar eventos e a pressão sobe para quem produz (Beats, Kafka, aplicação). Costuma ser sintoma do <em>output</em> lento ou indisponível, não da fila em si.' },
+          { label: 'Persistentes / Em memória', desc: 'Quantos pipelines usam cada tipo. Fila de memória é o padrão (<code>queue.type: memory</code>); persistente exige <code>queue.type: persisted</code>.' },
+          { label: 'Ocupado', desc: 'Bytes em uso e o máximo somado de todas as filas persistentes. O espaço livre do disco onde cada fila vive fica no tooltip da coluna <strong>Fila</strong> da tabela de pipelines — a PQ para de aceitar eventos quando o disco enche, mesmo longe do <code>max_bytes</code>.' },
+          { label: 'Card neutro (—)', desc: 'Sem nenhuma fila persistente não há o que medir: o card fica neutro informando que tudo está em memória. Não é zero de ocupação.' },
+        ],
+      },
+      {
+        id: 'help-logstash-dlq', q: 'Dead Letter Queue',
+        summary: 'A <strong>dead letter queue</strong> guarda eventos que o output rejeitou de forma definitiva — tipicamente <em>mapping conflict</em> no Elasticsearch (HTTP 400). Cada evento aqui é um evento que <strong>não chegou ao destino</strong>, e nada o reprocessa sozinho: é preciso lê-la com o input <code>dead_letter_queue</code> e tratar.',
+        data: [
+          { label: 'Descartados', desc: 'Eventos escritos na DLQ. Qualquer valor acima de zero fica <span style="color:var(--red)">vermelho</span>: é perda de dado silenciosa do ponto de vista do pipeline, que segue verde.' },
+          { label: 'Tamanho', desc: 'Espaço ocupado pela DLQ em disco. Cresce até <code>dead_letter_queue.max_bytes</code> (1 GB por padrão) e, ao bater o limite, o comportamento depende do <code>storage_policy</code>.' },
+          { label: 'Expirados', desc: 'Eventos que <strong>saíram</strong> da DLQ por idade ou tamanho (<code>dead_letter_queue.retain.age</code>, ou <code>storage_policy: drop_older</code>). Esses estão <strong>perdidos</strong> — não há mais o que reprocessar.' },
+          { label: 'Card neutro (—)', desc: 'A DLQ é <strong>desativada por padrão</strong> (<code>dead_letter_queue.enable: false</code>). Sem ela, um evento rejeitado pelo output só aparece no log do Logstash e desaparece: o card neutro não é garantia de que nada foi descartado.' },
+        ],
+      },
+      {
+        id: 'help-logstash-reloads', q: 'Reloads com Falha',
+        summary: 'Recargas automáticas de configuração (<code>config.reload.automatic</code>) que <strong>falharam</strong>. Uma falha significa que o Logstash continua rodando a configuração <strong>anterior</strong>: a alteração feita não está em vigor, e fora do log nada avisa.',
+        data: [
+          { label: 'Valor', desc: 'Soma das falhas de recarga de todos os pipelines (ou o total do nó, quando não há URL cadastrada). <span style="color:var(--red)">Vermelho</span> a partir de uma.' },
+          { label: 'Causas típicas', desc: 'Erro de sintaxe no arquivo de pipeline, plugin não instalado, credencial inválida em um output, referência a arquivo inexistente. O motivo da última falha fica no tooltip da coluna <strong>Reloads</strong> da tabela de pipelines.' },
+        ],
+      },
+      {
+        id: 'help-logstash-utilization', q: 'Utilização por Instância',
+        summary: 'Tabela de recursos por instância, no mesmo formato da <strong>Utilização por Nó</strong> dos Sinais Vitais. Cada célula informa no tooltip a <strong>origem</strong> do número; um traço significa <strong>ausência de fonte</strong> para aquela métrica — não é zero.',
+        data: [
+          { label: 'CPU', desc: 'CPU do <strong>processo</strong> Logstash (<code>process.cpu.percent</code>), não do host. Diferente do Kibana, aqui a API expõe CPU — e é a do processo que responde se o Logstash está no limite. Vem do self-monitoring ou da API.' },
+          { label: 'Heap', desc: 'Heap da JVM sobre o máximo configurado (<code>-Xmx</code> no <code>jvm.options</code>). Acima de ~75% de forma sustentada, o GC passa a consumir CPU que seria do pipeline e a vazão cai sem que nada apareça como erro. Heap muito grande também prejudica: aumenta a pausa do GC.' },
+          { label: 'RAM e Disco', desc: 'São do <strong>host</strong> e vêm exclusivamente da integração <code>system</code> do <strong>Elastic Agent</strong> (<code>metrics-system.memory-*</code> e <code>metrics-system.filesystem-*</code>), casada pelo nome do host. <strong>A API do Logstash não expõe nenhum dos dois.</strong> Sem agente naquele host, a célula fica com um traço. No disco vale o <strong>ponto de montagem mais cheio</strong>.' },
+          { label: 'FDs (file descriptors)', desc: 'Descritores abertos sobre o máximo do processo, com os absolutos abaixo da barra. Logstash com muitos inputs de arquivo ou conexões de saída bate esse teto antes de qualquer outro limite, e o sintoma é <code>too many open files</code> — com o pipeline parando sem erro de configuração.' },
+          { label: 'Eventos/s', desc: 'Vazão da instância: média desde o start (eventos de saída ÷ uptime), não taxa instantânea.' },
+          { label: 'só self-monitoring', desc: 'Marca instâncias descobertas sem URL cadastrada. Elas não têm pipelines, filas, DLQ nem plugins — cadastre a URL na Configuração para completar.' },
+        ],
+      },
+      {
+        id: 'help-logstash-pipelines', q: 'Pipelines, filas e DLQ',
+        summary: 'Um pipeline por linha, por instância — a visão onde os problemas de Logstash realmente aparecem. <strong>Só existe com URL cadastrada</strong>: o self-monitoring traz apenas os totais do nó. Os contadores são acumulados desde o start.',
+        data: [
+          { label: 'Pipeline', desc: 'Nome do pipeline (o <code>pipeline.id</code> do <code>pipelines.yml</code>; <code>main</code> quando há um só) e a instância abaixo. Quando a versão expõe status por pipeline no health report, um badge verde/amarelo/vermelho aparece ao lado do nome, com o sintoma no tooltip.' },
+          { label: 'Workers / batch', desc: '<code>pipeline.workers</code> (threads que executam filtros e saídas, por padrão uma por vCPU) e <code>pipeline.batch.size</code>. São os dois parâmetros de tuning: batch maior melhora a vazão e aumenta o uso de heap.' },
+          { label: 'Entrada / Saída', desc: 'Eventos acumulados. Uma diferença grande e crescente indica eventos presos na fila ou perdidos para a DLQ — compare com as colunas <strong>Fila</strong> e <strong>DLQ</strong> da mesma linha.' },
+          { label: 'ms/evento', desc: 'Custo médio por evento deste pipeline. É o que permite comparar pipelines de volumes diferentes e o primeiro lugar para olhar quando a vazão não acompanha a ingestão.' },
+          { label: 'Fila', desc: 'Tipo (<strong>memória</strong> ou <strong>persistente</strong>) e, na persistente, a ocupação em relação ao <code>queue.max_bytes</code>. O tooltip traz bytes em uso, <strong>espaço livre no disco</strong> e o caminho da fila — a PQ para de aceitar eventos quando o disco enche, mesmo longe do máximo configurado.' },
+          { label: 'DLQ', desc: 'Eventos rejeitados definitivamente pelo output deste pipeline, com o tamanho abaixo. O tooltip traz o último erro, o <code>storage_policy</code> e os expirados. Traço significa DLQ vazia ou desativada.' },
+          { label: 'Reloads', desc: 'Falhas de recarga de configuração (motivo da última no tooltip) e, abaixo, as recargas bem-sucedidas. Falha aqui = configuração antiga ainda em vigor.' },
+        ],
+      },
+      {
+        id: 'help-logstash-plugins', q: 'Plugins mais lentos',
+        summary: 'Onde o tempo do pipeline é gasto, somando todos os pipelines de todas as instâncias — a resposta direta para "onde está o gargalo". Ordenado pelo <strong>tempo total</strong> acumulado desde o start.',
+        data: [
+          { label: 'O que entra', desc: 'Só <strong>filtros</strong> e <strong>saídas</strong>. Um <em>input</em> não tem tempo de processamento — o que ele acumula é espera por dados — e apareceria sempre no topo sem significar nada.' },
+          { label: 'Eventos e ms/evento', desc: 'Volume que passou pelo plugin e o custo unitário. Um plugin barato com volume enorme aparece aqui <strong>por volume</strong>; o caro de verdade é o que tem <strong>ms/evento</strong> alto. Suspeitos recorrentes: <code>grok</code> com padrão que faz backtracking, <code>dns</code> e qualquer filtro que faça chamada externa, e outputs esperando pelo destino.' },
+          { label: 'Tempo total e % do pipeline', desc: 'Tempo acumulado no plugin e a fração do tempo daquele pipeline que ele representa. Um plugin com 60% do tempo do pipeline é onde vale otimizar; abaixo de 10%, ajustá-lo não muda a vazão.' },
+          { label: 'Nomes com hash', desc: 'Plugins sem <code>id</code> explícito na configuração aparecem com o hash gerado pelo Logstash. Nomear os plugins (<code>id =&gt; "..."</code>) é o que torna esta tabela — e o Stack Monitoring — legível.' },
+        ],
+      },
+    ],
+  },
 ];
 
 function renderHelpItem(t) {
@@ -1158,6 +1273,7 @@ async function loadCapacity() {
 // Refresh da topbar e do atalho R: cada página recarrega a sua própria fonte.
 function refreshCurrentPage() {
   if (currentPage === 'kibana') return loadKibana();
+  if (currentPage === 'logstash') return loadLogstash();
   if (currentPage === 'capacity') return loadCapacity();
   return loadDashboard();
 }
@@ -4091,29 +4207,73 @@ function renderNodeDetail(d) {
   </div>`;
 }
 
-// ═══════════════════ KIBANA ═══════════════════════════════
-// A página tem fonte própria (/api/kibana/dashboard) e não depende do
-// dashboardData do cluster. Ver docs/kibana.md.
+// ═══════════════ INTEGRAÇÕES (KIBANA E LOGSTASH) ═══════════
+// As duas páginas têm fonte própria (/api/<integração>/dashboard) e não
+// dependem do dashboardData do cluster; a Configuração edita as duas no mesmo
+// formato. Ver docs/kibana.md e docs/logstash.md.
 
-let kibanaData = null;
-let kibanaConfig = null;      // config persistida (sem senha)
-let kibanaDraft = null;       // edição em andamento na página Configuração
-
-// Rótulo da origem de cada métrica, exibido no title da célula. A precedência
-// (agente → self-monitoring → API) é resolvida no backend, por métrica.
-const KIBANA_SOURCE_LABEL = {
-  agent: 'Elastic Agent (metrics-system.*)',
-  monitoring: 'Self-monitoring (.monitoring-kibana-*)',
-  api: 'API do Kibana (/api/stats)',
+// Metadados por integração: o que muda entre elas está todo aqui, e o resto do
+// código (nav, config, teste de URL, salvamento) é comum.
+const INTEGRATIONS = {
+  kibana: {
+    label: 'Kibana',
+    icon: 'fa-chart-line',
+    urlPlaceholder: 'https://kibana.exemplo:5601',
+    helpTopic: 'help-kibana-config',
+    // A API do Kibana sempre exige credencial.
+    userRequired: true,
+    switchDesc: 'Monitoramento das instâncias de Kibana desta conexão. Desativado, o item some da barra lateral e nenhuma consulta é feita.',
+    switchTip: 'Ativa a página <strong>Kibana</strong> na barra lateral. As instâncias são descobertas automaticamente pelo <strong>self-monitoring</strong> do cluster conectado; as URLs cadastradas aqui acrescentam o que só a API do Kibana entrega: <strong>Task Manager</strong>, <strong>Fleet</strong> e <strong>APM Server</strong>.',
+    accessDesc: 'Credenciais usadas nas chamadas à API do Kibana. Todas as instâncias usam o mesmo usuário e senha.',
+    instancesDesc: 'URLs de cada Kibana do ambiente. O botão <strong>Testar</strong> valida a URL sem gravar nada.',
+    emptyInstances: 'Nenhuma instância cadastrada. Sem URL, a página Kibana ainda funciona com o que vier do <strong>self-monitoring</strong> — mas fica sem Task Manager, Fleet e APM Server.',
+  },
+  logstash: {
+    label: 'Logstash',
+    icon: 'fa-diagram-project',
+    urlPlaceholder: 'http://logstash.exemplo:9600',
+    helpTopic: 'help-logstash-config',
+    // A API de monitoramento do Logstash é aberta por padrão
+    // (`api.auth.type: none`): exigir usuário barraria o caso mais comum.
+    userRequired: false,
+    switchDesc: 'Monitoramento das instâncias de Logstash desta conexão. Desativado, o item some da barra lateral e nenhuma consulta é feita.',
+    switchTip: 'Ativa a página <strong>Logstash</strong> na barra lateral. As instâncias são descobertas pelo <strong>self-monitoring</strong> do cluster conectado; as URLs cadastradas aqui acrescentam o que só a API de monitoramento entrega: <strong>pipelines</strong>, <strong>filas</strong>, <strong>DLQ</strong> e o custo por <strong>plugin</strong>.',
+    accessDesc: 'Credenciais da API de monitoramento (porta 9600). <strong>Opcionais</strong>: a API é aberta por padrão — preencha só se o ambiente tiver <code>api.auth.type: basic</code>.',
+    instancesDesc: 'URLs da API de monitoramento de cada Logstash — normalmente <code>http://host:9600</code>. O botão <strong>Testar</strong> valida a URL sem gravar nada.',
+    emptyInstances: 'Nenhuma instância cadastrada. Sem URL, a página Logstash só mostra o que vier do <strong>self-monitoring</strong> — fica sem pipelines, filas, DLQ e plugins.',
+  },
 };
 
-// CPU e disco não existem na API do Kibana nem no self-monitoring — só a
-// integração `system` do Elastic Agent os coleta, do host. Sem agente naquele
-// host não há fonte, e a célula fica vazia em vez de mostrar um zero enganoso.
+// Estado por integração: config salva, draft em edição e último dashboard.
+const integrationConfig = { kibana: null, logstash: null };
+const integrationDraft = { kibana: null, logstash: null };
+const integrationData = { kibana: null, logstash: null };
+
+// Rótulo da origem de cada métrica, exibido no title da célula. A precedência
+// é resolvida no backend, por métrica.
+const SOURCE_LABELS = {
+  kibana: {
+    agent: 'Elastic Agent (metrics-system.*)',
+    monitoring: 'Self-monitoring (.monitoring-kibana-*)',
+    api: 'API do Kibana (/api/stats)',
+  },
+  logstash: {
+    agent: 'Elastic Agent (metrics-system.*)',
+    monitoring: 'Self-monitoring (.monitoring-logstash-*)',
+    api: 'API do Logstash (/_node/stats)',
+  },
+};
+
+// Motivo da ausência de fonte, por métrica que não existe em toda fonte.
+// Traço em vez de zero: ausência de dado não é dado zerado.
 const NO_AGENT_HINT = 'Sem fonte: CPU e disco vêm da integração "system" do ' +
   'Elastic Agent no host desta instância. A API do Kibana não expõe esses dados.';
+const LS_NO_AGENT_HINT = 'Sem fonte: RAM e disco são do host e vêm da integração ' +
+  '"system" do Elastic Agent. A API do Logstash não expõe nenhum dos dois.';
+const LS_NO_API_HINT = 'Sem fonte: esta métrica vem da API de monitoramento do ' +
+  'Logstash (/_node/stats) ou do self-monitoring do cluster.';
 
-const KIBANA_STATUS_BADGE = {
+const SERVICE_STATUS_BADGE = {
   green: ['badge-green', 'Disponível'],
   available: ['badge-green', 'Disponível'],
   yellow: ['badge-yellow', 'Degradado'],
@@ -4121,58 +4281,80 @@ const KIBANA_STATUS_BADGE = {
   red: ['badge-red', 'Crítico'],
   critical: ['badge-red', 'Crítico'],
   unavailable: ['badge-red', 'Indisponível'],
+  unknown: ['badge-gray', 'desconhecido'],
 };
 
-function kibanaStatusBadge(status) {
-  const [cls, label] = KIBANA_STATUS_BADGE[status] || ['badge-gray', status || 'desconhecido'];
+// Status considerado saudável nas duas páginas (Kibana usa 'available', o
+// health report do Logstash usa 'green').
+const HEALTHY_STATUS = ['green', 'available'];
+
+function serviceStatusBadge(status) {
+  const [cls, label] = SERVICE_STATUS_BADGE[status] || ['badge-gray', status || 'desconhecido'];
   return `<span class="badge ${cls}">${escHtml(label)}</span>`;
 }
 
 // Célula percentual com a origem no tooltip nativo; traço quando não há fonte.
-function kibanaMetricCell(metric, emptyHint) {
+function svcMetricCell(key, metric, emptyHint) {
   if (!metric || metric.value == null) {
     return `<span class="kb-no-source" title="${escHtml(emptyHint || 'Sem dado disponível')}">&mdash;</span>`;
   }
-  const src = KIBANA_SOURCE_LABEL[metric.source] || metric.source;
+  const src = SOURCE_LABELS[key][metric.source] || metric.source;
   return `<div title="Fonte: ${escHtml(src)}">${pctBar(metric.value)}</div>`;
 }
 
-function kibanaNumCell(metric, suffix, digits = 1) {
+function svcNumCell(key, metric, suffix, digits = 1) {
   if (!metric || metric.value == null) return '<span class="kb-no-source">&mdash;</span>';
-  const src = KIBANA_SOURCE_LABEL[metric.source] || metric.source;
+  const src = SOURCE_LABELS[key][metric.source] || metric.source;
   const val = Number(metric.value).toFixed(digits).replace(/\.0+$/, '');
   return `<span title="Fonte: ${escHtml(src)}">${val}${suffix || ''}</span>`;
 }
 
-async function fetchKibanaConfig() {
-  const res = await fetch('/api/kibana/config');
+async function fetchIntegrationConfig(key) {
+  const res = await fetch(`/api/${key}/config`);
   if (res.status === 401) { location.reload(); throw new Error('unauthorized'); }
-  kibanaConfig = await res.json();
-  return kibanaConfig;
+  integrationConfig[key] = await res.json();
+  return integrationConfig[key];
 }
 
-// Mostra/esconde o item Kibana da sidebar conforme a integração está ativa.
-function applyKibanaNav() {
-  const nav = document.getElementById('nav-kibana');
-  if (nav) nav.style.display = (kibanaConfig && kibanaConfig.enabled) ? '' : 'none';
+// Mostra/esconde o item da sidebar conforme a integração está ativa.
+function applyIntegrationNav(key) {
+  const nav = document.getElementById('nav-' + key);
+  const cfg = integrationConfig[key];
+  if (nav) nav.style.display = (cfg && cfg.enabled) ? '' : 'none';
 }
 
-async function loadKibana() {
-  const page = document.getElementById('page-kibana');
+// Carrega a config das duas integrações e aplica a sidebar. Falha em uma não
+// pode impedir a outra — nem o dashboard do cluster — de funcionar.
+function loadIntegrations() {
+  for (const key of Object.keys(INTEGRATIONS)) {
+    fetchIntegrationConfig(key).then(() => applyIntegrationNav(key)).catch(() => {});
+  }
+}
+
+// Zera o estado das integrações ao trocar de cluster (a config é por conexão).
+function resetIntegrations() {
+  for (const key of Object.keys(INTEGRATIONS)) {
+    integrationConfig[key] = integrationDraft[key] = integrationData[key] = null;
+  }
+}
+
+// Busca o dashboard de uma integração e delega a renderização ao `render`.
+async function loadIntegrationPage(key, render) {
+  const page = document.getElementById('page-' + key);
   const icon = document.getElementById('refreshIcon');
   if (icon) icon.classList.add('spin');
   page.innerHTML = `<div class="loading-state">
     <i class="fas fa-circle-notch fa-spin"></i>
-    <span>Carregando dados do Kibana...</span>
+    <span>Carregando dados do ${INTEGRATIONS[key].label}...</span>
   </div>`;
 
   try {
-    const res = await fetch('/api/kibana/dashboard');
+    const res = await fetch(`/api/${key}/dashboard`);
     if (res.status === 401) { location.reload(); return; }
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    kibanaData = data;
-    renderKibana(data);
+    integrationData[key] = data;
+    render(data);
     document.getElementById('lastUpdated').textContent =
       'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
   } catch (e) {
@@ -4185,23 +4367,99 @@ async function loadKibana() {
   }
 }
 
-function renderKibana(d = kibanaData) {
+// Empty-state comum: nenhuma instância encontrada por nenhuma fonte.
+function integrationEmptyState(key, hasUrls, extra) {
+  const meta = INTEGRATIONS[key];
+  return `<div class="empty-state" style="padding:40px">
+    <i class="fas ${meta.icon}"></i>
+    <p>Nenhuma instância ${meta.label} encontrada.</p>
+    <p style="font-size:13px;color:var(--text-dim);max-width:520px;margin:8px auto 0">
+      ${hasUrls
+        ? 'As URLs cadastradas não responderam e não há dados de self-monitoring recentes neste cluster.'
+        : extra}
+    </p>
+    <button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="showPage('config')">
+      <i class="fas fa-sliders"></i> Abrir Configuração
+    </button>
+  </div>`;
+}
+
+// Card "Instâncias Saudáveis", igual nas duas páginas: proporção de instâncias
+// disponíveis, com versões e inacessíveis no rodapé.
+function healthyInstancesCard(d, key, tip) {
+  const instances = d.instances || [];
+  const healthy = instances.filter(i => HEALTHY_STATUS.includes(i.status)).length;
+  const allOk = healthy === instances.length;
+  const statusColor = instances.length === 0 ? 'muted' : (allOk ? 'green' : 'yellow');
+  const unreachable = instances.filter(i => i.configured && !i.reachable).length;
+  const versions = d.versions || [];
+  // Mais de uma versão indica upgrade em andamento ou incompleto — instâncias
+  // em versões diferentes divergem de comportamento.
+  const versionStat = versions.length
+    ? [{
+        label: versions.length > 1 ? 'Versões' : 'Versão',
+        val: escHtml(versions.join(' · ')),
+        color: versions.length > 1 ? 'yellow' : null,
+      }]
+    : [];
+
+  return cardStat(null, 'Instâncias Saudáveis', 'fa-circle-check',
+    `${healthy}/${instances.length}`, allOk ? 'todas disponíveis' : 'alguma degradada',
+    statusColor, tip,
+    [
+      ...versionStat,
+      ...(unreachable > 0 ? [{ label: 'Inacessíveis', val: fmtNum(unreachable), color: 'red' }] : []),
+    ],
+    `help-${key}-instances`);
+}
+
+// Coluna de identificação da instância: nome + versão/host e as marcações de
+// "inacessível" (URL cadastrada que não respondeu) e "só self-monitoring".
+function instanceNameCell(inst) {
+  const offline = inst.configured && !inst.reachable;
+  const sub = [inst.version, inst.host].filter(Boolean).map(escHtml).join(' · ');
+  const errorNote = offline
+    ? `<div class="kb-inst-error" title="${escHtml(inst.error || '')}"><i class="fas fa-triangle-exclamation"></i> inacessível</div>`
+    : '';
+  const noUrlNote = !inst.configured
+    ? '<div class="kb-inst-note" title="Descoberta pelo self-monitoring. Cadastre a URL para ver o que só a API entrega.">só self-monitoring</div>'
+    : '';
+  return `<div class="kb-inst-name">${escHtml(inst.name || '(sem nome)')}</div>
+    ${sub ? `<div class="kb-inst-sub">${sub}</div>` : ''}
+    ${errorNote}${noUrlNote}`;
+}
+
+// Card de largura total com uma tabela — o formato das tabelas das duas páginas.
+function tableCard(icon, title, tip, topic, head, rows) {
+  return `<div class="metric-card metric-card-static card-full">
+    <div class="card-header">
+      <div class="card-icon-title">
+        <div class="card-icon"><i class="fas ${icon}"></i></div>
+        <div class="card-title">${title}</div>
+      </div>
+      ${tip ? tooltip(tip, topic) : ''}
+    </div>
+    <div class="resource-table-wrap">
+      <table class="data-table resource-table">
+        <thead><tr>${head}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════ KIBANA ════════════════════════════════
+function loadKibana() {
+  return loadIntegrationPage('kibana', renderKibana);
+}
+
+function renderKibana(d = integrationData.kibana) {
   const page = document.getElementById('page-kibana');
   if (!page || !d) return;
 
   if (!d.instances.length) {
-    page.innerHTML = `<div class="empty-state" style="padding:40px">
-      <i class="fas fa-chart-line"></i>
-      <p>Nenhuma instância Kibana encontrada.</p>
-      <p style="font-size:13px;color:var(--text-dim);max-width:520px;margin:8px auto 0">
-        ${d.has_urls
-          ? 'As URLs cadastradas não responderam e não há dados de self-monitoring recentes neste cluster.'
-          : 'Cadastre a URL de uma instância na <strong>Configuração</strong>, ou habilite o self-monitoring do Kibana para que as instâncias sejam descobertas automaticamente.'}
-      </p>
-      <button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="showPage('config')">
-        <i class="fas fa-sliders"></i> Abrir Configuração
-      </button>
-    </div>`;
+    page.innerHTML = integrationEmptyState('kibana', d.has_urls,
+      'Cadastre a URL de uma instância na <strong>Configuração</strong>, ou habilite o self-monitoring do Kibana para que as instâncias sejam descobertas automaticamente.');
     return;
   }
 
@@ -4219,38 +4477,13 @@ function renderKibana(d = kibanaData) {
 }
 
 function kibanaOverviewCards(d) {
-  const instances = d.instances || [];
-  const healthy = instances.filter(i => ['green', 'available'].includes(i.status)).length;
-  const allOk = healthy === instances.length;
-  const statusColor = instances.length === 0 ? 'muted' : (allOk ? 'green' : 'yellow');
-
-  const unreachable = instances.filter(i => i.configured && !i.reachable).length;
-  const versions = d.versions || [];
-  // Mais de uma versão indica upgrade em andamento ou incompleto — instâncias
-  // em versões diferentes atrás do mesmo load balancer divergem de comportamento.
-  const versionStat = versions.length
-    ? [{
-        label: versions.length > 1 ? 'Versões' : 'Versão',
-        val: escHtml(versions.join(' · ')),
-        color: versions.length > 1 ? 'yellow' : null,
-      }]
-    : [];
-
   const tip = 'Instâncias cujo status geral é <strong>disponível</strong>. O status vem do ' +
     '<code>/api/status</code> quando a URL está cadastrada; caso contrário, do self-monitoring.<br><br>' +
     'O rodapé traz a <strong>versão</strong> das instâncias — quando aparece mais de uma, fica ' +
     '<span style="color:var(--yellow)">amarela</span>: é sinal de upgrade em andamento ou incompleto.';
 
   return [
-    cardStat(null, 'Instâncias Saudáveis', 'fa-circle-check',
-      `${healthy}/${instances.length}`, allOk ? 'todas disponíveis' : 'alguma degradada',
-      statusColor, tip,
-      [
-        ...versionStat,
-        ...(unreachable > 0 ? [{ label: 'Inacessíveis', val: fmtNum(unreachable), color: 'red' }] : []),
-      ],
-      'help-kibana-instances'),
-
+    healthyInstancesCard(d, 'kibana', tip),
     kibanaFleetCard(d.fleet || {}),
     kibanaApmCard(d.apm || {}),
   ].join('');
@@ -4342,55 +4575,21 @@ function kibanaInstancesTable(d) {
     'acima de ~80% as requisições começam a enfileirar.<br>' +
     '<strong>Delay</strong>: atraso do event loop em milissegundos. Valores altos indicam bloqueio do loop.';
 
-  const rows = (d.instances || []).map(inst => {
-    const offline = inst.configured && !inst.reachable;
-    const sub = [inst.version, inst.host].filter(Boolean).map(escHtml).join(' · ');
-    const errorNote = offline
-      ? `<div class="kb-inst-error" title="${escHtml(inst.error || '')}"><i class="fas fa-triangle-exclamation"></i> inacessível</div>`
-      : '';
-    const noUrlNote = !inst.configured
-      ? '<div class="kb-inst-note" title="Descoberta pelo self-monitoring. Cadastre a URL para ver Task Manager e Fleet.">só self-monitoring</div>'
-      : '';
-    return `<tr>
-      <td>
-        <div class="kb-inst-name">${escHtml(inst.name || '(sem nome)')}</div>
-        ${sub ? `<div class="kb-inst-sub">${sub}</div>` : ''}
-        ${errorNote}${noUrlNote}
-      </td>
-      <td>${kibanaStatusBadge(inst.status)}</td>
-      <td>${kibanaMetricCell(inst.metrics.cpu, NO_AGENT_HINT)}</td>
-      <td>${kibanaMetricCell(inst.metrics.disk, NO_AGENT_HINT)}</td>
-      <td>${kibanaMetricCell(inst.metrics.ram)}</td>
-      <td>${kibanaMetricCell(inst.metrics.heap)}</td>
-      <td>${kibanaMetricCell(inst.metrics.elu)}</td>
-      <td style="text-align:right">${kibanaNumCell(inst.metrics.event_loop_delay, ' ms')}</td>
-    </tr>`;
-  }).join('');
+  const rows = (d.instances || []).map(inst => `<tr>
+      <td>${instanceNameCell(inst)}</td>
+      <td>${serviceStatusBadge(inst.status)}</td>
+      <td>${svcMetricCell('kibana', inst.metrics.cpu, NO_AGENT_HINT)}</td>
+      <td>${svcMetricCell('kibana', inst.metrics.disk, NO_AGENT_HINT)}</td>
+      <td>${svcMetricCell('kibana', inst.metrics.ram)}</td>
+      <td>${svcMetricCell('kibana', inst.metrics.heap)}</td>
+      <td>${svcMetricCell('kibana', inst.metrics.elu)}</td>
+      <td style="text-align:right">${svcNumCell('kibana', inst.metrics.event_loop_delay, ' ms')}</td>
+    </tr>`).join('');
 
-  return `<div class="metric-card metric-card-static card-full">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon"><i class="fas fa-gauge-high"></i></div>
-        <div class="card-title">Utilização por Instância</div>
-      </div>
-      ${tooltip(tip, 'help-kibana-utilization')}
-    </div>
-    <div class="resource-table-wrap">
-      <table class="data-table resource-table">
-        <thead><tr>
-          <th>Instância</th>
-          <th>Status</th>
-          <th>CPU</th>
-          <th>Disco</th>
-          <th>RAM</th>
-          <th>Heap</th>
-          <th>ELU</th>
-          <th style="text-align:right">Delay</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  </div>`;
+  return tableCard('fa-gauge-high', 'Utilização por Instância', tip, 'help-kibana-utilization',
+    `<th>Instância</th><th>Status</th><th>CPU</th><th>Disco</th><th>RAM</th>
+     <th>Heap</th><th>ELU</th><th style="text-align:right">Delay</th>`,
+    rows);
 }
 
 // Task Manager: só existe via API, então aparece apenas para instâncias com URL.
@@ -4433,25 +4632,11 @@ function kibanaTaskManagerSection(d) {
     </tr>`;
   }).join('');
 
-  return `${section('Task Manager')}
-  <div class="metric-card metric-card-static card-full">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon"><i class="fas fa-list-check"></i></div>
-        <div class="card-title">Alerting, Actions e Reporting</div>
-      </div>
-      ${tooltip(tip, 'help-kibana-task-manager')}
-    </div>
-    <div class="resource-table-wrap">
-      <table class="data-table resource-table">
-        <thead><tr>
-          <th>Instância</th><th>Status</th><th>Load</th><th>Drift</th>
-          <th>Capacidade</th><th style="text-align:right">Atrasadas</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  </div>`;
+  return section('Task Manager') +
+    tableCard('fa-list-check', 'Alerting, Actions e Reporting', tip, 'help-kibana-task-manager',
+      `<th>Instância</th><th>Status</th><th>Load</th><th>Drift</th>
+       <th>Capacidade</th><th style="text-align:right">Atrasadas</th>`,
+      rows);
 }
 
 // Detalhamento das policies com integração APM (só quando há mais de uma).
@@ -4469,139 +4654,454 @@ function kibanaFleetSection(d) {
     <td style="text-align:right;${p.offline > 0 ? 'color:var(--yellow)' : ''}">${fmtNum(p.offline || 0)}</td>
   </tr>`).join('');
 
-  return `${section('APM Server por Policy')}
-  <div class="metric-card metric-card-static card-full">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon"><i class="fas fa-diagram-project"></i></div>
-        <div class="card-title">Policies com integração APM</div>
-      </div>
-      ${tooltip('Cada <strong>agent policy</strong> que contém a integração <code>apm</code> e quantos agentes a executam. Útil para saber se o coletor de APM está de pé em todos os grupos esperados.', 'help-kibana-apm')}
-    </div>
-    <div class="resource-table-wrap">
-      <table class="data-table resource-table">
-        <thead><tr>
-          <th>Policy</th><th>Versão do pacote</th>
-          <th style="text-align:right">Agentes</th><th style="text-align:right">Healthy</th>
-          <th style="text-align:right">Unhealthy</th><th style="text-align:right">Offline</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
+  return section('APM Server por Policy') +
+    tableCard('fa-diagram-project', 'Policies com integração APM',
+      'Cada <strong>agent policy</strong> que contém a integração <code>apm</code> e quantos agentes a executam. Útil para saber se o coletor de APM está de pé em todos os grupos esperados.',
+      'help-kibana-apm',
+      `<th>Policy</th><th>Versão do pacote</th>
+       <th style="text-align:right">Agentes</th><th style="text-align:right">Healthy</th>
+       <th style="text-align:right">Unhealthy</th><th style="text-align:right">Offline</th>`,
+      rows);
+}
+
+// ═══════════════════ LOGSTASH ══════════════════════════════
+// Os contadores de eventos do Logstash são **acumulados desde o start** do
+// processo, não taxas: o throughput exibido é a média desde o start
+// (eventos ÷ uptime), e é assim que ele é rotulado em toda a página.
+
+function loadLogstash() {
+  return loadIntegrationPage('logstash', renderLogstash);
+}
+
+function renderLogstash(d = integrationData.logstash) {
+  const page = document.getElementById('page-logstash');
+  if (!page || !d) return;
+
+  if (!d.instances.length) {
+    page.innerHTML = integrationEmptyState('logstash', d.has_urls,
+      'Cadastre a URL da API de monitoramento (normalmente <code>http://host:9600</code>) na <strong>Configuração</strong>, ou habilite o monitoramento do Logstash para que as instâncias sejam descobertas automaticamente.');
+    return;
+  }
+
+  page.innerHTML = `<div class="metrics-grid">
+    ${section('Visão Geral')}
+    <div class="section-signals-cards">${logstashOverviewCards(d)}</div>
+
+    ${section('Utilização por Instância')}
+    ${logstashInstancesTable(d)}
+
+    ${logstashPipelinesSection(d)}
+    ${logstashPluginsSection(d)}
   </div>`;
 }
 
+function logstashOverviewCards(d) {
+  const tip = 'Instâncias cujo status é <strong>verde</strong>. Com URL cadastrada, o status vem do ' +
+    '<code>/_health_report</code> — a avaliação do próprio Logstash, que enxerga pipeline parado e ' +
+    'falha de reload; em versões sem esse endpoint, do campo <code>status</code> do ' +
+    '<code>/_node/stats</code>. Sem URL, do self-monitoring.<br><br>' +
+    'O rodapé traz a <strong>versão</strong> das instâncias — mais de uma fica ' +
+    '<span style="color:var(--yellow)">amarela</span>: sinal de upgrade em andamento ou incompleto.';
+
+  return [
+    healthyInstancesCard(d, 'logstash', tip),
+    logstashThroughputCard(d),
+    logstashQueueCard(d),
+    logstashDlqCard(d),
+    logstashReloadCard(d),
+  ].join('');
+}
+
+// Throughput: média desde o start, nunca taxa instantânea — os contadores da
+// API são acumulados e uma taxa real exigiria duas coletas.
+function logstashThroughputCard(d) {
+  const ev = d.events || {};
+  const tip = 'Vazão de eventos somando todas as instâncias. Os contadores do Logstash são ' +
+    '<strong>acumulados desde o start</strong> do processo, então o valor é a <strong>média desde ' +
+    'o start</strong> (eventos de saída ÷ uptime) — não a taxa deste instante, que exigiria duas ' +
+    'coletas.<br><br>' +
+    '<strong>Entrada / Filtrados / Saída</strong>: totais acumulados. Saída bem abaixo da entrada, ' +
+    'sem <code>drop</code> no pipeline, indica eventos retidos na fila ou perdidos para a DLQ.<br>' +
+    '<strong>ms/evento</strong>: custo médio de processamento por evento (tempo total ÷ eventos de ' +
+    'saída). É o número comparável entre pipelines de volumes diferentes — o detalhe por plugin ' +
+    'fica na tabela <strong>Plugins mais lentos</strong>.';
+
+  if (ev.per_sec == null) {
+    return cardStat(null, 'Vazão de Eventos', 'fa-right-left', '&mdash;',
+      'sem uptime para calcular', 'muted', tip, [], 'help-logstash-throughput');
+  }
+
+  return cardStat(null, 'Vazão de Eventos', 'fa-right-left', fmtNum(ev.per_sec),
+    'eventos/s (média desde o start)', 'blue', tip,
+    [
+      { label: 'Entrada', val: fmtNum(ev.in || 0) },
+      { label: 'Saída', val: fmtNum(ev.out || 0) },
+      { label: 'Filtrados', val: fmtNum(ev.filtered || 0) },
+      ...(ev.avg_event_ms != null
+        ? [{ label: 'ms/evento', val: fmtMs(ev.avg_event_ms) }] : []),
+    ],
+    'help-logstash-throughput');
+}
+
+// Fila: a ocupação só é calculável na fila persistente (a de memória não tem
+// teto em bytes), então o valor é o pior caso entre as persistentes.
+function logstashQueueCard(d) {
+  const q = d.queues || {};
+  const tip = 'Situação das filas dos pipelines. A <strong>fila persistente</strong> (PQ) grava os ' +
+    'eventos em disco antes de processá-los, absorvendo picos e sobrevivendo a restart; a de ' +
+    '<strong>memória</strong> não tem teto em bytes e perde o que estiver em trânsito se o processo ' +
+    'cair.<br><br>' +
+    'O valor é a <strong>ocupação da fila mais cheia</strong> entre as persistentes — só nelas há ' +
+    'um máximo (<code>queue.max_bytes</code>) para dividir. Fila persistente cheia faz o Logstash ' +
+    'aplicar <strong>backpressure</strong> na entrada: o input para de aceitar eventos.<br><br>' +
+    'Sem nenhuma fila persistente o card fica neutro — não há o que medir, não é zero.';
+
+  if (!q.persisted) {
+    return cardStat(null, 'Fila Persistente', 'fa-layer-group', '&mdash;',
+      q.memory ? 'todas as filas em memória' : 'sem pipeline com fila', 'muted', tip,
+      [
+        ...(q.memory ? [{ label: 'Em memória', val: fmtNum(q.memory) }] : []),
+        ...(q.events ? [{ label: 'Eventos na fila', val: fmtNum(q.events) }] : []),
+      ],
+      'help-logstash-queue');
+  }
+
+  const pct = q.max_pct;
+  const color = pct == null ? 'blue' : pctColor(pct);
+  return cardStat(null, 'Fila Persistente', 'fa-layer-group',
+    pct == null ? '&mdash;' : `${pct}%`, 'ocupação da fila mais cheia', color, tip,
+    [
+      { label: 'Persistentes', val: fmtNum(q.persisted) },
+      { label: 'Em memória', val: fmtNum(q.memory || 0) },
+      { label: 'Ocupado', val: `${formatBytes(q.bytes || 0)} / ${formatBytes(q.max_bytes || 0)}` },
+      { label: 'Eventos na fila', val: fmtNum(q.events || 0) },
+    ],
+    'help-logstash-queue');
+}
+
+// DLQ: qualquer evento aqui é evento que não chegou ao destino.
+function logstashDlqCard(d) {
+  const dlq = d.dlq || {};
+  const tip = 'A <strong>dead letter queue</strong> guarda os eventos que o output rejeitou de forma ' +
+    'definitiva — tipicamente mapping conflict no Elasticsearch (HTTP 400). Cada evento aqui é um ' +
+    'evento que <strong>não chegou ao destino</strong> e que ninguém reprocessa sozinho: é preciso ' +
+    'ler a DLQ (input <code>dead_letter_queue</code>) e tratar.<br><br>' +
+    '<strong>Descartados</strong>: eventos escritos na DLQ. <strong>Expirados</strong>: eventos que ' +
+    'saíram da DLQ por idade ou tamanho (<code>dead_letter_queue.retain.age</code> / ' +
+    '<code>storage_policy: drop_older</code>) — esses estão <strong>perdidos</strong>.<br><br>' +
+    'A DLQ é desativada por padrão; sem ela, um evento rejeitado só aparece no log do Logstash.';
+
+  if (!dlq.enabled) {
+    return cardStat(null, 'Dead Letter Queue', 'fa-inbox', '&mdash;',
+      'sem eventos descartados', 'muted', tip, [], 'help-logstash-dlq');
+  }
+
+  const dropped = dlq.dropped || 0;
+  return cardStat(null, 'Dead Letter Queue', 'fa-inbox', fmtNum(dropped),
+    'eventos descartados', dropped > 0 ? 'red' : 'green', tip,
+    [
+      { label: 'Tamanho', val: formatBytes(dlq.bytes || 0) },
+      ...(dlq.expired ? [{ label: 'Expirados', val: fmtNum(dlq.expired), color: 'red' }] : []),
+      { label: 'Pipelines', val: fmtNum((dlq.pipelines || []).length) },
+    ],
+    'help-logstash-dlq');
+}
+
+// Reloads com falha: configuração recarregada que não subiu.
+function logstashReloadCard(d) {
+  const failures = d.reload_failures || 0;
+  const tip = 'Recargas de configuração que <strong>falharam</strong> ' +
+    '(<code>config.reload.automatic</code>). Uma falha significa que o Logstash continua rodando ' +
+    'a configuração <strong>anterior</strong>: a alteração que você fez não está em vigor, e o ' +
+    'processo não reclama além do log.<br><br>' +
+    'Causas típicas: erro de sintaxe no pipeline, plugin ausente, credencial inválida em um output. ' +
+    'O motivo da última falha fica no tooltip da coluna <strong>Reloads</strong> da tabela de pipelines.';
+
+  return cardStat(null, 'Reloads com Falha', 'fa-rotate-left', fmtNum(failures),
+    failures > 0 ? 'configuração não aplicada' : 'nenhuma falha de recarga',
+    failures > 0 ? 'red' : 'green', tip, [], 'help-logstash-reloads');
+}
+
+function logstashInstancesTable(d) {
+  const tip = 'Utilização por instância do Logstash. Cada célula mostra no tooltip a ' +
+    '<strong>origem</strong> do número.<br><br>' +
+    '<strong>CPU</strong>: CPU do <em>processo</em> Logstash (<code>process.cpu.percent</code>), não do ' +
+    'host — é a que a API expõe, e a que importa para saber se o Logstash está no limite.<br>' +
+    '<strong>Heap</strong>: heap da JVM sobre o máximo configurado (<code>-Xmx</code>). Acima de 75% ' +
+    'de forma sustentada, o GC passa a consumir CPU que seria do pipeline.<br>' +
+    '<strong>RAM</strong> e <strong>Disco</strong> são do <em>host</em> e só existem com a integração ' +
+    '<code>system</code> do Elastic Agent nele — a API do Logstash não expõe nenhum dos dois. Sem ' +
+    'agente, a célula fica com um traço (ausência de fonte, não zero).<br>' +
+    '<strong>FDs</strong>: file descriptors abertos sobre o máximo do processo. Logstash com muitos ' +
+    'inputs de arquivo ou conexões de saída bate esse teto antes de qualquer outro limite, e o ' +
+    'sintoma é "too many open files".<br>' +
+    '<strong>Eventos/s</strong>: média desde o start (eventos de saída ÷ uptime).';
+
+  const rows = (d.instances || []).map(inst => `<tr>
+      <td>${instanceNameCell(inst)}</td>
+      <td>${serviceStatusBadge(inst.status)}</td>
+      <td>${svcMetricCell('logstash', inst.metrics.cpu, LS_NO_API_HINT)}</td>
+      <td>${svcMetricCell('logstash', inst.metrics.heap, LS_NO_API_HINT)}</td>
+      <td>${svcMetricCell('logstash', inst.metrics.ram, LS_NO_AGENT_HINT)}</td>
+      <td>${svcMetricCell('logstash', inst.metrics.disk, LS_NO_AGENT_HINT)}</td>
+      <td>${logstashFdCell(inst)}</td>
+      <td style="text-align:right">${svcNumCell('logstash', inst.metrics.events_per_sec, '')}</td>
+    </tr>`).join('');
+
+  return tableCard('fa-gauge-high', 'Utilização por Instância', tip, 'help-logstash-utilization',
+    `<th>Instância</th><th>Status</th><th>CPU</th><th>Heap</th><th>RAM</th>
+     <th>Disco</th><th>FDs</th><th style="text-align:right">Eventos/s</th>`,
+    rows);
+}
+
+// FDs: a barra é o percentual, mas o número absoluto (aberto/máx) é o que
+// permite julgar, então vai logo abaixo.
+function logstashFdCell(inst) {
+  const cell = svcMetricCell('logstash', inst.metrics.fd, LS_NO_API_HINT);
+  if (inst.fd_open == null || inst.fd_max == null) return cell;
+  return `${cell}<div class="kb-inst-sub">${fmtNum(inst.fd_open)} / ${fmtNum(inst.fd_max)}</div>`;
+}
+
+// Pipelines, filas e DLQ só existem na API: sem URL cadastrada a seção explica
+// o que falta, em vez de simplesmente não existir.
+function logstashPipelinesSection(d) {
+  const pipes = d.pipelines || [];
+  if (!pipes.length) {
+    return section('Pipelines') +
+      `<div class="metric-card metric-card-static card-full">
+        <div class="cfg-empty">
+          Detalhamento por pipeline (eventos, fila, DLQ e reloads) vem da <strong>API de
+          monitoramento</strong> de cada instância. Cadastre a URL na
+          <strong>Configuração</strong> para vê-lo — o self-monitoring só traz os totais do nó.
+        </div>
+      </div>`;
+  }
+
+  const tip = 'Um pipeline por linha, por instância. Os contadores são <strong>acumulados desde o ' +
+    'start</strong>.<br><br>' +
+    '<strong>Workers</strong>: threads de filtro/saída (<code>pipeline.workers</code>) e o ' +
+    '<code>batch.size</code> abaixo. São os dois parâmetros de tuning do pipeline.<br>' +
+    '<strong>ms/evento</strong>: custo médio de processamento por evento — o comparável entre ' +
+    'pipelines.<br>' +
+    '<strong>Fila</strong>: tipo (memória ou persistente) e, na persistente, a ocupação em relação ' +
+    'ao <code>queue.max_bytes</code>. O tooltip traz bytes, espaço livre e o caminho no disco.<br>' +
+    '<strong>DLQ</strong>: eventos rejeitados definitivamente pelo output deste pipeline.<br>' +
+    '<strong>Reloads</strong>: falhas de recarga de configuração (com o motivo da última no ' +
+    'tooltip) e, abaixo, as recargas bem-sucedidas.';
+
+  const rows = pipes.map(p => `<tr>
+    <td>
+      <div class="kb-inst-name">${escHtml(p.id)}${p.health_status ? ' ' + pipelineHealthBadge(p) : ''}</div>
+      <div class="kb-inst-sub">${escHtml(p.instance)}</div>
+    </td>
+    <td>${p.workers != null ? fmtNum(p.workers) : '<span class="kb-no-source">&mdash;</span>'}
+        ${p.batch_size != null ? `<div class="kb-inst-sub">batch ${fmtNum(p.batch_size)}</div>` : ''}</td>
+    <td style="text-align:right">${fmtNum(p.events_in)}</td>
+    <td style="text-align:right">${fmtNum(p.events_out)}</td>
+    <td style="text-align:right">${p.avg_event_ms != null ? fmtMs(p.avg_event_ms) : '<span class="kb-no-source">&mdash;</span>'}</td>
+    <td>${logstashQueueCell(p)}</td>
+    <td style="text-align:right">${logstashDlqCell(p)}</td>
+    <td style="text-align:right">${logstashReloadCell(p)}</td>
+  </tr>`).join('');
+
+  return section('Pipelines') +
+    tableCard('fa-bezier-curve', 'Pipelines, filas e DLQ', tip, 'help-logstash-pipelines',
+      `<th>Pipeline</th><th>Workers</th><th style="text-align:right">Entrada</th>
+       <th style="text-align:right">Saída</th><th style="text-align:right">ms/evento</th>
+       <th>Fila</th><th style="text-align:right">DLQ</th>
+       <th style="text-align:right">Reloads</th>`,
+      rows);
+}
+
+function pipelineHealthBadge(p) {
+  const cls = { green: 'badge-green', yellow: 'badge-yellow', red: 'badge-red' }[p.health_status] || 'badge-gray';
+  const title = p.health_symptom || p.health_status;
+  return `<span class="badge ${cls}" title="${escHtml(title)}">${escHtml(p.health_status)}</span>`;
+}
+
+function logstashQueueCell(p) {
+  const persisted = p.queue_type === 'persisted';
+  const label = `<span class="badge ${persisted ? 'badge-blue' : 'badge-gray'}">${persisted ? 'persistente' : 'memória'}</span>`;
+  if (!persisted) {
+    // Fila de memória não tem máximo em bytes: só a contagem de eventos faz sentido.
+    return `${label}${p.queue_events ? `<div class="kb-inst-sub">${fmtNum(p.queue_events)} eventos</div>` : ''}`;
+  }
+  const detail = [
+    p.queue_bytes != null ? `${formatBytes(p.queue_bytes)} de ${formatBytes(p.queue_max_bytes || 0)}` : '',
+    p.queue_free_bytes != null ? `${formatBytes(p.queue_free_bytes)} livres no disco` : '',
+    p.queue_path ? `caminho: ${p.queue_path}` : '',
+  ].filter(Boolean).join(' · ');
+  return `<div title="${escHtml(detail)}">${label}
+    ${p.queue_pct != null ? pctBar(p.queue_pct) : ''}
+    ${p.queue_events ? `<div class="kb-inst-sub">${fmtNum(p.queue_events)} eventos</div>` : ''}</div>`;
+}
+
+function logstashDlqCell(p) {
+  if (!p.dlq_dropped && !p.dlq_bytes && !p.dlq_expired) {
+    return '<span class="kb-no-source" title="Nenhum evento na DLQ deste pipeline (ou DLQ desativada)">&mdash;</span>';
+  }
+  const title = [p.dlq_last_error ? `Último erro: ${p.dlq_last_error}` : '',
+                 p.dlq_storage_policy ? `storage_policy: ${p.dlq_storage_policy}` : '',
+                 p.dlq_expired ? `${p.dlq_expired} expirados (perdidos)` : ''].filter(Boolean).join(' · ');
+  return `<span title="${escHtml(title)}" style="${p.dlq_dropped > 0 ? 'color:var(--red);font-weight:700' : ''}">
+    ${fmtNum(p.dlq_dropped || 0)}</span>
+    ${p.dlq_bytes ? `<div class="kb-inst-sub">${formatBytes(p.dlq_bytes)}</div>` : ''}`;
+}
+
+function logstashReloadCell(p) {
+  const failures = p.reload_failures || 0;
+  return `<span title="${escHtml(p.reload_last_error || '')}" style="${failures > 0 ? 'color:var(--red);font-weight:700' : ''}">
+    ${fmtNum(failures)}</span>
+    ${p.reload_successes ? `<div class="kb-inst-sub">${fmtNum(p.reload_successes)} ok</div>` : ''}`;
+}
+
+// Gargalo por plugin: onde o tempo do pipeline está sendo gasto.
+function logstashPluginsSection(d) {
+  const plugins = d.slow_plugins || [];
+  if (!plugins.length) return '';
+
+  const tip = 'Plugins que mais consomem tempo, somando todos os pipelines — a resposta direta para ' +
+    '"onde está o gargalo". Ordenado pelo <strong>tempo total</strong> acumulado desde o start.<br><br>' +
+    'Só <strong>filtros</strong> e <strong>saídas</strong> entram: um <em>input</em> não tem tempo de ' +
+    'processamento (o que ele acumula é espera por dados) e apareceria sempre no topo, sem significar ' +
+    'nada.<br><br>' +
+    '<strong>ms/evento</strong> é o custo unitário — um plugin barato com volume enorme aparece aqui ' +
+    'por volume, não por ineficiência; o caro de verdade é o que tem ms/evento alto. ' +
+    '<strong>% do pipeline</strong> mostra quanto do tempo daquele pipeline é esse plugin.<br><br>' +
+    'Plugins sem <code>id</code> explícito no arquivo de configuração aparecem com o hash gerado ' +
+    'pelo Logstash — nomear os plugins (<code>id => "..."</code>) torna esta tabela legível.';
+
+  const rows = plugins.map(p => `<tr>
+    <td><div class="kb-inst-name">${escHtml(p.name)}</div>
+        ${p.id ? `<div class="kb-inst-sub">${escHtml(p.id)}</div>` : ''}</td>
+    <td><span class="badge ${p.type === 'filter' ? 'badge-blue' : 'badge-gray'}">${escHtml(p.type)}</span></td>
+    <td><div class="kb-inst-name">${escHtml(p.pipeline)}</div>
+        <div class="kb-inst-sub">${escHtml(p.instance)}</div></td>
+    <td style="text-align:right">${fmtNum(p.events)}</td>
+    <td style="text-align:right">${p.avg_event_ms != null ? fmtMs(p.avg_event_ms) : '-'}</td>
+    <td style="text-align:right">${fmtDuration(p.duration_ms)}</td>
+    <td style="text-align:right">${p.share_pct != null ? `${p.share_pct}%` : '-'}</td>
+  </tr>`).join('');
+
+  return section('Plugins mais lentos') +
+    tableCard('fa-stopwatch', 'Onde o tempo do pipeline é gasto', tip, 'help-logstash-plugins',
+      `<th>Plugin</th><th>Tipo</th><th>Pipeline</th>
+       <th style="text-align:right">Eventos</th><th style="text-align:right">ms/evento</th>
+       <th style="text-align:right">Tempo total</th><th style="text-align:right">% do pipeline</th>`,
+      rows);
+}
+
 // ═══════════════════ CONFIGURAÇÃO ═════════════════════════
+// Uma seção por integração, cada uma com seu próprio rodapé de Salvar: são
+// configurações independentes e salvar uma não deve arrastar a outra.
 async function renderConfig() {
   const page = document.getElementById('page-config');
   if (!page) return;
-  if (!kibanaConfig) {
+  const keys = Object.keys(INTEGRATIONS);
+
+  if (keys.some(k => !integrationConfig[k])) {
     page.innerHTML = `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando configuração...</span></div>`;
     try {
-      await fetchKibanaConfig();
+      await Promise.all(keys.filter(k => !integrationConfig[k]).map(fetchIntegrationConfig));
     } catch (e) {
       page.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p></div>`;
       return;
     }
   }
-  // Draft parte da config salva; edições ficam aqui até o Salvar.
-  if (!kibanaDraft) {
-    kibanaDraft = {
-      enabled: kibanaConfig.enabled,
-      username: kibanaConfig.username,
-      instances: (kibanaConfig.instances || []).map(i => ({ url: i.url })),
-      passwordDirty: false,
-      password: '',
-    };
+  // Draft parte da config salva; edições ficam nele até o Salvar.
+  for (const key of keys) {
+    if (!integrationDraft[key]) {
+      integrationDraft[key] = {
+        enabled: integrationConfig[key].enabled,
+        username: integrationConfig[key].username,
+        instances: (integrationConfig[key].instances || []).map(i => ({ url: i.url })),
+        passwordDirty: false,
+        password: '',
+      };
+    }
   }
-  page.innerHTML = configPageHtml();
-}
 
-function configPageHtml() {
-  const cfg = kibanaConfig || {};
-  const draft = kibanaDraft;
-  const locked = cfg.has_password && !draft.passwordDirty;
-
-  const notPersistable = cfg.persistable === false
+  // O aviso de "conexão não salva" vale para as duas: fica uma vez, no topo.
+  const notPersistable = keys.some(k => integrationConfig[k].persistable === false)
     ? `<div class="kb-warning">
          <i class="fas fa-circle-info"></i>
-         <div>${escHtml(cfg.reason || '')}</div>
+         <div>${escHtml(integrationConfig[keys[0]].reason || '')}</div>
        </div>`
     : '';
+
+  page.innerHTML = `<div class="config-page">
+    ${notPersistable}
+    ${keys.map(integrationConfigHtml).join('')}
+  </div>`;
+}
+
+function integrationConfigHtml(key) {
+  const meta = INTEGRATIONS[key];
+  const cfg = integrationConfig[key] || {};
+  const draft = integrationDraft[key];
+  const locked = cfg.has_password && !draft.passwordDirty;
 
   const urlRows = draft.instances.length
     ? draft.instances.map((inst, idx) => `
       <div class="cfg-instance">
         <div class="cfg-instance-row">
           <span class="cfg-instance-num">${idx + 1}</span>
-          <input type="text" value="${escHtml(inst.url)}" data-url-idx="${idx}"
-            placeholder="https://kibana.exemplo:5601"
-            oninput="kibanaUrlChanged(${idx}, this.value)">
-          <button class="btn btn-ghost btn-sm" onclick="kibanaTestUrl(${idx})" title="Testar esta instância">
+          <input type="text" value="${escHtml(inst.url)}" data-url-key="${key}" data-url-idx="${idx}"
+            placeholder="${escHtml(meta.urlPlaceholder)}"
+            oninput="cfgUrlChanged('${key}', ${idx}, this.value)">
+          <button class="btn btn-ghost btn-sm" onclick="cfgTestUrl('${key}', ${idx})" title="Testar esta instância">
             <i class="fas fa-vial"></i> Testar
           </button>
-          <button class="btn-icon" onclick="kibanaRemoveUrl(${idx})" title="Remover">
+          <button class="btn-icon" onclick="cfgRemoveUrl('${key}', ${idx})" title="Remover">
             <i class="fas fa-trash"></i>
           </button>
         </div>
-        <div class="kb-url-result" id="kbUrlResult-${idx}"></div>
+        <div class="kb-url-result" id="urlResult-${key}-${idx}"></div>
       </div>`).join('')
-    : `<div class="cfg-empty">
-         Nenhuma instância cadastrada. Sem URL, a página Kibana ainda funciona com o que vier do
-         <strong>self-monitoring</strong> — mas fica sem Task Manager, Fleet e APM Server.
-       </div>`;
+    : `<div class="cfg-empty">${meta.emptyInstances}</div>`;
 
-  return `<div class="config-page">
-    ${notPersistable}
-
-    <section class="cfg-section">
+  return `<section class="cfg-section">
       <div class="cfg-section-info">
         <div class="cfg-section-title">
-          <i class="fas fa-chart-line"></i>
-          <span>Kibana</span>
-          ${tooltip('Ativa a página <strong>Kibana</strong> na barra lateral. As instâncias são descobertas automaticamente pelo <strong>self-monitoring</strong> do cluster conectado; as URLs cadastradas aqui acrescentam o que só a API do Kibana entrega: <strong>Task Manager</strong>, <strong>Fleet</strong> e <strong>APM Server</strong>.', 'help-kibana-config')}
+          <i class="fas ${meta.icon}"></i>
+          <span>${meta.label}</span>
+          ${tooltip(meta.switchTip, meta.helpTopic)}
         </div>
-        <p class="cfg-section-desc">
-          Monitoramento das instâncias de Kibana desta conexão. Desativado, o item some da barra
-          lateral e nenhuma consulta é feita.
-        </p>
+        <p class="cfg-section-desc">${meta.switchDesc}</p>
       </div>
       <div class="cfg-section-fields">
         <label class="cfg-switch">
-          <input type="checkbox" id="kbEnabled" ${draft.enabled ? 'checked' : ''}
-            onchange="kibanaToggleEnabled(this.checked)">
+          <input type="checkbox" id="${key}Enabled" ${draft.enabled ? 'checked' : ''}
+            onchange="cfgToggleEnabled('${key}', this.checked)">
           <span class="cfg-switch-track"></span>
-          <span class="cfg-switch-text" id="kbEnabledLabel">${draft.enabled ? 'Ativado' : 'Desativado'}</span>
+          <span class="cfg-switch-text" id="${key}EnabledLabel">${draft.enabled ? 'Ativado' : 'Desativado'}</span>
         </label>
       </div>
     </section>
 
-    <div id="kbFields" ${draft.enabled ? '' : 'hidden'}>
+    <div id="${key}Fields" ${draft.enabled ? '' : 'hidden'}>
       <section class="cfg-section">
         <div class="cfg-section-info">
           <div class="cfg-section-title"><i class="fas fa-key"></i><span>Acesso</span></div>
-          <p class="cfg-section-desc">
-            Credenciais usadas nas chamadas à API do Kibana. Todas as instâncias usam o mesmo
-            usuário e senha.
-          </p>
+          <p class="cfg-section-desc">${meta.accessDesc}</p>
         </div>
         <div class="cfg-section-fields">
           <div class="form-row">
             <div class="form-group">
-              <label>Usuário</label>
-              <input type="text" id="kbUsername" value="${escHtml(draft.username || '')}"
+              <label>Usuário${meta.userRequired ? '' : ' <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span>'}</label>
+              <input type="text" id="${key}Username" value="${escHtml(draft.username || '')}"
                 placeholder="elastic" autocomplete="username"
-                oninput="kibanaDraft.username = this.value">
+                oninput="integrationDraft['${key}'].username = this.value">
             </div>
             <div class="form-group">
               <label>Senha</label>
               ${locked
-                ? `<button type="button" class="btn btn-ghost btn-full" onclick="kibanaEnablePasswordChange()">
+                ? `<button type="button" class="btn btn-ghost btn-full" onclick="cfgEnablePasswordChange('${key}')">
                      <i class="fas fa-key"></i> Alterar senha
                    </button>`
-                : `<input type="password" id="kbPassword" value="${escHtml(draft.password || '')}"
+                : `<input type="password" id="${key}Password" value="${escHtml(draft.password || '')}"
                      placeholder="••••••••" autocomplete="current-password"
-                     oninput="kibanaDraft.password = this.value; kibanaDraft.passwordDirty = true">`}
+                     oninput="integrationDraft['${key}'].password = this.value; integrationDraft['${key}'].passwordDirty = true">`}
             </div>
           </div>
         </div>
@@ -4610,14 +5110,11 @@ function configPageHtml() {
       <section class="cfg-section">
         <div class="cfg-section-info">
           <div class="cfg-section-title"><i class="fas fa-server"></i><span>Instâncias</span></div>
-          <p class="cfg-section-desc">
-            URLs de cada Kibana do ambiente. O botão <strong>Testar</strong> valida a URL sem
-            gravar nada.
-          </p>
+          <p class="cfg-section-desc">${meta.instancesDesc}</p>
         </div>
         <div class="cfg-section-fields">
           <div class="cfg-instance-list">${urlRows}</div>
-          <button class="btn btn-ghost btn-sm cfg-add-btn" onclick="kibanaAddUrl()">
+          <button class="btn btn-ghost btn-sm cfg-add-btn" onclick="cfgAddUrl('${key}')">
             <i class="fas fa-plus"></i> Adicionar instância
           </button>
         </div>
@@ -4625,47 +5122,47 @@ function configPageHtml() {
     </div>
 
     <div class="cfg-footer">
-      <div class="error-msg" id="kbConfigMsg"></div>
+      <div class="error-msg" id="${key}ConfigMsg"></div>
       <div class="cfg-footer-actions">
-        <button class="btn btn-ghost" onclick="kibanaResetDraft()">
+        <button class="btn btn-ghost" onclick="cfgResetDraft('${key}')">
           <i class="fas fa-rotate-left"></i> Descartar alterações
         </button>
-        <button class="btn btn-primary" id="kbSaveBtn" onclick="saveKibanaConfig()">
-          <i class="fas fa-floppy-disk"></i> Salvar
+        <button class="btn btn-primary" id="${key}SaveBtn" onclick="saveIntegrationConfig('${key}')">
+          <i class="fas fa-floppy-disk"></i> Salvar ${meta.label}
         </button>
       </div>
-    </div>
-  </div>`;
+    </div>`;
 }
 
-function kibanaToggleEnabled(checked) {
-  kibanaDraft.enabled = checked;
-  const fields = document.getElementById('kbFields');
+function cfgToggleEnabled(key, checked) {
+  integrationDraft[key].enabled = checked;
+  const fields = document.getElementById(`${key}Fields`);
   if (fields) fields.hidden = !checked;
-  const label = document.getElementById('kbEnabledLabel');
+  const label = document.getElementById(`${key}EnabledLabel`);
   if (label) label.textContent = checked ? 'Ativado' : 'Desativado';
 }
 
-function kibanaEnablePasswordChange() {
-  kibanaDraft.passwordDirty = true;
-  kibanaDraft.password = '';
+function cfgEnablePasswordChange(key) {
+  integrationDraft[key].passwordDirty = true;
+  integrationDraft[key].password = '';
   renderConfig();
 }
 
-function kibanaUrlChanged(idx, value) {
-  if (kibanaDraft.instances[idx]) kibanaDraft.instances[idx].url = value;
+function cfgUrlChanged(key, idx, value) {
+  if (integrationDraft[key].instances[idx]) integrationDraft[key].instances[idx].url = value;
 }
 
-function kibanaAddUrl() {
-  kibanaDraft.instances.push({ url: '' });
+function cfgAddUrl(key) {
+  integrationDraft[key].instances.push({ url: '' });
   renderConfig();
-  // foco no campo recém-criado
-  const inputs = document.querySelectorAll('[data-url-idx]');
+  // foco no campo recém-criado (o último daquela integração)
+  const inputs = document.querySelectorAll(`[data-url-key="${key}"]`);
   if (inputs.length) inputs[inputs.length - 1].focus();
 }
 
-async function kibanaRemoveUrl(idx) {
-  const url = kibanaDraft.instances[idx] ? kibanaDraft.instances[idx].url : '';
+async function cfgRemoveUrl(key, idx) {
+  const inst = integrationDraft[key].instances[idx];
+  const url = inst ? inst.url : '';
   const ok = !url || await showConfirm({
     title: 'Remover instância',
     message: `Remover "${url}" da lista? A alteração só vale depois de salvar.`,
@@ -4673,18 +5170,18 @@ async function kibanaRemoveUrl(idx) {
     danger: true,
   });
   if (!ok) return;
-  kibanaDraft.instances.splice(idx, 1);
+  integrationDraft[key].instances.splice(idx, 1);
   renderConfig();
 }
 
-function kibanaResetDraft() {
-  kibanaDraft = null;
+function cfgResetDraft(key) {
+  integrationDraft[key] = null;
   renderConfig();
 }
 
-async function kibanaTestUrl(idx) {
-  const inst = kibanaDraft.instances[idx];
-  const out = document.getElementById(`kbUrlResult-${idx}`);
+async function cfgTestUrl(key, idx) {
+  const inst = integrationDraft[key].instances[idx];
+  const out = document.getElementById(`urlResult-${key}-${idx}`);
   if (!inst || !out) return;
   if (!inst.url.trim()) {
     out.className = 'kb-url-result error';
@@ -4695,14 +5192,14 @@ async function kibanaTestUrl(idx) {
   out.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Testando...';
 
   try {
-    const res = await fetch('/api/kibana/test', {
+    const res = await fetch(`/api/${key}/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url: inst.url,
-        username: kibanaDraft.username,
+        username: integrationDraft[key].username,
         // Senha só vai quando foi digitada agora; senão o back usa a salva.
-        ...(kibanaDraft.passwordDirty ? { password: kibanaDraft.password } : {}),
+        ...(integrationDraft[key].passwordDirty ? { password: integrationDraft[key].password } : {}),
       }),
     });
     const data = await res.json();
@@ -4719,22 +5216,23 @@ async function kibanaTestUrl(idx) {
   }
 }
 
-async function saveKibanaConfig() {
-  const btn = document.getElementById('kbSaveBtn');
-  const msg = document.getElementById('kbConfigMsg');
+async function saveIntegrationConfig(key) {
+  const btn = document.getElementById(`${key}SaveBtn`);
+  const msg = document.getElementById(`${key}ConfigMsg`);
+  const draft = integrationDraft[key];
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
 
   const payload = {
-    enabled: kibanaDraft.enabled,
-    username: kibanaDraft.username,
-    instances: kibanaDraft.instances.filter(i => i.url.trim()).map(i => ({ url: i.url.trim() })),
+    enabled: draft.enabled,
+    username: draft.username,
+    instances: draft.instances.filter(i => i.url.trim()).map(i => ({ url: i.url.trim() })),
   };
-  if (kibanaDraft.passwordDirty) payload.password = kibanaDraft.password;
+  if (draft.passwordDirty) payload.password = draft.password;
 
   try {
-    const res = await fetch('/api/kibana/config', {
+    const res = await fetch(`/api/${key}/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -4744,14 +5242,14 @@ async function saveKibanaConfig() {
       showMsg(msg, data.error || 'Não foi possível salvar', 'error');
       return;
     }
-    kibanaConfig = data.config;
-    kibanaDraft = null;
-    applyKibanaNav();
+    integrationConfig[key] = data.config;
+    integrationDraft[key] = null;
+    applyIntegrationNav(key);
     // renderConfig recria o DOM da página: só depois dá para escrever a mensagem.
     await renderConfig();
-    showTempMsg(document.getElementById('kbConfigMsg'), 'Configuração salva', 'success');
-    // A página Kibana precisa refletir as URLs novas na próxima visita.
-    kibanaData = null;
+    showTempMsg(document.getElementById(`${key}ConfigMsg`), 'Configuração salva', 'success');
+    // A página da integração precisa refletir as URLs novas na próxima visita.
+    integrationData[key] = null;
   } catch (e) {
     showMsg(msg, e.message, 'error');
   } finally {
@@ -4773,8 +5271,10 @@ document.addEventListener('keydown', e => {
     if (nm && nm.style.display === 'flex') { closeNodeModal(); return; }
     closeDetailModal(); closeTaskJsonModal(); closeAliasModal(); closeConfirmModal();
   }
+  // Só faz sentido onde há dado ao vivo — a mesma lista da topbar, para uma
+  // página refreshável nova não ficar de fora do atalho por esquecimento.
   if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' &&
-      (currentPage === 'overview' || currentPage === 'capacity' || currentPage === 'kibana')) {
+      REFRESHABLE_PAGES.has(currentPage)) {
     refreshCurrentPage();
   }
 });
@@ -4806,9 +5306,9 @@ renderHelp();
       document.getElementById('app').style.display = 'flex';
       setClusterInfo(data.info);
       loadDashboard();
-      // A config do Kibana decide se o item Kibana aparece na sidebar. Falha
-      // aqui não pode impedir o dashboard do cluster de carregar.
-      fetchKibanaConfig().then(applyKibanaNav).catch(() => {});
+      // A config de cada integração decide se o item dela aparece na sidebar.
+      // Falha aqui não pode impedir o dashboard do cluster de carregar.
+      loadIntegrations();
       showPage(pageFromHash());
     } else {
       loadConnections();

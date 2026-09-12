@@ -8,6 +8,7 @@ import os
 import db
 import es_service
 import kibana_service
+import logstash_service
 
 load_dotenv()
 
@@ -297,62 +298,78 @@ def api_snapshots():
         return jsonify({'error': str(e)}), 500
 
 
-# ─── Kibana (config por conexão + métricas) ───────────────
-# A config é gravada por conexão ES salva. Numa conexão ad-hoc que não casa com
-# nenhuma salva não há onde persistir: as rotas respondem com persistable=False
-# e o front orienta a salvar a conexão. Ver docs/kibana.md.
+# ─── Integrações (Kibana e Logstash) ──────────────────────
+# As duas se comportam igual: config por conexão ES salva, teste de uma URL
+# isolada e um dashboard próprio. Numa conexão ad-hoc que não casa com nenhuma
+# salva não há onde persistir: as rotas respondem com persistable=False e o front
+# orienta a salvar a conexão. Ver docs/kibana.md e docs/logstash.md.
 NOT_PERSISTABLE = ('Esta conexão não está salva. Salve-a na tela de conexão para '
-                   'guardar a configuração do Kibana.')
+                   'guardar a configuração de {label}.')
+
+INTEGRATIONS = {
+    'kibana': {
+        'label': 'Kibana',
+        'service': kibana_service,
+        # O Kibana sempre exige credencial; a API de monitoramento do Logstash
+        # é aberta por padrão (`api.auth.type: none`), então lá usuário é opcional.
+        'requires_user': True,
+    },
+    'logstash': {
+        'label': 'Logstash',
+        'service': logstash_service,
+        'requires_user': False,
+    },
+}
 
 
-def _validate_kibana_payload(data):
+def _validate_integration_payload(prefix, data):
     """Retorna None se válido ou uma mensagem de erro.
 
     Lista de URLs vazia é válida: sem nenhuma, a página ainda funciona com o
-    que vem do self-monitoring — só fica sem Task Manager, Fleet e APM.
+    que vier do self-monitoring — só perde o que só existe na API.
     """
     if not data.get('enabled'):
         return None                       # desativado não precisa de credencial
-    if not (data.get('username') or '').strip():
-        return 'O usuário do Kibana é obrigatório'
+    meta = INTEGRATIONS[prefix]
+    if meta['requires_user'] and not (data.get('username') or '').strip():
+        return 'O usuário do %s é obrigatório' % meta['label']
     return None
 
 
-@app.route('/api/kibana/config', methods=['GET'])
-def api_kibana_config_get():
+def _integration_config_get(prefix):
     err = require_es()
     if err:
         return err
     conn_id = es_service.connection_id()
     if conn_id is None:
-        return jsonify({'persistable': False, 'reason': NOT_PERSISTABLE,
+        return jsonify({'persistable': False,
+                        'reason': NOT_PERSISTABLE.format(label=INTEGRATIONS[prefix]['label']),
                         'enabled': False, 'username': '', 'has_password': False,
                         'instances': []})
-    config = db.get_kibana_config(conn_id)
+    config = db.get_integration_config(prefix, conn_id)
     config['persistable'] = True
     return jsonify(config)
 
 
-@app.route('/api/kibana/config', methods=['PUT'])
-def api_kibana_config_save():
+def _integration_config_save(prefix):
     err = require_es()
     if err:
         return err
     conn_id = es_service.connection_id()
     if conn_id is None:
-        return jsonify({'success': False, 'error': NOT_PERSISTABLE}), 409
+        return jsonify({'success': False,
+                        'error': NOT_PERSISTABLE.format(label=INTEGRATIONS[prefix]['label'])}), 409
 
     data = request.get_json() or {}
-    msg = _validate_kibana_payload(data)
+    msg = _validate_integration_payload(prefix, data)
     if msg:
         return jsonify({'success': False, 'error': msg}), 400
-    config = db.save_kibana_config(conn_id, data)
+    config = db.save_integration_config(prefix, conn_id, data)
     config['persistable'] = True
     return jsonify({'success': True, 'config': config})
 
 
-@app.route('/api/kibana/test', methods=['POST'])
-def api_kibana_test():
+def _integration_test(prefix):
     """Testa uma URL isolada, sem gravar nada (espelha /api/test_connection).
 
     Senha vazia no payload reaproveita a já salva, para testar sem redigitar.
@@ -370,27 +387,67 @@ def api_kibana_test():
     if not password:
         conn_id = es_service.connection_id()
         if conn_id is not None:
-            saved = db.get_kibana_config(conn_id, include_password=True)
+            saved = db.get_integration_config(prefix, conn_id, include_password=True)
             password = saved.get('password') or ''
             username = username or saved.get('username') or ''
     try:
-        return jsonify({'success': True, **kibana_service.test_instance(url, username, password)})
+        service = INTEGRATIONS[prefix]['service']
+        return jsonify({'success': True, **service.test_instance(url, username, password)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
-@app.route('/api/kibana/dashboard')
-def api_kibana_dashboard():
+def _integration_dashboard(prefix):
     err = require_es()
     if err:
         return err
     conn_id = es_service.connection_id()
-    config = (db.get_kibana_config(conn_id, include_password=True)
+    config = (db.get_integration_config(prefix, conn_id, include_password=True)
               if conn_id is not None else {'enabled': False, 'instances': []})
     try:
-        return jsonify(kibana_service.dashboard(config))
+        return jsonify(INTEGRATIONS[prefix]['service'].dashboard(config))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/kibana/config', methods=['GET'])
+def api_kibana_config_get():
+    return _integration_config_get('kibana')
+
+
+@app.route('/api/kibana/config', methods=['PUT'])
+def api_kibana_config_save():
+    return _integration_config_save('kibana')
+
+
+@app.route('/api/kibana/test', methods=['POST'])
+def api_kibana_test():
+    return _integration_test('kibana')
+
+
+@app.route('/api/kibana/dashboard')
+def api_kibana_dashboard():
+    return _integration_dashboard('kibana')
+
+
+@app.route('/api/logstash/config', methods=['GET'])
+def api_logstash_config_get():
+    return _integration_config_get('logstash')
+
+
+@app.route('/api/logstash/config', methods=['PUT'])
+def api_logstash_config_save():
+    return _integration_config_save('logstash')
+
+
+@app.route('/api/logstash/test', methods=['POST'])
+def api_logstash_test():
+    return _integration_test('logstash')
+
+
+@app.route('/api/logstash/dashboard')
+def api_logstash_dashboard():
+    return _integration_dashboard('logstash')
 
 
 if __name__ == '__main__':
