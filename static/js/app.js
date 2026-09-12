@@ -1089,6 +1089,21 @@ const HELP_CONTENT = [
           { label: 'FDs (file descriptors)', desc: 'Descritores abertos sobre o máximo do processo, com os absolutos abaixo da barra. Logstash com muitos inputs de arquivo ou conexões de saída bate esse teto antes de qualquer outro limite, e o sintoma é <code>too many open files</code> — com o pipeline parando sem erro de configuração.' },
           { label: 'Eventos/s', desc: 'Vazão da instância: média desde o start (eventos de saída ÷ uptime), não taxa instantânea.' },
           { label: 'só self-monitoring', desc: 'Marca instâncias descobertas sem URL cadastrada. Elas não têm pipelines, filas, DLQ nem plugins — cadastre a URL na Configuração para completar.' },
+          { label: 'Detalhe da instância', desc: 'Clicar no <strong>nome</strong> abre a modal com tudo o que o Logstash expõe sobre aquela instância — ver o tópico abaixo.' },
+        ],
+      },
+      {
+        id: 'help-logstash-instance-detail', q: 'Detalhe da instância (modal)',
+        summary: 'Aberta pelo <strong>nome da instância</strong> na tabela Utilização por Instância. Consolida o que só faz sentido olhando <strong>uma</strong> instância por vez: SO, JVM, pools e GC, processo, limites de cgroup, vazão e pipelines. <strong>Não faz requisição</strong>: tudo já veio na última atualização da página. A linha <strong>Fonte deste detalhe</strong> diz de onde o bloco saiu, e cada métrica traz a origem no tooltip do rótulo.',
+        data: [
+          { label: 'Identificação', desc: 'Status (com o sintoma do health report quando há), host, endereço da API, URL monitorada, versão (marcada quando é <em>snapshot</em>), ID do nó, uptime e a data de início da JVM. <strong>Fonte deste detalhe</strong> diz se o bloco veio da API (ao vivo) ou da última amostra do self-monitoring — os dados nunca são misturados entre as duas, para a foto não ficar internamente incoerente.' },
+          { label: 'Sistema Operacional e cgroup', desc: 'SO, arquitetura e <strong>processadores disponíveis</strong> — a contagem que o <code>pipeline.workers</code> segue por padrão. Em container, o <strong>limite de CPU do cgroup</strong> e o <strong>throttling</strong>: quando a cota é menor que os vCPUs do SO, o Logstash tem menos CPU do que a contagem sugere e os workers ficam superdimensionados. Throttling acima de 10% fica vermelho — o processo está sendo parado ao fim dos períodos em que estoura a cota, e a latência sobe sem a CPU parecer saturada.' },
+          { label: 'CPU', desc: 'CPU do <strong>processo</strong> Logstash, o <strong>load average</strong> do host (1m/5m/15m, colorido contra a contagem de vCPUs) e o tempo total de CPU acumulado desde o start.' },
+          { label: 'Memória e JVM', desc: 'RAM do host (Elastic Agent), heap usada, os <strong>pools</strong> (young/survivor/old — sem percentual nos que não declaram máximo, como é o padrão no G1), <strong>non-heap</strong> (metaspace e code cache, que ficam fora do <code>-Xmx</code>) e <code>-Xms</code>/<code>-Xmx</code>: valores diferentes geram aviso, porque o Logstash recomenda os dois iguais para a JVM não redimensionar a heap em runtime.' },
+          { label: 'Overhead de GC', desc: 'Tempo de GC ÷ uptime — a fração da vida do processo gasta coletando. Honesto mesmo com contadores acumulados, porque numerador e denominador começam no mesmo instante. É o sinal que a barra de heap não dá: 40% de heap com 20% de overhead é pior que 80% de heap sem GC. Amarelo a partir de 10%, vermelho a partir de 25%.' },
+          { label: 'Vazão atual (flow)', desc: 'A seção <code>flow</code> (Logstash 8.6+) é a <strong>única taxa instantânea</strong> que a API entrega pronta: o próprio Logstash a calcula sobre uma janela recente. Por isso a modal mostra "vazão atual" ao lado da média desde o start — sem inventar taxa em cima de contador acumulado. Traz também os <strong>workers ocupados</strong> (perto do total configurado = workers são o gargalo) e o <strong>backpressure</strong> da fila, em segundos bloqueados por segundo. Em versões sem <code>flow</code>, só a média aparece.' },
+          { label: 'Pipelines', desc: 'Resumo dos pipelines daquela instância (ms/evento, eventos de saída, tipo de fila e DLQ). O detalhamento completo — workers, batch, reloads, caminho da fila — fica na tabela <strong>Pipelines, filas e DLQ</strong> da página, que lista todas as instâncias.' },
+          { label: 'Sem URL cadastrada', desc: 'A modal continua abrindo com o que o self-monitoring traz (heap, FDs, GC, threads, eventos). Ficam de fora SO, JVM, cgroup, <code>flow</code> e pipelines — que só existem na API. O SO aparece mesmo assim quando quem monitora é o <strong>Elastic Agent</strong>, que grava o SO do host no próprio documento.' },
         ],
       },
       {
@@ -3980,6 +3995,58 @@ async function cancelTask(taskId, btn) {
   }
 }
 
+// ─── Blocos de detalhe (`nd-*`) ──────────────────────────
+// Linguagem visual das modais que descrevem **uma** instância: seções com
+// rótulo à esquerda e valor (ou barra) à direita. Usada pela modal de nó do
+// cluster e pela de instância do Logstash — o layout é o mesmo, só o conteúdo
+// muda, e manter duas cópias faria as duas divergirem.
+
+// Barra de % colorida (reutiliza .tier-disk-track/.tier-disk-fill).
+// `opts.fixedBar`: barra de largura fixa, para alinhar barras entre linhas e
+// trazer o texto logo em seguida em vez de a barra esticar até o fim da linha.
+// `opts.color`: cor explícita, quando a métrica tem recorte próprio (GC, por
+// exemplo); sem ela vale a régua de disco (85/70), que é a da modal de nó.
+// `opts.text`: texto no lugar do percentual, para quando arredondar para zero
+// seria falso (o mesmo motivo do `< 0,001 ms` em `fmtMs`).
+function ndPctRow(label, pct, extra = '', opts = {}) {
+  const color = opts.color || (pct >= 85 ? 'red' : pct >= 70 ? 'yellow' : 'green');
+  return `<div class="nd-row${opts.fixedBar ? ' nd-row--fixbar' : ''}">
+    <span class="nd-label">${label}</span>
+    <div class="nd-bar-wrap">
+      <div class="tier-disk-track nd-bar"><div class="tier-disk-fill" style="width:${Math.min(pct, 100)}%;background:var(--${color})"></div></div>
+      <span class="nd-pct text-${color}">${opts.text || `${pct}%`}</span>
+      ${extra ? `<span class="nd-extra">${extra}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+// Linha simples label / valor (some quando não há valor: ausência de dado não
+// vira linha vazia).
+function ndValRow(label, value, dim = false) {
+  if (value === null || value === undefined || value === '') return '';
+  return `<div class="nd-row">
+    <span class="nd-label">${label}</span>
+    <span class="nd-value${dim ? ' nd-dim' : ''}">${value}</span>
+  </div>`;
+}
+
+// Nota de alerta (linha sem coluna de rótulo), amarela por padrão.
+function ndWarnRow(text, color = 'yellow') {
+  return `<div class="nd-row"><span class="nd-value text-${color}" style="font-size:12px">
+    <i class="fas fa-triangle-exclamation" style="margin-right:6px"></i>${text}</span></div>`;
+}
+
+// Seção com título; devolve '' quando nenhuma linha sobreviveu, para a modal
+// não exibir cabeçalho de seção vazia.
+function ndSection(icon, title, rows) {
+  const body = rows.filter(Boolean).join('');
+  if (!body) return '';
+  return `<div class="nd-section">
+    <div class="nd-section-title"><i class="fas ${icon}"></i>${title}</div>
+    ${body}
+  </div>`;
+}
+
 // ─── Modal de Detalhe de Nó (Topologia) ──────────────────
 // Carregado sob demanda ao clicar na caixinha — sem impacto no dashboard.
 
@@ -4026,42 +4093,8 @@ function renderNodeDetail(d) {
   // Topo mostra só o nome da instância (IP e SO ficam nas seções abaixo)
   document.getElementById('nodeModalSubtitle').textContent = '';
 
-  // Helper: barra de % colorida (reutiliza .tier-disk-track/.tier-disk-fill)
-  function pctRow(label, pct, extra = '', opts = {}) {
-    const color = pct >= 85 ? 'red' : pct >= 70 ? 'yellow' : 'green';
-    // fixedBar: barra de largura fixa (para alinhar barras entre linhas e trazer
-    // o texto logo em seguida, em vez de a barra esticar até o fim da linha)
-    return `<div class="nd-row${opts.fixedBar ? ' nd-row--fixbar' : ''}">
-      <span class="nd-label">${label}</span>
-      <div class="nd-bar-wrap">
-        <div class="tier-disk-track nd-bar"><div class="tier-disk-fill" style="width:${pct}%;background:var(--${color})"></div></div>
-        <span class="nd-pct text-${color}">${pct}%</span>
-        ${extra ? `<span class="nd-extra">${extra}</span>` : ''}
-      </div>
-    </div>`;
-  }
-
-  // Helper: linha simples label / valor
-  function valRow(label, value, dim = false) {
-    if (value === null || value === undefined || value === '') return '';
-    return `<div class="nd-row">
-      <span class="nd-label">${label}</span>
-      <span class="nd-value${dim ? ' nd-dim' : ''}">${value}</span>
-    </div>`;
-  }
-
-  // Helper: nota de alerta (linha sem coluna de rótulo), cor amarela/vermelha
-  function warnRow(text, color = 'yellow') {
-    return `<div class="nd-row"><span class="nd-value text-${color}" style="font-size:12px">
-      <i class="fas fa-triangle-exclamation" style="margin-right:6px"></i>${text}</span></div>`;
-  }
-
-  function sec(icon, title, rows) {
-    return `<div class="nd-section">
-      <div class="nd-section-title"><i class="fas ${icon}"></i>${title}</div>
-      ${rows.filter(Boolean).join('')}
-    </div>`;
-  }
+  // Blocos visuais compartilhados com a modal de instância do Logstash.
+  const pctRow = ndPctRow, valRow = ndValRow, warnRow = ndWarnRow, sec = ndSection;
 
   // Disco: uso geral + mounts. O uso é calculado sobre "available" (espaço
   // disponível a não-root), que é a base dos watermarks do ES (85/90/95%).
@@ -4415,7 +4448,9 @@ function healthyInstancesCard(d, key, tip) {
 
 // Coluna de identificação da instância: nome + versão/host e as marcações de
 // "inacessível" (URL cadastrada que não respondeu) e "só self-monitoring".
-function instanceNameCell(inst) {
+// `onclick` (opcional) torna o nome clicável — hoje só o Logstash o usa, para
+// abrir a modal de detalhe da instância.
+function instanceNameCell(inst, onclick) {
   const offline = inst.configured && !inst.reachable;
   const sub = [inst.version, inst.host].filter(Boolean).map(escHtml).join(' · ');
   const errorNote = offline
@@ -4424,7 +4459,10 @@ function instanceNameCell(inst) {
   const noUrlNote = !inst.configured
     ? '<div class="kb-inst-note" title="Descoberta pelo self-monitoring. Cadastre a URL para ver o que só a API entrega.">só self-monitoring</div>'
     : '';
-  return `<div class="kb-inst-name">${escHtml(inst.name || '(sem nome)')}</div>
+  const nameAttrs = onclick
+    ? ` class="kb-inst-name node-name-clickable" onclick="${onclick}" title="Ver detalhes da instância"`
+    : ' class="kb-inst-name"';
+  return `<div${nameAttrs}>${escHtml(inst.name || '(sem nome)')}</div>
     ${sub ? `<div class="kb-inst-sub">${sub}</div>` : ''}
     ${errorNote}${noUrlNote}`;
 }
@@ -4835,10 +4873,12 @@ function logstashInstancesTable(d) {
     '<strong>FDs</strong>: file descriptors abertos sobre o máximo do processo. Logstash com muitos ' +
     'inputs de arquivo ou conexões de saída bate esse teto antes de qualquer outro limite, e o ' +
     'sintoma é "too many open files".<br>' +
-    '<strong>Eventos/s</strong>: média desde o start (eventos de saída ÷ uptime).';
+    '<strong>Eventos/s</strong>: média desde o start (eventos de saída ÷ uptime).<br><br>' +
+    'Clique no <strong>nome da instância</strong> para o detalhe completo: SO, JVM, pools e GC, ' +
+    'processo, limites de cgroup e a vazão atual.';
 
-  const rows = (d.instances || []).map(inst => `<tr>
-      <td>${instanceNameCell(inst)}</td>
+  const rows = (d.instances || []).map((inst, i) => `<tr>
+      <td>${instanceNameCell(inst, `openLsInstanceModal(${i})`)}</td>
       <td>${serviceStatusBadge(inst.status)}</td>
       <td>${svcMetricCell('logstash', inst.metrics.cpu, LS_NO_API_HINT)}</td>
       <td>${svcMetricCell('logstash', inst.metrics.heap, LS_NO_API_HINT)}</td>
@@ -4860,6 +4900,392 @@ function logstashFdCell(inst) {
   const cell = svcMetricCell('logstash', inst.metrics.fd, LS_NO_API_HINT);
   if (inst.fd_open == null || inst.fd_max == null) return cell;
   return `${cell}<div class="kb-inst-sub">${fmtNum(inst.fd_open)} / ${fmtNum(inst.fd_max)}</div>`;
+}
+
+// ─── Modal de Detalhe de Instância (Logstash) ────────────
+// Abre pelo nome na tabela "Utilização por Instância" e **não faz requisição**:
+// o bloco `detail` (JVM, SO, GC, processo, flow) já vem no
+// /api/logstash/dashboard da última atualização, coletado junto com o resto.
+// A tabela mostra o que é comparável entre instâncias; aqui fica o que só faz
+// sentido olhando uma por vez.
+
+// De onde veio o bloco de detalhe: a modal diz em que tempo verbal está falando.
+const LS_DETAIL_SOURCE = {
+  api: 'API de monitoramento — leitura ao vivo',
+  monitoring: 'Self-monitoring do cluster — última amostra recebida',
+  agent: 'Self-monitoring via Elastic Agent — última amostra recebida',
+};
+
+const LS_NO_DETAIL_HINT = 'Sem fonte: este dado vem da API de monitoramento ' +
+  '(/_node/stats e /_node/os,jvm). Cadastre a URL da instância na Configuração.';
+
+function openLsInstanceModal(idx) {
+  const inst = ((integrationData.logstash || {}).instances || [])[idx];
+  if (!inst) return;
+  document.getElementById('lsInstanceModalTitle').textContent = inst.name || '(sem nome)';
+  document.getElementById('lsInstanceModalSubtitle').textContent =
+    [inst.version, inst.host].filter(Boolean).join(' · ');
+  document.getElementById('lsInstanceModalBody').innerHTML = lsInstanceDetailHtml(inst);
+  document.getElementById('lsInstanceModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLsInstanceModal() {
+  document.getElementById('lsInstanceModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+// Timestamp do self-monitoring (ISO) no formato das demais datas da interface;
+// mantém o valor bruto se vier em algo que o Date não entenda.
+function lsTimestamp(iso) {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return isNaN(ms) ? escHtml(iso) : fmtMillisDate(ms);
+}
+
+// Ponto de montagem: o caminho pode ser longo, então o que ele é fica no
+// tooltip e a coluna exibe só o caminho.
+function lsMountLabel(mount) {
+  return mount ? `<span title="Ponto de montagem mais cheio do host">${escHtml(mount)}</span>` : '';
+}
+
+// Traço com o motivo no tooltip — ausência de fonte nunca vira zero.
+function lsNoSource(hint) {
+  return `<span class="kb-no-source" title="${escHtml(hint || LS_NO_DETAIL_HINT)}">&mdash;</span>`;
+}
+
+// Linha de barra a partir de uma métrica com origem: o tooltip do rótulo diz de
+// onde veio o número, como nas células da tabela.
+function lsMetricRow(label, metric, extra, hint, opts = {}) {
+  if (!metric || metric.value == null) return ndValRow(label, lsNoSource(hint));
+  const src = SOURCE_LABELS.logstash[metric.source] || metric.source;
+  return ndPctRow(`<span title="Fonte: ${escHtml(src)}" style="cursor:help">${label}</span>`,
+    metric.value, extra, Object.assign({ color: pctColor(metric.value) }, opts));
+}
+
+function lsInstanceDetailHtml(inst) {
+  const d = inst.detail || {};
+  const jvm = d.jvm || {};
+  const info = d.jvm_info || {};
+  const proc = d.process || {};
+  const os = d.os || {};
+  const flow = d.flow || {};
+  const m = inst.metrics || {};
+  const ev = inst.events || {};
+  const defaults = d.pipeline_defaults || {};
+
+  const num = v => (v == null ? null : fmtNum(v));
+  const bytes = v => (v == null ? null : formatBytes(v));
+
+  // Nenhuma fonte respondeu por esta instância: uma tela inteira de traços
+  // não diria nada além do que a nota diz. RAM e disco do host podem existir
+  // mesmo assim — vêm do Elastic Agent, que não depende do Logstash estar de pé.
+  if (!inst.detail_source) {
+    return `<div class="nd-body">
+      ${lsIdentitySection(inst, d, info)}
+      ${lsHostOnlySection(inst, m)}
+      <div class="nd-section">
+        <div class="nd-note"><i class="fas fa-circle-info"></i><span>
+          <strong>Sem dados desta instância.</strong> A URL cadastrada não respondeu e não há
+          amostra recente no self-monitoring do cluster. JVM, SO, processo e vazão voltam a
+          aparecer assim que uma das duas fontes responder.</span></div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="nd-body">
+    ${lsIdentitySection(inst, d, info)}
+    ${lsOsSection(os, d.cgroup)}
+    ${lsCpuSection(m, proc, os)}
+    ${lsMemorySection(inst, m, jvm, info)}
+    ${lsDiskSection(inst, m)}
+    ${ndSection('fa-file', 'Processo', [
+      lsMetricRow('File descriptors', m.fd,
+        `${num(inst.fd_open) || '?'} de ${num(inst.fd_max) || '?'}${
+          proc.peak_fds != null ? ` · pico ${num(proc.peak_fds)}` : ''}`,
+        LS_NO_API_HINT, { fixedBar: true }),
+      ndValRow('Memória virtual', bytes(proc.virtual_bytes), true),
+      ndValRow('PID', info.pid != null ? num(info.pid) : null, true),
+      ndValRow('Ephemeral ID', d.ephemeral_id
+        ? `<span title="Identifica o processo atual: muda a cada restart do Logstash">${escHtml(d.ephemeral_id)}</span>`
+        : null, true),
+    ])}
+    ${lsEventsSection(inst, ev, m, flow, defaults)}
+    ${lsPipelineDefaultsSection(inst, defaults)}
+    ${lsHealthSection(inst)}
+    ${lsPipelinesSummarySection(inst)}
+  </div>`;
+}
+
+function lsIdentitySection(inst, d, info) {
+  const offline = inst.configured && !inst.reachable;
+  const source = LS_DETAIL_SOURCE[inst.detail_source] || '';
+  const started = info.start_time_ms ? fmtMillisDate(info.start_time_ms) : null;
+
+  return ndSection('fa-diagram-project', 'Identificação', [
+    ndValRow('Status', `${serviceStatusBadge(inst.status)}${
+      inst.health && inst.health.symptom
+        ? ` <span class="nd-dim">${escHtml(inst.health.symptom)}</span>` : ''}`),
+    offline ? ndWarnRow(`URL cadastrada não respondeu: ${escHtml(inst.error || 'motivo desconhecido')}`, 'red') : '',
+    ndValRow('Host', escHtml(inst.host)),
+    ndValRow('Endereço da API', escHtml(inst.http_address), true),
+    ndValRow('URL monitorada', inst.url ? escHtml(inst.url)
+      : '<span class="nd-dim">não cadastrada — só self-monitoring</span>', !inst.url),
+    ndValRow('Versão', `${escHtml(inst.version) || '—'}${
+      inst.snapshot ? ' <span class="text-yellow">(snapshot — build de desenvolvimento)</span>' : ''}`),
+    ndValRow('ID do nó', escHtml(inst.id), true),
+    ndValRow('Uptime', inst.uptime_ms ? fmtDuration(inst.uptime_ms) : null),
+    ndValRow('JVM iniciada em', started, true),
+    ndValRow('Fonte deste detalhe', source ? escHtml(source) : null, true),
+    ndValRow('Última amostra', lsTimestamp(inst.last_seen), true),
+  ]);
+}
+
+// RAM e disco do host quando é só isso que sobrou (instância sem nenhuma fonte
+// própria, mas com Elastic Agent no host).
+function lsHostOnlySection(inst, m) {
+  return ndSection('fa-desktop', 'Host (Elastic Agent)', [
+    m.ram && m.ram.value != null
+      ? lsMetricRow('RAM do host', m.ram, '', LS_NO_AGENT_HINT, { fixedBar: true }) : '',
+    m.disk && m.disk.value != null
+      ? lsMetricRow('Uso do disco', m.disk, lsMountLabel(inst.disk_mount),
+        LS_NO_AGENT_HINT, { fixedBar: true }) : '',
+  ]);
+}
+
+// SO e cgroup. Sem URL cadastrada, o SO só aparece quando o Elastic Agent
+// monitora o Logstash (o doc dele carrega `host.os.*` em ECS).
+function lsOsSection(os, cgroup) {
+  const soName = [os.name, os.version].filter(Boolean).join(' ');
+  const cg = cgroup || {};
+  const limited = cg.cpu_limit != null && os.processors && cg.cpu_limit < os.processors;
+  const throttlePct = cg.throttled_pct;
+  const throttleColor = throttlePct == null ? '' : (throttlePct >= 10 ? 'red' : throttlePct >= 1 ? 'yellow' : 'green');
+
+  return ndSection('fa-desktop', 'Sistema Operacional', [
+    ndValRow('SO', escHtml(soName)),
+    ndValRow('Arquitetura', escHtml(os.arch), true),
+    ndValRow('Processadores disponíveis', os.processors != null
+      ? `${fmtNum(os.processors)} <span class="nd-dim">· é a contagem que o <code>pipeline.workers</code> segue por padrão</span>`
+      : null),
+    cg.cpu_limit != null
+      ? ndValRow('Limite de CPU (cgroup)', `${cg.cpu_limit} vCPU${cg.cpu_limit === 1 ? '' : 's'}`)
+      : '',
+    limited ? ndWarnRow(`O cgroup limita a instância a ${cg.cpu_limit} vCPU(s), abaixo dos ` +
+      `${fmtNum(os.processors)} que o SO informa — <code>pipeline.workers</code> segue a contagem do SO ` +
+      'e fica superdimensionado se não for fixado à mão.') : '',
+    throttlePct != null
+      ? ndValRow('Throttling de CPU', `<span class="text-${throttleColor}">${throttlePct}%</span> ` +
+        `<span class="nd-dim">dos períodos · ${fmtNum(cg.throttled_times)} vezes · ` +
+        `${fmtDuration(cg.throttled_ms)} parado</span>`)
+      : '',
+    throttlePct != null && throttlePct >= 10
+      ? ndWarnRow('Throttling alto: o processo está sendo parado ao fim dos períodos em que estoura a ' +
+        'cota do cgroup. A latência do pipeline sobe sem que a CPU apareça saturada.') : '',
+    cg.control_group ? ndValRow('Control group', escHtml(cg.control_group), true) : '',
+  ]);
+}
+
+function lsCpuSection(m, proc, os) {
+  const procs = os.processors;
+  // Load average do **host**, não do processo: comparar com os vCPUs é o que
+  // diz se a máquina está sobrecarregada, e não só o Logstash.
+  const loadColor = v => (procs ? (v / procs >= 1.5 ? 'red' : v / procs >= 0.8 ? 'yellow' : 'green') : 'blue');
+  const loads = [proc.load_1m, proc.load_5m, proc.load_15m];
+  const loadRow = loads.some(v => v != null)
+    ? ndValRow('Load average (1m/5m/15m)',
+      `${loads.map(v => v != null
+        ? `<span class="text-${loadColor(v)}" style="font-weight:700">${v.toFixed(2)}</span>` : '—').join(' / ')}` +
+      (procs ? ` <span class="nd-dim">· ${fmtNum(procs)} vCPU${procs === 1 ? '' : 's'}</span>` : ''))
+    : '';
+
+  return ndSection('fa-microchip', 'CPU', [
+    lsMetricRow('CPU do processo', m.cpu, 'uso do processo Logstash, não do host',
+      LS_NO_API_HINT, { fixedBar: true }),
+    loadRow,
+    ndValRow('Tempo total de CPU', proc.cpu_total_ms != null
+      ? `${fmtDuration(proc.cpu_total_ms)} <span class="nd-dim">· acumulado desde o start</span>` : null),
+  ]);
+}
+
+function lsMemorySection(inst, m, jvm, info) {
+  const gc = jvm.gc || {};
+  const pools = jvm.pools || [];
+  const heapInit = info.heap_init;
+  const heapMax = info.heap_max || inst.heap_max;
+  // O Logstash recomenda -Xms e -Xmx iguais: com valores diferentes a JVM
+  // redimensiona a heap em runtime, o que causa pausa e mascara o dimensionamento.
+  const heapMismatch = heapInit != null && heapMax != null && heapInit !== heapMax;
+
+  const poolRows = pools.map(p => {
+    const label = { young: 'Pool young (eden)', survivor: 'Pool survivor', old: 'Pool old (tenured)' }[p.name]
+      || `Pool ${escHtml(p.name)}`;
+    const peak = p.peak_used != null ? ` · pico ${formatBytes(p.peak_used)}` : '';
+    // Sem máximo declarado (o padrão no G1) não há percentual: só o uso.
+    return p.pct != null
+      ? ndPctRow(label, p.pct, `${formatBytes(p.used)} de ${formatBytes(p.max)}${peak}`,
+        { fixedBar: true, color: pctColor(p.pct) })
+      : ndValRow(label, `${formatBytes(p.used || 0)}<span class="nd-dim">${peak} · sem máximo declarado</span>`);
+  });
+
+  const gcRows = (gc.collectors || []).map(c => ndValRow(
+    `GC ${escHtml(c.name)}`,
+    `${fmtNum(c.count)} coletas <span class="nd-dim">· ${fmtDuration(c.time_ms)} no total` +
+    `${c.avg_ms != null ? ` · ${fmtMs(c.avg_ms)} por coleta` : ''}</span>`));
+
+  return ndSection('fa-memory', 'Memória e JVM', [
+    lsMetricRow('RAM do host', m.ram, 'uso de memória da máquina', LS_NO_AGENT_HINT, { fixedBar: true }),
+    lsMetricRow('Heap usada', m.heap,
+      `${formatBytes(inst.heap_used || 0)} de ${formatBytes(inst.heap_max || 0)}`,
+      LS_NO_API_HINT, { fixedBar: true }),
+    ...poolRows,
+    ndValRow('Non-heap', jvm.non_heap_used != null
+      ? `${formatBytes(jvm.non_heap_used)}<span class="nd-dim">${
+        jvm.non_heap_committed ? ` de ${formatBytes(jvm.non_heap_committed)} reservados` : ''
+      } · metaspace e code cache, fora do -Xmx</span>` : null),
+    heapInit != null || heapMax != null
+      ? ndValRow('Heap configurada (-Xms / -Xmx)',
+        `${heapInit != null ? formatBytes(heapInit) : '—'} / ${heapMax != null ? formatBytes(heapMax) : '—'}`)
+      : '',
+    heapMismatch ? ndWarnRow('<code>-Xms</code> e <code>-Xmx</code> diferentes — o Logstash recomenda os ' +
+      'dois iguais: assim a JVM não redimensiona a heap em runtime, o que causa pausa e esconde o ' +
+      'dimensionamento real.') : '',
+    ...gcRows,
+    gc.overhead_pct != null
+      ? ndPctRow('Overhead de GC', gc.overhead_pct,
+        `${fmtDuration(gc.time_ms)} de GC em ${fmtDuration(inst.uptime_ms || 0)} de uptime`,
+        {
+          fixedBar: true,
+          color: gcOverheadColor(gc.overhead_pct),
+          // Houve GC, mas abaixo da resolução exibida: "0%" seria falso.
+          text: (gc.overhead_pct === 0 && gc.time_ms) ? '&lt; 0,1%' : '',
+        })
+      : '',
+    gc.overhead_pct != null && gc.overhead_pct >= 10
+      ? ndWarnRow('Mais de 10% da vida do processo gasta em GC: é CPU que não vai para o pipeline. ' +
+        'Costuma significar heap apertada ou batch grande demais.') : '',
+    ndValRow('Threads', jvm.threads != null
+      ? `${fmtNum(jvm.threads)}${jvm.threads_peak != null ? ` <span class="nd-dim">· pico ${fmtNum(jvm.threads_peak)}</span>` : ''}`
+      : null),
+    ndValRow('Versão da JVM', escHtml(info.version)),
+    ndValRow('VM', [info.vm_name, info.vm_vendor].filter(Boolean).map(escHtml).join(' · '), true),
+    ndValRow('Coletores de GC', (info.gc_collectors || []).map(escHtml).join(' · '), true),
+  ]);
+}
+
+// Disco é do **host** e só o Elastic Agent o tem: sem ele, explicar em vez de
+// deixar a seção sumir sem motivo aparente.
+function lsDiskSection(inst, m) {
+  if (!m.disk || m.disk.value == null) {
+    return ndSection('fa-hard-drive', 'Disco do host', [
+      `<div class="nd-note"><i class="fas fa-circle-info"></i><span>
+        <strong>Sem fonte para o disco.</strong> A API do Logstash não expõe uso de filesystem —
+        ele vem da integração <code>system</code> do <strong>Elastic Agent</strong> no host desta
+        instância. O espaço livre onde a fila persistente vive aparece no tooltip da coluna
+        <strong>Fila</strong> da tabela de pipelines.</span></div>`,
+    ]);
+  }
+  return ndSection('fa-hard-drive', 'Disco do host', [
+    lsMetricRow('Uso do disco', m.disk,
+      lsMountLabel(inst.disk_mount), LS_NO_AGENT_HINT, { fixedBar: true }),
+  ]);
+}
+
+// Eventos: contadores acumulados e, quando a versão expõe `flow`, as taxas
+// **da janela recente** calculadas pelo próprio Logstash — a única taxa "de
+// agora" honesta disponível sem uma segunda coleta.
+function lsEventsSection(inst, ev, m, flow, defaults) {
+  const rate = k => (flow[k] && flow[k].current != null ? flow[k].current : null);
+  const lifetime = k => (flow[k] && flow[k].lifetime != null ? flow[k].lifetime : null);
+  const flowRow = (label, key, unit) => {
+    const cur = rate(key);
+    if (cur == null) return '';
+    const life = lifetime(key);
+    return ndValRow(label, `${fmtNum(Math.round(cur))}${unit}` +
+      (life != null ? ` <span class="nd-dim">· ${fmtNum(Math.round(life))}${unit} desde o start</span>` : ''));
+  };
+  const workers = defaults.workers != null ? defaults.workers : inst.default_workers;
+  const concurrency = rate('worker_concurrency');
+  const backpressure = rate('queue_backpressure');
+
+  return ndSection('fa-right-left', 'Eventos e vazão', [
+    `<div class="nd-note"><i class="fas fa-circle-info"></i><span>
+      Os contadores do Logstash são <strong>acumulados desde o start</strong> do processo. A média
+      abaixo é <code>eventos de saída ÷ uptime</code>${rate('input_throughput') != null
+        ? ' — as taxas <strong>atuais</strong> vêm da seção <code>flow</code>, que o próprio Logstash calcula sobre uma janela recente'
+        : ''}.</span></div>`,
+    ndValRow('Média desde o start', m.events_per_sec && m.events_per_sec.value != null
+      ? `${fmtNum(m.events_per_sec.value)} <span class="nd-dim">eventos/s</span>` : lsNoSource(LS_NO_API_HINT)),
+    flowRow('Vazão atual — entrada', 'input_throughput', ' <span class="nd-dim">eventos/s</span>'),
+    flowRow('Vazão atual — filtros', 'filter_throughput', ' <span class="nd-dim">eventos/s</span>'),
+    flowRow('Vazão atual — saída', 'output_throughput', ' <span class="nd-dim">eventos/s</span>'),
+    concurrency != null
+      ? ndValRow('Workers ocupados', `${concurrency.toFixed(2)}${workers ? ` de ${fmtNum(workers)}` : ''} ` +
+        '<span class="nd-dim">· média na janela recente; perto do total, os workers são o gargalo</span>')
+      : '',
+    backpressure != null
+      ? ndValRow('Backpressure da fila', `${backpressure.toFixed(2)} ` +
+        '<span class="nd-dim">s bloqueados por segundo · tempo em que a entrada ficou esperando espaço na fila</span>')
+      : '',
+    ndValRow('Entrada', ev.in != null ? fmtNum(ev.in) : null),
+    ndValRow('Filtrados', ev.filtered != null ? fmtNum(ev.filtered) : null),
+    ndValRow('Saída', ev.out != null ? fmtNum(ev.out) : null),
+    ndValRow('ms/evento', ev.avg_event_ms != null
+      ? `${fmtMs(ev.avg_event_ms)} <span class="nd-dim">· custo médio de processamento, comparável entre instâncias</span>`
+      : null),
+    ndValRow('Tempo total de processamento', ev.duration_ms ? fmtDuration(ev.duration_ms) : null, true),
+  ]);
+}
+
+function lsPipelineDefaultsSection(inst, defaults) {
+  const workers = defaults.workers != null ? defaults.workers : inst.default_workers;
+  const batch = defaults.batch_size != null ? defaults.batch_size : inst.default_batch_size;
+  return ndSection('fa-sliders', 'Configuração padrão do pipeline', [
+    ndValRow('pipeline.workers', workers != null
+      ? `${fmtNum(workers)} <span class="nd-dim">· threads que executam filtros e saídas</span>` : null),
+    ndValRow('pipeline.batch.size', batch != null
+      ? `${fmtNum(batch)} <span class="nd-dim">· eventos por batch; maior melhora a vazão e consome mais heap</span>` : null),
+    ndValRow('pipeline.batch.delay', defaults.batch_delay != null
+      ? `${fmtNum(defaults.batch_delay)} ms <span class="nd-dim">· espera antes de fechar um batch incompleto</span>` : null),
+    ndValRow('Reloads de configuração', (inst.detail || {}).reload_successes != null
+      ? `${fmtNum(inst.detail.reload_successes)} ok · <span class="${
+        inst.detail.reload_failures > 0 ? 'text-red' : 'nd-dim'}">${fmtNum(inst.detail.reload_failures)} com falha</span>`
+      : null),
+  ]);
+}
+
+// Health report: só existe com URL cadastrada e em versões que têm o endpoint.
+function lsHealthSection(inst) {
+  const health = inst.health;
+  if (!health || !health.available) return '';
+  const indicators = health.indicators || [];
+  return ndSection('fa-notes-medical', 'Health report', [
+    ndValRow('Avaliação do próprio Logstash', serviceStatusBadge(health.status)),
+    health.symptom ? ndValRow('Sintoma', escHtml(health.symptom)) : '',
+    ...indicators.map(i => ndWarnRow(
+      `<strong>${escHtml(i.name)}</strong>: ${escHtml(i.symptom || i.status)}`,
+      i.status === 'red' ? 'red' : 'yellow')),
+    indicators.length === 0 && health.status === 'green'
+      ? ndValRow('Indicadores', '<span class="text-green">todos verdes</span>') : '',
+  ]);
+}
+
+// Resumo dos pipelines desta instância — o detalhe completo (workers, DLQ,
+// reloads) fica na tabela da página, que já lista todos.
+function lsPipelinesSummarySection(inst) {
+  const pipes = inst.pipelines || [];
+  if (!pipes.length) return '';
+  const rows = pipes.map(p => {
+    const queue = p.queue_type === 'persisted'
+      ? `fila persistente${p.queue_pct != null ? ` ${p.queue_pct}%` : ''}`
+      : 'fila em memória';
+    const dlq = p.dlq_dropped ? ` · <span class="text-red">DLQ ${fmtNum(p.dlq_dropped)}</span>` : '';
+    return ndValRow(
+      `${escHtml(p.id)}${p.health_status ? ' ' + pipelineHealthBadge(p) : ''}`,
+      `${p.avg_event_ms != null ? fmtMs(p.avg_event_ms) : '—'}/evento ` +
+      `<span class="nd-dim">· ${fmtNum(p.events_out)} eventos de saída · ${queue}</span>${dlq}`);
+  });
+  return ndSection('fa-bezier-curve', `Pipelines (${pipes.length})`, rows);
 }
 
 // Pipelines, filas e DLQ só existem na API: sem URL cadastrada a seção explica
@@ -5269,6 +5695,8 @@ document.addEventListener('keydown', e => {
     if (sm && sm.style.display === 'flex') { closeSnapshotModal(); return; }
     const nm = document.getElementById('nodeModal');
     if (nm && nm.style.display === 'flex') { closeNodeModal(); return; }
+    const lsm = document.getElementById('lsInstanceModal');
+    if (lsm && lsm.style.display === 'flex') { closeLsInstanceModal(); return; }
     closeDetailModal(); closeTaskJsonModal(); closeAliasModal(); closeConfirmModal();
   }
   // Só faz sentido onde há dado ao vivo — a mesma lista da topbar, para uma

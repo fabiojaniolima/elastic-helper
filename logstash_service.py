@@ -239,6 +239,213 @@ def _node_metrics(stats):
     }
 
 
+# ─── Detalhe de uma instância (modal) ─────────────────────
+# A tabela da página mostra o que é comparável entre instâncias; o resto do que
+# o Logstash expõe sobre JVM, SO e processo só faz sentido olhando **uma**
+# instância por vez, e é o que este bloco monta.
+
+_POOL_ORDER = ('young', 'survivor', 'old')
+
+
+def _positive(val):
+    """Valor só quando positivo: a JVM usa **-1 para "sem limite"** (pools do G1,
+    `non_heap_max`, `cfs_quota_micros` fora de container) e -1 num denominador
+    viraria percentual negativo em vez de "não se aplica"."""
+    return val if isinstance(val, (int, float)) and not isinstance(val, bool) and val > 0 else None
+
+
+def _jvm_pools(mem):
+    """Pools da heap na ordem do ciclo de vida do objeto (young → survivor → old)."""
+    pools = mem.get('pools') or {}
+    out = []
+    for name in _POOL_ORDER:
+        pool = pools.get(name)
+        if not isinstance(pool, dict):
+            continue
+        used = (mc.scalar(pool.get('used_in_bytes'))
+                or mc.scalar(pool.get('used'), 'bytes'))
+        limit = _positive(mc.scalar(pool.get('max_in_bytes'))
+                          or mc.scalar(pool.get('max'), 'bytes'))
+        if used is None and limit is None:
+            continue
+        out.append({
+            'name': name,
+            'used': used,
+            'max': limit,
+            'peak_used': (mc.scalar(pool.get('peak_used_in_bytes'))
+                          or mc.scalar(pool.get('peak_used'), 'bytes')),
+            'pct': mc.pct(used, limit),
+        })
+    return out
+
+
+def _jvm_gc(jvm, uptime_ms):
+    """Coletas de GC **acumuladas desde o start**, com o overhead sobre o uptime.
+
+    Tempo de GC ÷ uptime é a fração da vida do processo gasta coletando — um
+    número honesto mesmo acumulado, porque numerador e denominador começam no
+    mesmo instante. É o sinal de heap apertada que a barra de heap não dá: 40%
+    de heap com 20% de overhead é pior do que 80% de heap sem GC.
+    """
+    collectors = []
+    total_ms = 0
+    total_count = 0
+    for name, info in (dig(jvm, 'gc', 'collectors') or {}).items():
+        if not isinstance(info, dict):
+            continue
+        count = mc.num(mc.scalar(info.get('collection_count')))
+        time_ms = mc.num(mc.scalar(info.get('collection_time_in_millis'))
+                         or mc.scalar(info.get('collection_time'), 'ms'))
+        collectors.append({'name': name, 'count': count, 'time_ms': time_ms,
+                           'avg_ms': round(time_ms / count, 1) if count else None})
+        total_ms += time_ms
+        total_count += count
+    if not collectors:
+        return None
+    collectors.sort(key=lambda c: c['name'])
+    return {'collectors': collectors, 'count': total_count, 'time_ms': total_ms,
+            'overhead_pct': mc.pct(total_ms, uptime_ms)}
+
+
+def _cgroup(os_stats):
+    """Limite de CPU e throttling do cgroup — existe só em container.
+
+    Com `cfs_quota` abaixo dos vCPUs do host, o Logstash tem menos CPU do que a
+    contagem de processadores sugere (e `pipeline.workers`, que segue essa
+    contagem, fica superdimensionado). O throttling é o sintoma direto: o
+    processo é parado ao fim de cada período em que estourou a cota.
+    """
+    cpu = dig(os_stats, 'cgroup', 'cpu') or {}
+    stat = cpu.get('stat') or {}
+    quota = _positive(mc.scalar(cpu.get('cfs_quota_micros')))
+    period = _positive(mc.scalar(cpu.get('cfs_period_micros')))
+    throttled = mc.scalar(stat.get('number_of_times_throttled'))
+    throttled_ns = mc.scalar(stat.get('time_throttled_nanos'))
+    if quota is None and throttled is None:
+        return None
+    return {
+        'control_group': cpu.get('control_group') or '',
+        'cpu_limit': round(quota / period, 2) if quota and period else None,
+        'throttled_pct': mc.pct(throttled, mc.scalar(stat.get('number_of_elapsed_periods'))),
+        'throttled_times': mc.num(throttled),
+        'throttled_ms': round(throttled_ns / 1e6) if throttled_ns else 0,
+    }
+
+
+# `flow` (Logstash 8.6+) é a **única taxa instantânea** que a API entrega
+# pronta: `current` é a janela recente calculada pelo próprio Logstash, ao lado
+# do `lifetime`, que é a média desde o start. É o que permite a modal mostrar
+# "agora" sem inventar uma taxa em cima de contador acumulado.
+_FLOW_KEYS = ('input_throughput', 'filter_throughput', 'output_throughput',
+              'queue_backpressure', 'worker_concurrency')
+
+
+def _flow(stats):
+    """Taxas da seção `flow`, quando a versão a expõe (vazio nas antigas)."""
+    flow = stats.get('flow') or {}
+    out = {}
+    for key in _FLOW_KEYS:
+        node = flow.get(key)
+        if not isinstance(node, dict):
+            continue
+        current = mc.scalar(node.get('current'))
+        lifetime = mc.scalar(node.get('lifetime'))
+        if current is None and lifetime is None:
+            continue
+        out[key] = {'current': current, 'lifetime': lifetime}
+    return out
+
+
+def _node_detail(stats):
+    """Detalhe do nó a partir de um payload no formato `/_node/stats`.
+
+    Como `_node_metrics`, serve às duas fontes — o self-monitoring grava o mesmo
+    desenho de objeto. O que só a API tem (SO, JVM estática) entra depois, por
+    `_node_info`.
+    """
+    jvm = stats.get('jvm') or {}
+    mem = jvm.get('mem') or {}
+    proc = stats.get('process') or {}
+    cpu = proc.get('cpu') or {}
+    load = cpu.get('load_average') or {}
+    reloads = stats.get('reloads') or {}
+    uptime_ms = (mc.scalar(jvm.get('uptime_in_millis'))
+                 or mc.scalar(jvm.get('uptime'), 'ms'))
+
+    return {
+        'jvm': {
+            'threads': mc.scalar(dig(jvm, 'threads', 'count')),
+            'threads_peak': mc.scalar(dig(jvm, 'threads', 'peak_count')),
+            'heap_committed': (mc.scalar(mem.get('heap_committed_in_bytes'))
+                               or mc.scalar(mem.get('heap_committed'), 'bytes')),
+            'non_heap_used': (mc.scalar(mem.get('non_heap_used_in_bytes'))
+                              or mc.scalar(mem.get('non_heap_used'), 'bytes')),
+            'non_heap_committed': (mc.scalar(mem.get('non_heap_committed_in_bytes'))
+                                   or mc.scalar(mem.get('non_heap_committed'), 'bytes')),
+            'pools': _jvm_pools(mem),
+            'gc': _jvm_gc(jvm, uptime_ms),
+        },
+        'process': {
+            'open_fds': mc.scalar(proc.get('open_file_descriptors')),
+            'peak_fds': mc.scalar(proc.get('peak_open_file_descriptors')),
+            'max_fds': mc.scalar(proc.get('max_file_descriptors')),
+            'virtual_bytes': mc.scalar(dig(proc, 'mem', 'total_virtual_in_bytes')),
+            'cpu_total_ms': (mc.scalar(cpu.get('total_in_millis'))
+                             or mc.scalar(cpu.get('total'), 'ms')),
+            'load_1m': mc.scalar(load.get('1m')),
+            'load_5m': mc.scalar(load.get('5m')),
+            'load_15m': mc.scalar(load.get('15m')),
+        },
+        'cgroup': _cgroup(stats.get('os') or {}),
+        'flow': _flow(stats),
+        'reload_successes': mc.num(mc.scalar(reloads.get('successes'))),
+        'reload_failures': mc.num(mc.scalar(reloads.get('failures'))),
+    }
+
+
+def _node_info(body):
+    """SO e JVM estáticos, de `GET /_node/os,jvm` — nenhuma outra fonte os tem.
+
+    A variante com os tipos na URL evita trazer a configuração completa dos
+    pipelines, que o `/_node` sem argumento devolve junto e não é usada aqui.
+    """
+    if not body:
+        return {}
+    os_info = body.get('os') or {}
+    jvm = body.get('jvm') or {}
+    mem = jvm.get('mem') or {}
+    return {
+        'os': {
+            'name': os_info.get('name') or '',
+            'arch': os_info.get('arch') or '',
+            'version': os_info.get('version') or '',
+            'processors': mc.scalar(os_info.get('available_processors')),
+        },
+        'jvm_info': {
+            'version': jvm.get('version') or '',
+            'vm_name': jvm.get('vm_name') or '',
+            'vm_vendor': jvm.get('vm_vendor') or '',
+            'vm_version': jvm.get('vm_version') or '',
+            'pid': mc.scalar(jvm.get('pid')),
+            'start_time_ms': mc.scalar(jvm.get('start_time_in_millis')),
+            'gc_collectors': [c for c in (jvm.get('gc_collectors') or [])
+                              if isinstance(c, str)],
+            # `heap_init` é o -Xms e `heap_max` o -Xmx: o Logstash recomenda os
+            # dois iguais, e é a comparação que o front faz.
+            'heap_init': mc.scalar(mem.get('heap_init_in_bytes')),
+            'heap_max': mc.scalar(mem.get('heap_max_in_bytes')),
+            'non_heap_init': mc.scalar(mem.get('non_heap_init_in_bytes')),
+            'non_heap_max': _positive(mc.scalar(mem.get('non_heap_max_in_bytes'))),
+        },
+        'pipeline_defaults': {
+            'workers': mc.scalar(dig(body, 'pipeline', 'workers')),
+            'batch_size': mc.scalar(dig(body, 'pipeline', 'batch_size')),
+            'batch_delay': mc.scalar(dig(body, 'pipeline', 'batch_delay')),
+        },
+        'ephemeral_id': body.get('ephemeral_id') or '',
+    }
+
+
 # ─── Coletores da API do Logstash ─────────────────────────
 def _collect_health(url, auth):
     """`/_health_report` — avaliação do próprio Logstash (8.x recentes).
@@ -307,6 +514,13 @@ def _collect_instance(url, auth):
     if health.get('available') and health.get('status'):
         result['status'] = health['status']
 
+    # SO e JVM estáticos para a modal de detalhe: falha aqui só deixa a modal
+    # sem essas seções, sem afetar nada da página.
+    detail = _node_detail(stats)
+    info, _ = _http_get(url, '/_node/os,jvm', auth)
+    detail.update(_node_info(info))
+    result['detail'] = detail
+
     # Configuração por pipeline (workers/batch) não vem no /_node/stats.
     config, _ = _http_get(url, '/_node/pipelines', auth)
     configs = dict(_iter_pipelines(dig(config, 'pipelines'))) if config else {}
@@ -350,6 +564,21 @@ def _monitoring_doc_fields(hit):
         'timestamp': src.get('timestamp') or src.get('@timestamp'),
     }
     doc.update(_node_metrics(stats))
+
+    detail = _node_detail(stats)
+    # O doc do Elastic Agent carrega o SO do host em ECS (`host.os.*`), que a
+    # API não é a única a saber: é o que dá a seção de SO à modal de uma
+    # instância sem URL cadastrada. O layout legacy não tem esses campos.
+    host_os = dig(src, 'host', 'os') or {}
+    arch = dig(src, 'host', 'architecture')
+    if host_os or arch:
+        detail['os'] = {
+            'name': host_os.get('name') or host_os.get('platform') or '',
+            'arch': arch or '',
+            'version': host_os.get('version') or '',
+            'processors': None,   # não vem no doc do serviço, só no do `system`
+        }
+    doc['detail'] = detail
     return doc
 
 
@@ -391,6 +620,17 @@ def _merge_instance(api, mon, sysm):
     def first(field, default=''):
         return mon.get(field) or api.get(field) or default
 
+    # O detalhe da modal vem **inteiro de uma fonte só**, ao contrário das
+    # métricas da tabela: misturar a heap de 15 minutos atrás (self-monitoring)
+    # com o GC de agora (API) daria uma foto internamente incoerente. A API
+    # vence quando existe — é a leitura ao vivo e a única com SO e JVM.
+    if api.get('detail'):
+        detail, detail_source = api['detail'], 'api'
+    elif mon.get('detail'):
+        detail, detail_source = mon['detail'], mon_src
+    else:
+        detail, detail_source = {}, ''
+
     return {
         'id': first('id'),
         'name': first('name'),
@@ -428,6 +668,9 @@ def _merge_instance(api, mon, sysm):
         'events': mon_ev or api_ev,
         'reload_failures': api.get('reload_failures') or mon.get('reload_failures') or 0,
         'health': api.get('health'),
+        # Bloco da modal de detalhe (JVM, SO, processo, flow) — ver `_node_detail`.
+        'detail': detail,
+        'detail_source': detail_source,
         # Pipelines só existem via API: o self-monitoring traz totais do nó.
         'pipelines': api.get('pipelines') or [],
     }

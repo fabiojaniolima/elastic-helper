@@ -2059,8 +2059,9 @@ input[type="checkbox"] {
 
 /* RAM/Heap: barras elásticas (preenchem o espaço) porém do mesmo tamanho entre si.
    Como só o texto varia de comprimento, reservamos uma largura fixa para ele —
-   assim a barra (flex:1) sobra igual nas duas linhas. */
-.nd-row--fixbar .nd-extra { flex: 0 0 auto; width: 210px; }
+   assim a barra (flex:1) sobra igual nas duas linhas. Com nowrap, um texto mais
+   longo que o previsto vazaria: corta com reticências. */
+.nd-row--fixbar .nd-extra { flex: 0 0 auto; width: 210px; overflow: hidden; text-overflow: ellipsis; }
 
 .nd-pct {
   font-size: 12px;
