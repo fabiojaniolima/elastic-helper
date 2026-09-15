@@ -20,6 +20,7 @@ Captura da tela "Sinais Vitais":
 | **Inventário** | Nós, volume de dados, documentos, índices, capacidade por tier de dados e configuração dos índices (sem réplica, sem ILM, shards primários grandes, ILM sem fase delete) |
 | **Diagnóstico** | Leitura interpretada dos mesmos dados: um card por problema encontrado, com severidade e link para o detalhe. Só aparece o que de fato ocorre |
 | **Kibana** | Instâncias do Kibana, Task Manager, Fleet e APM Server. Opcional — a página só aparece com a integração ativada |
+| **Logstash** | Instâncias, CPU/heap/FDs, vazão de eventos, pipelines, filas, dead letter queue e plugins mais lentos. Opcional — a página só aparece com a integração ativada |
 | **Configuração** | Integrações e preferências da conexão atual |
 | **Ajuda** | Documentação de cada card e de cada métrica exibida, com busca |
 
