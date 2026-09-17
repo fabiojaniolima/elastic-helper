@@ -1153,7 +1153,6 @@ const HELP_CONTENT = [
         summary: '<code>indices.recovery.max_bytes_per_sec</code> limita, <strong>por nó</strong>, o tráfego total de entrada e saída de recovery: cópia de réplicas, realocação de shards e restauração de snapshot. É o principal acelerador quando o cluster demora a voltar a GREEN depois da perda de um nó ou de uma manutenção.',
         data: [
           { label: 'Valor em MB', desc: 'A tela trabalha em megabytes por segundo e grava o valor como <code>&lt;n&gt;mb</code>. Se o cluster tiver um valor que não dá um número inteiro de MB (ex.: <code>512kb</code>), ele aparece como o Elasticsearch o devolveu.' },
-          { label: 'Padrão', desc: '<strong>40 MB/s</strong>. Nós dedicados aos tiers <strong>cold</strong> ou <strong>frozen</strong> usam um padrão maior, proporcional à memória do nó — mas um valor aplicado aqui vale para <strong>todos</strong> os nós, inclusive esses.' },
           { label: 'Quando aumentar', desc: 'Recovery lento com rede e disco folgados — confira a modal de recovery e o uso de disco dos nós. Aumentos graduais (ex.: 100, 200 MB) são mais seguros que saltos grandes.' },
           { label: 'Risco de exagerar', desc: 'O tráfego de recovery disputa rede e I/O de disco com indexação e busca: latência sobe e, em discos lentos, as filas de escrita podem rejeitar requisições. Restaure o padrão quando o recovery terminar.' },
         ],
@@ -1162,7 +1161,6 @@ const HELP_CONTENT = [
         id: 'help-cluster-rebalance', q: 'Rebalanceamentos simultâneos',
         summary: '<code>cluster.routing.allocation.cluster_concurrent_rebalance</code> define quantas realocações de shard <strong>para rebalanceamento</strong> podem acontecer ao mesmo tempo no <strong>cluster inteiro</strong>. Não limita movimentações causadas por filtros de alocação ou forced awareness.',
         data: [
-          { label: 'Padrão', desc: '<strong>2</strong>.' },
           { label: 'Quando aumentar', desc: 'Depois de adicionar nós, para o cluster redistribuir os shards mais rápido. O ritmo real também depende de <strong>Recoveries simultâneas por nó</strong> e da <strong>velocidade de recovery</strong>: aumentar só este valor pode não acelerar nada.' },
           { label: 'Risco de exagerar', desc: 'Mais shards em movimento ao mesmo tempo significam mais rede e disco ocupados com cópia, disputando com a carga de produção.' },
         ],
@@ -1171,7 +1169,6 @@ const HELP_CONTENT = [
         id: 'help-cluster-node-recoveries', q: 'Recoveries simultâneas por nó',
         summary: '<code>cluster.routing.allocation.node_concurrent_recoveries</code> define quantas recoveries de shard um nó pode receber <strong>e</strong> enviar ao mesmo tempo. É um atalho que ajusta juntos <code>node_concurrent_incoming_recoveries</code> e <code>node_concurrent_outgoing_recoveries</code> — se um desses estiver definido explicitamente, ele prevalece para o seu sentido.',
         data: [
-          { label: 'Padrão', desc: '<strong>2</strong>. A própria Elastic não recomenda mudar esse valor.' },
           { label: 'Quando aumentar', desc: 'Raramente vale a pena. Cada recovery a mais divide a mesma banda de <strong>velocidade de recovery</strong> do nó: sem aumentar aquele limite, mais recoveries simultâneas só ficam individualmente mais lentas.' },
           { label: 'Risco de exagerar', desc: 'Pressão de rede, disco e heap no nó, com impacto em indexação e busca, sem necessariamente terminar as movimentações mais cedo.' },
         ],
@@ -5741,21 +5738,21 @@ const CLUSTER_TUNABLE_META = {
     icon: 'fa-gauge-high',
     helpTopic: 'help-cluster-recovery-speed',
     desc: 'Limite de tráfego de recovery <strong>por nó</strong> — cópia de réplicas, realocação e restauração de snapshot. É o principal acelerador para o cluster voltar a GREEN.',
-    tip: 'Limita, por nó, a banda usada para copiar shards. Aumentar acelera o recovery, mas disputa rede e disco com indexação e busca. Padrão: <strong>40 MB/s</strong> (maior em nós dedicados cold/frozen).',
+    tip: 'Limita, por nó, a banda usada para copiar shards. Aumentar acelera o recovery, mas disputa rede e disco com indexação e busca.',
   },
   'cluster.routing.allocation.cluster_concurrent_rebalance': {
     label: 'Rebalanceamentos simultâneos',
     icon: 'fa-scale-balanced',
     helpTopic: 'help-cluster-rebalance',
     desc: 'Quantos shards podem ser movidos <strong>para rebalanceamento</strong> ao mesmo tempo no cluster inteiro.',
-    tip: 'Vale para o cluster todo e só para rebalanceamento — não limita movimentações por filtro de alocação. Padrão: <strong>2</strong>.',
+    tip: 'Vale para o cluster todo e só para rebalanceamento — não limita movimentações por filtro de alocação.',
   },
   'cluster.routing.allocation.node_concurrent_recoveries': {
     label: 'Recoveries simultâneas por nó',
     icon: 'fa-arrow-right-arrow-left',
     helpTopic: 'help-cluster-node-recoveries',
     desc: 'Quantas recoveries de shard cada nó pode receber e enviar ao mesmo tempo.',
-    tip: 'Ajusta juntos os limites de entrada e saída por nó. Mais recoveries dividem a mesma banda de recovery do nó. Padrão: <strong>2</strong> — a Elastic não recomenda mudar.',
+    tip: 'Ajusta juntos os limites de entrada e saída por nó. Mais recoveries dividem a mesma banda de recovery do nó. A Elastic não recomenda mudar o padrão.',
   },
 };
 
@@ -5901,8 +5898,7 @@ async function restoreClusterTunable(idx) {
   const item = clusterSettings[idx];
   const ok = await showConfirm({
     title: 'Restaurar padrão',
-    message: `Restaurar ${item.key} de ${clusterValueText(item, item.value, item.raw)} para o padrão ` +
-      `(${clusterValueText(item, item.default, item.default_raw)})? A mudança vale imediatamente para todo o cluster.` +
+    message: `Restaurar ${item.key} ao valor padrão? A mudança vale imediatamente para todo o cluster.` +
       (item.transient_raw !== null ? CLUSTER_TRANSIENT_NOTE : ''),
     confirmLabel: 'Restaurar padrão',
   });
