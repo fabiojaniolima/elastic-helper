@@ -2530,6 +2530,67 @@ input[type="checkbox"] {
   gap: 10px;
 }
 
+/* ─── Página Cluster: ajustes de _cluster/settings (reusa o layout .cfg-section) ─── */
+.cluster-tunable-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.cluster-tunable-status strong { color: var(--text); }
+
+.cluster-tunable-warn {
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--yellow);
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+.cluster-tunable-warn i { margin-top: 3px; }
+
+.cluster-tunable-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cluster-tunable-row input { padding: 5px 10px; font-size: 13px; }
+/* Sem estilo global de :disabled no app: aqui ele carrega significado (nada a aplicar / já é o padrão) */
+.cluster-tunable-row .btn:disabled,
+.cluster-tunable-row .btn:disabled:hover {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--blue-dim);
+}
+.cluster-tunable-row .btn-ghost:disabled,
+.cluster-tunable-row .btn-ghost:disabled:hover { background: transparent; color: var(--text-muted); }
+.cluster-tunable-msg { margin: 10px 0 0; }
+
+/* Campo com unidade colada à direita (ex.: MB) */
+.input-with-suffix { display: flex; align-items: stretch; width: 160px; }
+.input-with-suffix input { min-width: 0; }
+.input-with-suffix input:has(+ .input-suffix) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.input-suffix {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 /* Com a sidebar ocupando ~248px, abaixo disso a coluna de campos fica estreita demais */
 @media (max-width: 980px) {
   .cfg-section { grid-template-columns: 1fr; gap: 14px; }

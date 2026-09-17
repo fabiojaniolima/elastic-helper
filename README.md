@@ -21,6 +21,7 @@ Captura da tela "Sinais Vitais":
 | **Diagnóstico** | Leitura interpretada dos mesmos dados: um card por problema encontrado, com severidade e link para o detalhe. Só aparece o que de fato ocorre |
 | **Kibana** | Instâncias do Kibana, Task Manager, Fleet e APM Server. Opcional — a página só aparece com a integração ativada |
 | **Logstash** | Instâncias, CPU/heap/FDs, vazão de eventos, pipelines, filas, dead letter queue e plugins mais lentos. Opcional — a página só aparece com a integração ativada |
+| **Cluster** | Ajustes de `_cluster/settings` que o Kibana não expõe: velocidade de recovery e concorrência de rebalanceamento e de recoveries por nó. Cada valor pode ser aplicado ou restaurado ao padrão, sempre com confirmação |
 | **Configuração** | Integrações e preferências da conexão atual |
 | **Ajuda** | Documentação de cada card e de cada métrica exibida, com busca |
 

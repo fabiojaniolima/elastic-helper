@@ -205,6 +205,14 @@
         <span class="nav-item-text">Logstash</span>
       </div>
 
+      <!-- Administração: páginas que alteram o cluster (as de Monitoramento só leem) -->
+      <div class="nav-group-label">Administração</div>
+      <div class="nav-item" id="nav-cluster" onclick="showPage('cluster')">
+        <span class="nav-item-bar"></span>
+        <i class="fas fa-gears nav-item-icon"></i>
+        <span class="nav-item-text">Cluster</span>
+      </div>
+
       <div class="nav-group-label">Suporte</div>
       <div class="nav-item" id="nav-config" onclick="showPage('config')">
         <span class="nav-item-bar"></span>
@@ -295,6 +303,10 @@
       <!-- ========== LOGSTASH ========== -->
       <!-- Conteúdo gerado por renderLogstash() a partir de /api/logstash/dashboard -->
       <section class="page page-logstash" id="page-logstash" hidden></section>
+
+      <!-- ========== CLUSTER ========== -->
+      <!-- Conteúdo gerado por loadCluster() → renderCluster() a partir de /api/cluster/settings -->
+      <section class="page page-cluster" id="page-cluster" hidden></section>
 
       <!-- ========== CONFIGURAÇÃO ========== -->
       <!-- Conteúdo gerado por renderConfig() a partir de /api/<integração>/config -->

@@ -591,13 +591,14 @@ const PAGE_META = {
   insights: { title: 'Diagnóstico', subtitle: 'Leitura interpretada dos dados do cluster — o que merece atenção' },
   kibana:   { title: 'Kibana', subtitle: 'Instâncias, Task Manager, frota do Fleet e APM Server' },
   logstash: { title: 'Logstash', subtitle: 'Instâncias, vazão de eventos, pipelines, filas e DLQ' },
+  cluster:  { title: 'Cluster', subtitle: 'Ajustes de _cluster/settings que o Kibana não expõe' },
   config:   { title: 'Configuração', subtitle: 'Integrações e preferências desta conexão' },
   help:     { title: 'Ajuda', subtitle: 'O que cada métrica significa e como agir' },
 };
 
-const PAGES = ['overview', 'capacity', 'insights', 'kibana', 'logstash', 'config', 'help'];
+const PAGES = ['overview', 'capacity', 'insights', 'kibana', 'logstash', 'cluster', 'config', 'help'];
 // Páginas com dados ao vivo: ganham timestamp e botão de refresh na topbar.
-const REFRESHABLE_PAGES = new Set(['overview', 'capacity', 'kibana', 'logstash']);
+const REFRESHABLE_PAGES = new Set(['overview', 'capacity', 'kibana', 'logstash', 'cluster']);
 
 function showPage(page) {
   if (!PAGE_META[page]) return;
@@ -624,6 +625,8 @@ function showPage(page) {
   // As integrações e a Configuração têm fonte própria (/api/<integração>/*).
   if (page === 'kibana') loadKibana();
   if (page === 'logstash') loadLogstash();
+  // Cluster lê _cluster/settings na hora: o valor em vigor pode ter mudado por fora.
+  if (page === 'cluster') loadCluster();
   if (page === 'config') renderConfig();
   // Reflete a página na URL (hash) para preservar no refresh e permitir compartilhar o link.
   if (location.hash.slice(1) !== page) {
@@ -1131,6 +1134,50 @@ const HELP_CONTENT = [
       },
     ],
   },
+  {
+    label: 'Página Cluster', icon: 'fa-gears',
+    topics: [
+      {
+        id: 'help-cluster-page', q: 'Ajustes do cluster',
+        summary: 'Configurações de <code>_cluster/settings</code> que o Kibana não expõe em tela. Diferente das demais páginas, esta <strong>altera o cluster</strong>: toda mudança vale na hora para todos os nós e pede confirmação antes de ser enviada.',
+        data: [
+          { label: 'Em vigor e origem', desc: 'O valor que o cluster está usando agora e de onde ele vem: <strong>Padrão</strong> (ninguém alterou), <strong>Persistente</strong> (alterado e mantido após restart do cluster) ou <strong>Transient</strong> (alterado, mas perdido no restart completo do cluster — forma descontinuada desde o ES 8). A precedência é a do Elasticsearch: transient vence persistent, que vence o padrão.' },
+          { label: 'Aplicar', desc: 'Grava o valor como <strong>persistent</strong>, uma propriedade por vez. Se houver um valor <strong>transient</strong> na mesma chave, ele é removido junto — senão teria precedência e o valor aplicado não entraria em vigor. Um valor persistente <strong>não volta sozinho</strong> ao padrão: ajuste feito para uma manutenção precisa ser desfeito depois.' },
+          { label: 'Restaurar padrão', desc: 'Envia <code>null</code> para a chave (persistent e, se existir, transient), que é como o Elasticsearch remove a sobrescrita e volta ao valor padrão. Fica desabilitado quando o valor já é o padrão.' },
+          { label: 'Somente inteiros ≥ 1', desc: 'Os valores especiais ficam fora de propósito: <code>0</code> tiraria o limite de velocidade do recovery, travaria as recoveries ou desligaria o rebalanceamento, e <code>-1</code> deixaria o rebalanceamento sem limite. Se precisar deles, use a API diretamente.' },
+          { label: 'Permissão', desc: 'Alterar exige o privilégio de cluster <code>manage</code>. Sem ele, o erro do Elasticsearch (normalmente 403) aparece na própria linha e nada é alterado.' },
+        ],
+      },
+      {
+        id: 'help-cluster-recovery-speed', q: 'Velocidade de recovery',
+        summary: '<code>indices.recovery.max_bytes_per_sec</code> limita, <strong>por nó</strong>, o tráfego total de entrada e saída de recovery: cópia de réplicas, realocação de shards e restauração de snapshot. É o principal acelerador quando o cluster demora a voltar a GREEN depois da perda de um nó ou de uma manutenção.',
+        data: [
+          { label: 'Valor em MB', desc: 'A tela trabalha em megabytes por segundo e grava o valor como <code>&lt;n&gt;mb</code>. Se o cluster tiver um valor que não dá um número inteiro de MB (ex.: <code>512kb</code>), ele aparece como o Elasticsearch o devolveu.' },
+          { label: 'Padrão', desc: '<strong>40 MB/s</strong>. Nós dedicados aos tiers <strong>cold</strong> ou <strong>frozen</strong> usam um padrão maior, proporcional à memória do nó — mas um valor aplicado aqui vale para <strong>todos</strong> os nós, inclusive esses.' },
+          { label: 'Quando aumentar', desc: 'Recovery lento com rede e disco folgados — confira a modal de recovery e o uso de disco dos nós. Aumentos graduais (ex.: 100, 200 MB) são mais seguros que saltos grandes.' },
+          { label: 'Risco de exagerar', desc: 'O tráfego de recovery disputa rede e I/O de disco com indexação e busca: latência sobe e, em discos lentos, as filas de escrita podem rejeitar requisições. Restaure o padrão quando o recovery terminar.' },
+        ],
+      },
+      {
+        id: 'help-cluster-rebalance', q: 'Rebalanceamentos simultâneos',
+        summary: '<code>cluster.routing.allocation.cluster_concurrent_rebalance</code> define quantas realocações de shard <strong>para rebalanceamento</strong> podem acontecer ao mesmo tempo no <strong>cluster inteiro</strong>. Não limita movimentações causadas por filtros de alocação ou forced awareness.',
+        data: [
+          { label: 'Padrão', desc: '<strong>2</strong>.' },
+          { label: 'Quando aumentar', desc: 'Depois de adicionar nós, para o cluster redistribuir os shards mais rápido. O ritmo real também depende de <strong>Recoveries simultâneas por nó</strong> e da <strong>velocidade de recovery</strong>: aumentar só este valor pode não acelerar nada.' },
+          { label: 'Risco de exagerar', desc: 'Mais shards em movimento ao mesmo tempo significam mais rede e disco ocupados com cópia, disputando com a carga de produção.' },
+        ],
+      },
+      {
+        id: 'help-cluster-node-recoveries', q: 'Recoveries simultâneas por nó',
+        summary: '<code>cluster.routing.allocation.node_concurrent_recoveries</code> define quantas recoveries de shard um nó pode receber <strong>e</strong> enviar ao mesmo tempo. É um atalho que ajusta juntos <code>node_concurrent_incoming_recoveries</code> e <code>node_concurrent_outgoing_recoveries</code> — se um desses estiver definido explicitamente, ele prevalece para o seu sentido.',
+        data: [
+          { label: 'Padrão', desc: '<strong>2</strong>. A própria Elastic não recomenda mudar esse valor.' },
+          { label: 'Quando aumentar', desc: 'Raramente vale a pena. Cada recovery a mais divide a mesma banda de <strong>velocidade de recovery</strong> do nó: sem aumentar aquele limite, mais recoveries simultâneas só ficam individualmente mais lentas.' },
+          { label: 'Risco de exagerar', desc: 'Pressão de rede, disco e heap no nó, com impacto em indexação e busca, sem necessariamente terminar as movimentações mais cedo.' },
+        ],
+      },
+    ],
+  },
 ];
 
 function renderHelpItem(t) {
@@ -1289,6 +1336,7 @@ async function loadCapacity() {
 function refreshCurrentPage() {
   if (currentPage === 'kibana') return loadKibana();
   if (currentPage === 'logstash') return loadLogstash();
+  if (currentPage === 'cluster') return loadCluster();
   if (currentPage === 'capacity') return loadCapacity();
   return loadDashboard();
 }
@@ -5681,6 +5729,211 @@ async function saveIntegrationConfig(key) {
   } finally {
     btn.disabled = false;
     btn.innerHTML = original;
+  }
+}
+
+// ─── Página Cluster: ajustes de _cluster/settings ─────────
+// A lista de chaves permitidas vive no backend (CLUSTER_TUNABLES); aqui fica só
+// a apresentação. Chave sem entrada aqui ainda aparece, com a própria chave como nome.
+const CLUSTER_TUNABLE_META = {
+  'indices.recovery.max_bytes_per_sec': {
+    label: 'Velocidade de recovery',
+    icon: 'fa-gauge-high',
+    helpTopic: 'help-cluster-recovery-speed',
+    desc: 'Limite de tráfego de recovery <strong>por nó</strong> — cópia de réplicas, realocação e restauração de snapshot. É o principal acelerador para o cluster voltar a GREEN.',
+    tip: 'Limita, por nó, a banda usada para copiar shards. Aumentar acelera o recovery, mas disputa rede e disco com indexação e busca. Padrão: <strong>40 MB/s</strong> (maior em nós dedicados cold/frozen).',
+  },
+  'cluster.routing.allocation.cluster_concurrent_rebalance': {
+    label: 'Rebalanceamentos simultâneos',
+    icon: 'fa-scale-balanced',
+    helpTopic: 'help-cluster-rebalance',
+    desc: 'Quantos shards podem ser movidos <strong>para rebalanceamento</strong> ao mesmo tempo no cluster inteiro.',
+    tip: 'Vale para o cluster todo e só para rebalanceamento — não limita movimentações por filtro de alocação. Padrão: <strong>2</strong>.',
+  },
+  'cluster.routing.allocation.node_concurrent_recoveries': {
+    label: 'Recoveries simultâneas por nó',
+    icon: 'fa-arrow-right-arrow-left',
+    helpTopic: 'help-cluster-node-recoveries',
+    desc: 'Quantas recoveries de shard cada nó pode receber e enviar ao mesmo tempo.',
+    tip: 'Ajusta juntos os limites de entrada e saída por nó. Mais recoveries dividem a mesma banda de recovery do nó. Padrão: <strong>2</strong> — a Elastic não recomenda mudar.',
+  },
+};
+
+const CLUSTER_ORIGIN_BADGE = {
+  default:    '<span class="badge badge-gray">Padrão</span>',
+  persistent: '<span class="badge badge-blue">Persistente</span>',
+  transient:  '<span class="badge badge-yellow">Transient</span>',
+};
+
+let clusterSettings = null;
+
+async function loadCluster() {
+  const page = document.getElementById('page-cluster');
+  const icon = document.getElementById('refreshIcon');
+  if (icon) icon.classList.add('spin');
+  page.innerHTML = `<div class="loading-state">
+    <i class="fas fa-circle-notch fa-spin"></i>
+    <span>Carregando configurações do cluster...</span>
+  </div>`;
+
+  try {
+    const res = await fetch('/api/cluster/settings');
+    if (res.status === 401) { location.reload(); return; }
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    clusterSettings = data.settings;
+    renderCluster();
+    document.getElementById('lastUpdated').textContent =
+      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) {
+    clusterSettings = null;
+    page.innerHTML = `<div class="error-state">
+      <i class="fas fa-triangle-exclamation"></i>
+      <p>Configurações do cluster indisponíveis: ${escHtml(e.message)}</p>
+    </div>`;
+  } finally {
+    if (icon) icon.classList.remove('spin');
+  }
+}
+
+// Valor legível: número na unidade da tela; o texto cru do ES quando a conversão
+// não deu inteiro (ex.: '512kb'); '—' quando o cluster não informou.
+function clusterValueText(item, value, raw) {
+  if (value !== null && value !== undefined) return item.unit === 'mb' ? `${value} MB` : String(value);
+  return raw || '—';
+}
+
+function renderCluster() {
+  const page = document.getElementById('page-cluster');
+  if (!page || !clusterSettings) return;
+  page.innerHTML = `<div class="config-page">
+    <div class="kb-warning">
+      <i class="fas fa-circle-info"></i>
+      <div>As alterações desta página valem <strong>na hora, para todo o cluster</strong>, e são gravadas como <strong>persistent</strong> — continuam valendo após restart até alguém restaurar o padrão.</div>
+    </div>
+    ${clusterSettings.map(clusterTunableHtml).join('')}
+  </div>`;
+}
+
+function clusterTunableHtml(item, idx) {
+  const meta = CLUSTER_TUNABLE_META[item.key] || { label: item.key, icon: 'fa-gear', desc: '', tip: '' };
+  const current = clusterValueText(item, item.value, item.raw);
+  const transientWarn = item.transient_raw !== null
+    ? `<div class="cluster-tunable-warn">
+         <i class="fas fa-triangle-exclamation"></i>
+         <span>Há um valor <strong>transient</strong> (<code>${escHtml(item.transient_raw)}</code>) nesta chave. Ele tem precedência e se perde num restart completo do cluster; aplicar ou restaurar o padrão o remove.</span>
+       </div>`
+    : '';
+  const input = `<input type="text" inputmode="numeric" id="clusterInput-${idx}" autocomplete="off"
+      value="${item.value ?? ''}" placeholder="${item.default ?? ''}"
+      oninput="clusterInputChanged(${idx}, this)"
+      onkeydown="if(event.key==='Enter' && !document.getElementById('clusterApply-${idx}').disabled) applyClusterTunable(${idx})">`;
+
+  return `<section class="cfg-section">
+      <div class="cfg-section-info">
+        <div class="cfg-section-title">
+          <i class="fas ${meta.icon}"></i>
+          <span>${meta.label}</span>
+          ${tooltip(`<code>${escHtml(item.key)}</code><br><br>${meta.tip}`, meta.helpTopic)}
+        </div>
+        <p class="cfg-section-desc">${meta.desc}</p>
+      </div>
+      <div class="cfg-section-fields">
+        <div class="cluster-tunable-status">
+          <span>Em vigor: <strong>${escHtml(current)}</strong></span>
+          ${CLUSTER_ORIGIN_BADGE[item.origin] || ''}
+        </div>
+        ${transientWarn}
+        <div class="cluster-tunable-row">
+          ${item.unit === 'mb'
+            ? `<div class="input-with-suffix">${input}<span class="input-suffix" title="Megabytes por segundo">MB</span></div>`
+            : `<div class="input-with-suffix">${input}</div>`}
+          <button class="btn btn-primary btn-sm" id="clusterApply-${idx}" onclick="applyClusterTunable(${idx})" disabled>
+            <i class="fas fa-check"></i> Aplicar
+          </button>
+          <button class="btn btn-ghost btn-sm" id="clusterRestore-${idx}" onclick="restoreClusterTunable(${idx})"
+            ${item.origin === 'default' ? 'disabled title="O valor já é o padrão"' : ''}>
+            <i class="fas fa-rotate-left"></i> Restaurar padrão
+          </button>
+        </div>
+        <div class="error-msg cluster-tunable-msg" id="clusterMsg-${idx}"></div>
+      </div>
+    </section>`;
+}
+
+// Inteiro ≥ mínimo, ou null quando o campo não é um valor aplicável.
+function clusterInputValue(idx) {
+  const item = clusterSettings[idx];
+  const text = document.getElementById(`clusterInput-${idx}`).value;
+  if (!/^\d+$/.test(text)) return null;
+  const n = parseInt(text, 10);
+  return n >= item.min ? n : null;
+}
+
+function clusterInputChanged(idx, el) {
+  const digits = el.value.replace(/\D/g, '');
+  if (digits !== el.value) el.value = digits;
+  const item = clusterSettings[idx];
+  const n = clusterInputValue(idx);
+  // Com transient na chave, reaplicar o mesmo número ainda muda algo: move o valor para persistent.
+  const changes = n !== null && (n !== item.value || item.transient_raw !== null);
+  document.getElementById(`clusterApply-${idx}`).disabled = !changes;
+}
+
+const CLUSTER_TRANSIENT_NOTE = ' O valor transient desta chave também será removido.';
+
+async function applyClusterTunable(idx) {
+  const item = clusterSettings[idx];
+  const n = clusterInputValue(idx);
+  if (n === null) return;
+  const next = clusterValueText(item, n, null);
+  const ok = await showConfirm({
+    title: 'Aplicar configuração',
+    message: `Alterar ${item.key} de ${clusterValueText(item, item.value, item.raw)} para ${next}? ` +
+      'A mudança vale imediatamente para todo o cluster e fica gravada como persistent.' +
+      (item.transient_raw !== null ? CLUSTER_TRANSIENT_NOTE : ''),
+    confirmLabel: 'Aplicar',
+  });
+  if (ok) await putClusterTunable(idx, n, `Aplicado: ${next}`);
+}
+
+async function restoreClusterTunable(idx) {
+  const item = clusterSettings[idx];
+  const ok = await showConfirm({
+    title: 'Restaurar padrão',
+    message: `Restaurar ${item.key} de ${clusterValueText(item, item.value, item.raw)} para o padrão ` +
+      `(${clusterValueText(item, item.default, item.default_raw)})? A mudança vale imediatamente para todo o cluster.` +
+      (item.transient_raw !== null ? CLUSTER_TRANSIENT_NOTE : ''),
+    confirmLabel: 'Restaurar padrão',
+  });
+  if (ok) await putClusterTunable(idx, null, 'Padrão restaurado');
+}
+
+async function putClusterTunable(idx, value, successText) {
+  const item = clusterSettings[idx];
+  const msg = document.getElementById(`clusterMsg-${idx}`);
+  for (const id of [`clusterApply-${idx}`, `clusterRestore-${idx}`]) {
+    document.getElementById(id).disabled = true;
+  }
+
+  try {
+    const res = await fetch('/api/cluster/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: item.key, value }),
+    });
+    if (res.status === 401) { location.reload(); return; }
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Não foi possível alterar a configuração');
+    clusterSettings = data.settings;
+    // renderCluster recria o DOM: a mensagem vai no elemento novo, pelo índice.
+    renderCluster();
+    showTempMsg(document.getElementById(`clusterMsg-${idx}`), successText, 'success');
+  } catch (e) {
+    // Nada mudou no estado conhecido: os botões voltam como estavam.
+    clusterInputChanged(idx, document.getElementById(`clusterInput-${idx}`));
+    document.getElementById(`clusterRestore-${idx}`).disabled = item.origin === 'default';
+    showMsg(msg, e.message, 'error');
   }
 }
 

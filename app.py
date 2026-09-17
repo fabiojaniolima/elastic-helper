@@ -298,6 +298,55 @@ def api_snapshots():
         return jsonify({'error': str(e)}), 500
 
 
+# ─── Ajustes de cluster (página Cluster) ──────────────────
+def _es_error_response(e):
+    """Repassa o status e o motivo de um erro do ES (ex.: 403 sem privilégio
+    `manage`); o que não veio do ES vira 500 com a mensagem da exceção."""
+    status = getattr(getattr(e, 'meta', None), 'status', None)
+    body = getattr(e, 'body', None)
+    reason = None
+    if isinstance(body, dict):
+        error = body.get('error')
+        reason = error.get('reason') if isinstance(error, dict) else error
+    if isinstance(status, int) and 400 <= status < 600:
+        return jsonify({'success': False, 'error': reason or str(e)}), status
+    return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cluster/settings', methods=['GET'])
+def api_cluster_settings_get():
+    err = require_es()
+    if err:
+        return err
+    try:
+        return jsonify({'settings': es_service.cluster_tunables()})
+    except Exception as e:
+        return _es_error_response(e)
+
+
+@app.route('/api/cluster/settings', methods=['PUT'])
+def api_cluster_settings_put():
+    """Aplica (`value` inteiro) ou restaura o padrão (`value` null) de um ajuste."""
+    err = require_es()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    key = data.get('key')
+    if key not in es_service.CLUSTER_TUNABLES:
+        return jsonify({'success': False, 'error': 'Configuração não permitida nesta tela'}), 400
+    if 'value' not in data:
+        return jsonify({'success': False, 'error': 'value é obrigatório (inteiro, ou null para restaurar o padrão)'}), 400
+    value = data['value']
+    minimum = es_service.CLUSTER_TUNABLES[key]['min']
+    # bool é subclasse de int: True passaria como 1 sem essa exclusão.
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < minimum):
+        return jsonify({'success': False, 'error': f'Informe um número inteiro maior ou igual a {minimum}'}), 400
+    try:
+        return jsonify({'success': True, 'settings': es_service.set_cluster_tunable(key, value)})
+    except Exception as e:
+        return _es_error_response(e)
+
+
 # ─── Integrações (Kibana e Logstash) ──────────────────────
 # As duas se comportam igual: config por conexão ES salva, teste de uma URL
 # isolada e um dashboard próprio. Numa conexão ad-hoc que não casa com nenhuma

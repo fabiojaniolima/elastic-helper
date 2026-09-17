@@ -1357,6 +1357,101 @@ def cancel_task(task_id):
     _client.tasks.cancel(task_id=task_id)
 
 
+# ─── Ajustes de cluster (página Cluster) ──────────────────
+# Lista fechada do que a página pode alterar: a chave nunca vem livre do payload.
+# `unit='mb'` indica que a tela trabalha em megabytes e o valor é gravado como
+# '<n>mb'; sem unidade, o inteiro vai direto. `min=1` barra de propósito os
+# valores especiais (0 tira o limite do recovery, trava recoveries ou desliga o
+# rebalanceamento; -1 deixa o rebalanceamento sem limite).
+CLUSTER_TUNABLES = {
+    'indices.recovery.max_bytes_per_sec': {'unit': 'mb', 'min': 1},
+    'cluster.routing.allocation.cluster_concurrent_rebalance': {'unit': None, 'min': 1},
+    'cluster.routing.allocation.node_concurrent_recoveries': {'unit': None, 'min': 1},
+}
+
+_BYTE_UNITS = {'b': 1, 'kb': 1024, 'mb': 1024 ** 2, 'gb': 1024 ** 3, 'tb': 1024 ** 4, 'pb': 1024 ** 5}
+
+
+def _bytes_to_mb(value):
+    """'40mb' → 40, '1gb' → 1024. None quando não é um byte size ou não dá um
+    número inteiro de MB (ex.: '512kb') — a tela mostra então o valor original."""
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    num = text.rstrip('abcdefghijklmnopqrstuvwxyz')
+    unit = text[len(num):] or 'b'
+    if unit not in _BYTE_UNITS:
+        return None
+    try:
+        total = float(num) * _BYTE_UNITS[unit]
+    except ValueError:
+        return None
+    mb = total / _BYTE_UNITS['mb']
+    return int(mb) if mb == int(mb) else None
+
+
+def _tunable_number(key, value):
+    """Valor como a tela o exibe: MB para byte sizes, inteiro para contagens."""
+    if value is None:
+        return None
+    if CLUSTER_TUNABLES[key]['unit'] == 'mb':
+        return _bytes_to_mb(value)
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return None
+
+
+def cluster_tunables():
+    """Estado de cada ajuste de CLUSTER_TUNABLES: valor em vigor, de onde vem e o padrão.
+
+    A precedência é a do próprio ES: transient > persistent > padrão. `raw` guarda
+    o texto como o cluster devolveu, para quando a conversão não der número inteiro."""
+    body = _client.cluster.get_settings(flat_settings=True, include_defaults=True).body
+    persistent = body.get('persistent') or {}
+    transient = body.get('transient') or {}
+    defaults = body.get('defaults') or {}
+    result = []
+    for key, spec in CLUSTER_TUNABLES.items():
+        if key in transient:
+            origin, raw = 'transient', transient[key]
+        elif key in persistent:
+            origin, raw = 'persistent', persistent[key]
+        else:
+            origin, raw = 'default', defaults.get(key)
+        default_raw = defaults.get(key)
+        result.append({
+            'key': key,
+            'unit': spec['unit'],
+            'min': spec['min'],
+            'origin': origin,
+            'raw': None if raw is None else str(raw),
+            'value': _tunable_number(key, raw),
+            'default_raw': None if default_raw is None else str(default_raw),
+            'default': _tunable_number(key, default_raw),
+            'persistent_raw': None if key not in persistent else str(persistent[key]),
+            'transient_raw': None if key not in transient else str(transient[key]),
+        })
+    return result
+
+
+def set_cluster_tunable(key, value):
+    """Grava um ajuste como persistent; `value=None` restaura o padrão.
+
+    Um transient da mesma chave teria precedência e esconderia o valor gravado,
+    então ele é removido junto — só quando existe, para não gerar o aviso de
+    depreciação de transient à toa. Devolve o estado relido do cluster."""
+    spec = CLUSTER_TUNABLES[key]
+    if value is not None and spec['unit'] == 'mb':
+        value = f'{value}mb'
+    current = _client.cluster.get_settings(flat_settings=True).body
+    kwargs = {'persistent': {key: value}}
+    if key in (current.get('transient') or {}):
+        kwargs['transient'] = {key: None}
+    _client.cluster.put_settings(**kwargs)
+    return cluster_tunables()
+
+
 # ─── Detalhe de um nó específico ──────────────────────────
 def node_detail(node_name):
     """Coleta paralela de nodes.info + nodes.stats filtrados para um único nó.
