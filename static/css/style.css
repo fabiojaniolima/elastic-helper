@@ -903,7 +903,7 @@ input[type="checkbox"] {
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  width: 400px;
+  width: 440px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
