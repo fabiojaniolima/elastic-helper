@@ -5463,8 +5463,10 @@ function logstashPluginsSection(d) {
 }
 
 // ═══════════════════ CONFIGURAÇÃO ═════════════════════════
-// Uma seção por integração, cada uma com seu próprio rodapé de Salvar: são
-// configurações independentes e salvar uma não deve arrastar a outra.
+// Uma seção por integração: o cabeçalho leva o nome e o switch de ativação, e
+// as configurações daquela integração ficam recuadas logo abaixo, marcando a
+// que seção pertencem. O formulário é um só — um único rodapé Cancelar/Salvar
+// no fim da página grava todas as integrações.
 async function renderConfig() {
   const page = document.getElementById('page-config');
   if (!page) return;
@@ -5503,6 +5505,17 @@ async function renderConfig() {
   page.innerHTML = `<div class="config-page">
     ${notPersistable}
     ${keys.map(integrationConfigHtml).join('')}
+    <div class="cfg-footer">
+      <div class="error-msg" id="configMsg"></div>
+      <div class="cfg-footer-actions">
+        <button class="btn btn-ghost" onclick="cfgResetDrafts()" title="Descarta as alterações não salvas">
+          Cancelar
+        </button>
+        <button class="btn btn-primary" id="configSaveBtn" onclick="saveIntegrationsConfig()">
+          <i class="fas fa-floppy-disk"></i> Salvar
+        </button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -5531,78 +5544,66 @@ function integrationConfigHtml(key) {
       </div>`).join('')
     : `<div class="cfg-empty">${meta.emptyInstances}</div>`;
 
-  return `<section class="cfg-section">
-      <div class="cfg-section-info">
-        <div class="cfg-section-title">
-          <i class="fas ${meta.icon}"></i>
-          <span>${meta.label}</span>
-          ${tooltip(meta.switchTip, meta.helpTopic)}
+  return `<section class="cfg-group">
+      <header class="cfg-group-header">
+        <div class="cfg-group-info">
+          <div class="cfg-group-title">
+            <i class="fas ${meta.icon}"></i>
+            <span>${meta.label}</span>
+            ${tooltip(meta.switchTip, meta.helpTopic)}
+          </div>
+          <p class="cfg-group-desc">${meta.switchDesc}</p>
         </div>
-        <p class="cfg-section-desc">${meta.switchDesc}</p>
-      </div>
-      <div class="cfg-section-fields">
         <label class="cfg-switch">
           <input type="checkbox" id="${key}Enabled" ${draft.enabled ? 'checked' : ''}
             onchange="cfgToggleEnabled('${key}', this.checked)">
           <span class="cfg-switch-track"></span>
           <span class="cfg-switch-text" id="${key}EnabledLabel">${draft.enabled ? 'Ativado' : 'Desativado'}</span>
         </label>
-      </div>
-    </section>
+      </header>
 
-    <div id="${key}Fields" ${draft.enabled ? '' : 'hidden'}>
-      <section class="cfg-section">
-        <div class="cfg-section-info">
-          <div class="cfg-section-title"><i class="fas fa-key"></i><span>Acesso</span></div>
-          <p class="cfg-section-desc">${meta.accessDesc}</p>
-        </div>
-        <div class="cfg-section-fields">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Usuário${meta.userRequired ? '' : ' <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span>'}</label>
-              <input type="text" id="${key}Username" value="${escHtml(draft.username || '')}"
-                placeholder="elastic" autocomplete="username"
-                oninput="integrationDraft['${key}'].username = this.value">
-            </div>
-            <div class="form-group">
-              <label>Senha</label>
-              ${locked
-                ? `<button type="button" class="btn btn-ghost btn-full" onclick="cfgEnablePasswordChange('${key}')">
-                     <i class="fas fa-key"></i> Alterar senha
-                   </button>`
-                : `<input type="password" id="${key}Password" value="${escHtml(draft.password || '')}"
-                     placeholder="••••••••" autocomplete="current-password"
-                     oninput="integrationDraft['${key}'].password = this.value; integrationDraft['${key}'].passwordDirty = true">`}
+      <div class="cfg-group-body" id="${key}Fields" ${draft.enabled ? '' : 'hidden'}>
+        <section class="cfg-section">
+          <div class="cfg-section-info">
+            <div class="cfg-section-title"><i class="fas fa-key"></i><span>Acesso</span></div>
+            <p class="cfg-section-desc">${meta.accessDesc}</p>
+          </div>
+          <div class="cfg-section-fields">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Usuário${meta.userRequired ? '' : ' <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span>'}</label>
+                <input type="text" id="${key}Username" value="${escHtml(draft.username || '')}"
+                  placeholder="elastic" autocomplete="username"
+                  oninput="integrationDraft['${key}'].username = this.value">
+              </div>
+              <div class="form-group">
+                <label>Senha</label>
+                ${locked
+                  ? `<button type="button" class="btn btn-ghost btn-full" onclick="cfgEnablePasswordChange('${key}')">
+                       <i class="fas fa-key"></i> Alterar senha
+                     </button>`
+                  : `<input type="password" id="${key}Password" value="${escHtml(draft.password || '')}"
+                       placeholder="••••••••" autocomplete="current-password"
+                       oninput="integrationDraft['${key}'].password = this.value; integrationDraft['${key}'].passwordDirty = true">`}
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="cfg-section">
-        <div class="cfg-section-info">
-          <div class="cfg-section-title"><i class="fas fa-server"></i><span>Instâncias</span></div>
-          <p class="cfg-section-desc">${meta.instancesDesc}</p>
-        </div>
-        <div class="cfg-section-fields">
-          <div class="cfg-instance-list">${urlRows}</div>
-          <button class="btn btn-ghost btn-sm cfg-add-btn" onclick="cfgAddUrl('${key}')">
-            <i class="fas fa-plus"></i> Adicionar instância
-          </button>
-        </div>
-      </section>
-    </div>
-
-    <div class="cfg-footer">
-      <div class="error-msg" id="${key}ConfigMsg"></div>
-      <div class="cfg-footer-actions">
-        <button class="btn btn-ghost" onclick="cfgResetDraft('${key}')">
-          <i class="fas fa-rotate-left"></i> Descartar alterações
-        </button>
-        <button class="btn btn-primary" id="${key}SaveBtn" onclick="saveIntegrationConfig('${key}')">
-          <i class="fas fa-floppy-disk"></i> Salvar ${meta.label}
-        </button>
+        <section class="cfg-section">
+          <div class="cfg-section-info">
+            <div class="cfg-section-title"><i class="fas fa-server"></i><span>Instâncias</span></div>
+            <p class="cfg-section-desc">${meta.instancesDesc}</p>
+          </div>
+          <div class="cfg-section-fields">
+            <div class="cfg-instance-list">${urlRows}</div>
+            <button class="btn btn-ghost btn-sm cfg-add-btn" onclick="cfgAddUrl('${key}')">
+              <i class="fas fa-plus"></i> Adicionar instância
+            </button>
+          </div>
+        </section>
       </div>
-    </div>`;
+    </section>`;
 }
 
 function cfgToggleEnabled(key, checked) {
@@ -5645,8 +5646,9 @@ async function cfgRemoveUrl(key, idx) {
   renderConfig();
 }
 
-function cfgResetDraft(key) {
-  integrationDraft[key] = null;
+// Cancelar: descarta o draft de todas as integrações e volta ao que está salvo.
+function cfgResetDrafts() {
+  for (const key of Object.keys(INTEGRATIONS)) integrationDraft[key] = null;
   renderConfig();
 }
 
@@ -5687,46 +5689,55 @@ async function cfgTestUrl(key, idx) {
   }
 }
 
-async function saveIntegrationConfig(key) {
-  const btn = document.getElementById(`${key}SaveBtn`);
-  const msg = document.getElementById(`${key}ConfigMsg`);
-  const draft = integrationDraft[key];
-  const original = btn.innerHTML;
+// Um Salvar para a página inteira. As rotas continuam sendo uma por integração
+// (`PUT /api/<key>/config`), então os PUTs são independentes: quem falhar mantém
+// o draft para nova tentativa e o erro é reportado junto com o resto.
+async function saveIntegrationsConfig() {
+  const btn = document.getElementById('configSaveBtn');
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
 
-  const payload = {
-    enabled: draft.enabled,
-    username: draft.username,
-    instances: draft.instances.filter(i => i.url.trim()).map(i => ({ url: i.url.trim() })),
-  };
-  if (draft.passwordDirty) payload.password = draft.password;
+  const errors = [];
+  let saved = 0;
+  for (const key of Object.keys(INTEGRATIONS)) {
+    const draft = integrationDraft[key];
+    if (!draft) continue;
 
-  try {
-    const res = await fetch(`/api/${key}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!data.success) {
-      showMsg(msg, data.error || 'Não foi possível salvar', 'error');
-      return;
+    const payload = {
+      enabled: draft.enabled,
+      username: draft.username,
+      instances: draft.instances.filter(i => i.url.trim()).map(i => ({ url: i.url.trim() })),
+    };
+    if (draft.passwordDirty) payload.password = draft.password;
+
+    try {
+      const res = await fetch(`/api/${key}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        errors.push(`${INTEGRATIONS[key].label}: ${data.error || 'não foi possível salvar'}`);
+        continue;
+      }
+      integrationConfig[key] = data.config;
+      integrationDraft[key] = null;
+      applyIntegrationNav(key);
+      // A página da integração precisa refletir as URLs novas na próxima visita.
+      integrationData[key] = null;
+      saved++;
+    } catch (e) {
+      errors.push(`${INTEGRATIONS[key].label}: ${e.message}`);
     }
-    integrationConfig[key] = data.config;
-    integrationDraft[key] = null;
-    applyIntegrationNav(key);
-    // renderConfig recria o DOM da página: só depois dá para escrever a mensagem.
-    await renderConfig();
-    showTempMsg(document.getElementById(`${key}ConfigMsg`), 'Configuração salva', 'success');
-    // A página da integração precisa refletir as URLs novas na próxima visita.
-    integrationData[key] = null;
-  } catch (e) {
-    showMsg(msg, e.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = original;
   }
+
+  // renderConfig recria o DOM da página (o botão inclusive): só depois dá para
+  // escrever a mensagem.
+  await renderConfig();
+  const msg = document.getElementById('configMsg');
+  if (errors.length) showMsg(msg, errors.join(' · '), 'error');
+  else if (saved) showTempMsg(msg, 'Configuração salva', 'success');
 }
 
 // ─── Página Cluster: ajustes de _cluster/settings ─────────

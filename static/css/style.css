@@ -2398,7 +2398,47 @@ input[type="checkbox"] {
 }
 .kb-warning i { color: var(--blue); margin-top: 2px; }
 
-/* ─── Página Configuração: seções (rótulo à esquerda, controles à direita) ─── */
+/* ─── Página Configuração: um grupo por integração ───
+   O cabeçalho do grupo leva o nome e o switch de ativação; as configurações
+   ficam recuadas logo abaixo, com um filete à esquerda marcando a que grupo
+   pertencem — é ele que delimita o grupo, sem divisor sob o cabeçalho. O
+   rodapé de ações é único, no fim da página. */
+.cfg-group + .cfg-group { margin-top: 40px; }
+
+.cfg-group-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  padding-bottom: 18px;
+}
+.cfg-group-info { min-width: 0; }
+.cfg-group-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--text);
+}
+.cfg-group-title i { color: var(--blue); font-size: 15px; }
+.cfg-group-desc {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.65;
+  margin-top: 6px;
+  max-width: 80ch;
+}
+.cfg-group-header .cfg-switch { flex-shrink: 0; padding-top: 2px; }
+
+.cfg-group-body {
+  margin-left: 22px;
+  padding-left: 24px;
+  border-left: 2px solid var(--border);
+}
+.cfg-group-body > .cfg-section:first-child { border-top: none; }
+
+/* ─── Seções (rótulo à esquerda, controles à direita) ─── */
 /* Sem max-width próprio: as seções ocupam toda a largura da área de conteúdo. */
 .cfg-section {
   display: grid;
@@ -2523,6 +2563,7 @@ input[type="checkbox"] {
   padding-top: 18px;
   margin-top: 8px;
 }
+.cfg-group + .cfg-footer { margin-top: 30px; }
 .cfg-footer .error-msg { margin-bottom: 12px; }
 .cfg-footer-actions {
   display: flex;
@@ -2594,6 +2635,8 @@ input[type="checkbox"] {
 /* Com a sidebar ocupando ~248px, abaixo disso a coluna de campos fica estreita demais */
 @media (max-width: 980px) {
   .cfg-section { grid-template-columns: 1fr; gap: 14px; }
+  .cfg-group-header { flex-direction: column; gap: 14px; }
+  .cfg-group-body { margin-left: 0; padding-left: 14px; }
   .cfg-footer-actions { flex-direction: column-reverse; }
   .cfg-footer-actions .btn { width: 100%; }
 }
