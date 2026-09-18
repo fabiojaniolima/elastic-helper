@@ -319,7 +319,12 @@ def api_cluster_settings_get():
     if err:
         return err
     try:
-        return jsonify({'settings': es_service.cluster_tunables()})
+        # `shard_budget` degrada para None sozinho: o contexto de uso some da tela,
+        # mas a leitura das configurações continua.
+        return jsonify({
+            'settings': es_service.cluster_tunables(),
+            'shard_budget': es_service.shard_budget(),
+        })
     except Exception as e:
         return _es_error_response(e)
 

@@ -568,6 +568,15 @@ def classify_index_block(flat_settings):
 
 # ─── Dashboard ────────────────────────────────────────────
 DATA_ROLES = {'data', 'data_hot', 'data_warm', 'data_cold', 'data_frozen', 'data_content'}
+NON_FROZEN_DATA_ROLES = DATA_ROLES - {'data_frozen'}
+
+
+def _is_dedicated_frozen(roles):
+    """Nó dedicado ao tier frozen: role `data_frozen` sem nenhuma outra role de
+    dados. Espelha `isDedicatedFrozen` do app.js — os dois lados precisam separar
+    esses nós, que respondem a limites e semânticas próprios."""
+    roles = set(roles or ())
+    return 'data_frozen' in roles and not NON_FROZEN_DATA_ROLES & roles
 
 # Fontes de dados do dashboard: nome interno → (fetcher, default quando falha).
 # `health` é a única sem default: é crítica e a exceção propaga para a rota.
@@ -1362,11 +1371,13 @@ def cancel_task(task_id):
 # `unit='mb'` indica que a tela trabalha em megabytes e o valor é gravado como
 # '<n>mb'; sem unidade, o inteiro vai direto. `min=1` barra de propósito os
 # valores especiais (0 tira o limite do recovery, trava recoveries ou desliga o
-# rebalanceamento; -1 deixa o rebalanceamento sem limite).
+# rebalanceamento; -1 deixa o rebalanceamento sem limite) e, no limite de shards,
+# coincide com o mínimo que o próprio ES aceita.
 CLUSTER_TUNABLES = {
     'indices.recovery.max_bytes_per_sec': {'unit': 'mb', 'min': 1},
     'cluster.routing.allocation.cluster_concurrent_rebalance': {'unit': None, 'min': 1},
     'cluster.routing.allocation.node_concurrent_recoveries': {'unit': None, 'min': 1},
+    'cluster.max_shards_per_node': {'unit': None, 'min': 1},
 }
 
 _BYTE_UNITS = {'b': 1, 'kb': 1024, 'mb': 1024 ** 2, 'gb': 1024 ** 3, 'tb': 1024 ** 4, 'pb': 1024 ** 5}
@@ -1450,6 +1461,72 @@ def set_cluster_tunable(key, value):
         kwargs['transient'] = {key: None}
     _client.cluster.put_settings(**kwargs)
     return cluster_tunables()
+
+
+def shard_budget():
+    """Contexto de `cluster.max_shards_per_node`: quantos shards abertos o cluster
+    já tem e sobre quantos nós o limite se multiplica.
+
+    O teto do cluster é `limite × nós de dados`, e o multiplicador **não** entra
+    aqui de propósito: o front o calcula a partir do valor em vigor, para a barra
+    acompanhar o novo limite logo após o PUT sem uma releitura do cluster.
+
+    Nós dedicados a frozen ficam fora da conta — eles respondem a
+    `cluster.max_shards_per_node.frozen`, um limite separado.
+
+    Devolve `None` quando alguma das fontes falha: a seção aparece sem o contexto,
+    nunca com zero (que seria lido como "não há shards").
+    """
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_indices = pool.submit(fetch_cat_indices)
+        f_nodes = pool.submit(fetch_nodes_info)
+    # `_collect` não serve aqui: seus defaults ([] e {}) tornam falha e vazio
+    # indistinguíveis, e "cluster sem índices" precisa ficar diferente de
+    # "a chamada falhou".
+    indices = safe_result(f_indices, None)
+    nodes_info = safe_result(f_nodes, None)
+    if indices is None or nodes_info is None:
+        return None
+
+    data_nodes = frozen_nodes = 0
+    for info in (nodes_info.get('nodes') or {}).values():
+        roles = set(info.get('roles', []))
+        if not DATA_ROLES & roles:
+            continue
+        if _is_dedicated_frozen(roles):
+            frozen_nodes += 1
+        else:
+            data_nodes += 1
+    if not data_nodes:
+        return None
+
+    # O limite do ES conta shards de índices **abertos** (primários + réplicas
+    # configuradas, alocadas ou não). Índices fechados ficam de fora — por isso o
+    # número diverge do "Total de Shards" dos Sinais Vitais, que soma todos.
+    open_shards = oversharded = oversharded_shards = 0
+    for i in indices:
+        if i.get('status') != 'open':
+            continue
+        pri = safe_int(i.get('pri'))
+        rep = safe_int(i.get('rep'))
+        shards = pri * (1 + rep)
+        open_shards += shards
+        # Mesma regra do Inventário (`_block_indices`): a passagem já está feita.
+        pri_store = safe_int(i.get('pri.store.size'))
+        if pri > 1 and pri_store > 0 and (pri_store / pri) < GB_1:
+            oversharded += 1
+            # O que pesa no teto são os shards, não os índices: dez índices
+            # oversharded de 100 shards ocupam mais que trezentos de dois. É essa
+            # soma que diz se corrigir o oversharding mudaria o número.
+            oversharded_shards += shards
+
+    return {
+        'open_shards': open_shards,
+        'data_nodes': data_nodes,
+        'frozen_nodes': frozen_nodes,
+        'oversharded_indices': oversharded,
+        'oversharded_shards': oversharded_shards,
+    }
 
 
 # ─── Detalhe de um nó específico ──────────────────────────

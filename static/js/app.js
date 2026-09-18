@@ -1144,7 +1144,7 @@ const HELP_CONTENT = [
           { label: 'Em vigor e origem', desc: 'O valor que o cluster está usando agora e de onde ele vem: <strong>Padrão</strong> (ninguém alterou), <strong>Persistente</strong> (alterado e mantido após restart do cluster) ou <strong>Transient</strong> (alterado, mas perdido no restart completo do cluster — forma descontinuada desde o ES 8). A precedência é a do Elasticsearch: transient vence persistent, que vence o padrão.' },
           { label: 'Aplicar', desc: 'Grava o valor como <strong>persistent</strong>, uma propriedade por vez. Se houver um valor <strong>transient</strong> na mesma chave, ele é removido junto — senão teria precedência e o valor aplicado não entraria em vigor. Um valor persistente <strong>não volta sozinho</strong> ao padrão: ajuste feito para uma manutenção precisa ser desfeito depois.' },
           { label: 'Restaurar padrão', desc: 'Envia <code>null</code> para a chave (persistent e, se existir, transient), que é como o Elasticsearch remove a sobrescrita e volta ao valor padrão. Fica desabilitado quando o valor já é o padrão.' },
-          { label: 'Somente inteiros ≥ 1', desc: 'Os valores especiais ficam fora de propósito: <code>0</code> tiraria o limite de velocidade do recovery, travaria as recoveries ou desligaria o rebalanceamento, e <code>-1</code> deixaria o rebalanceamento sem limite. Se precisar deles, use a API diretamente.' },
+          { label: 'Somente inteiros ≥ 1', desc: 'Os valores especiais ficam fora de propósito: <code>0</code> tiraria o limite de velocidade do recovery, travaria as recoveries ou desligaria o rebalanceamento, e <code>-1</code> deixaria o rebalanceamento sem limite. No <strong>limite de shards por nó</strong>, <code>1</code> é também o mínimo que o próprio Elasticsearch aceita. Se precisar dos valores especiais, use a API diretamente.' },
           { label: 'Permissão', desc: 'Alterar exige o privilégio de cluster <code>manage</code>. Sem ele, o erro do Elasticsearch (normalmente 403) aparece na própria linha e nada é alterado.' },
         ],
       },
@@ -1171,6 +1171,17 @@ const HELP_CONTENT = [
         data: [
           { label: 'Quando aumentar', desc: 'Raramente vale a pena. Cada recovery a mais divide a mesma banda de <strong>velocidade de recovery</strong> do nó: sem aumentar aquele limite, mais recoveries simultâneas só ficam individualmente mais lentas.' },
           { label: 'Risco de exagerar', desc: 'Pressão de rede, disco e heap no nó, com impacto em indexação e busca, sem necessariamente terminar as movimentações mais cedo.' },
+        ],
+      },
+      {
+        id: 'help-cluster-max-shards', q: 'Limite de shards por nó',
+        summary: '<code>cluster.max_shards_per_node</code> é o teto de <strong>shards abertos por nó de dados</strong>. Multiplicado pelo número de nós de dados, dá o teto do cluster inteiro. Diferente dos demais ajustes desta página, ele não afeta a recuperação: ao ser atingido, a <strong>criação de índices falha</strong> — com o erro <code>this action would add [N] total shards, but this cluster currently has [X]/[Y] maximum shards open</code>. Quem sente primeiro costuma ser o rollover do ILM ou o índice do dia seguinte, e o sintoma chega como "parou de indexar", sem nada vermelho na saúde do cluster.',
+        data: [
+          { label: 'Uso atual', desc: 'A barra mostra quantos shards abertos o cluster já tem sobre o teto em vigor (limite × nós de dados), com as mesmas faixas de cor do resto da aplicação: verde abaixo de 65%, amarelo até 80%, vermelho a partir daí. <strong>Só índices abertos contam</strong> — por isso o número pode divergir do "Total de Shards" dos Sinais Vitais, que inclui os fechados.' },
+          { label: 'Nós frozen', desc: 'Nós que servem <strong>apenas</strong> ao tier frozen não entram no cálculo: esse tier tem um teto separado, <code>cluster.max_shards_per_node.frozen</code>, que esta tela não altera. Um nó que acumule o frozen com outro tier de dados (ex.: <code>data_frozen</code> + <code>data_warm</code>) conta normalmente. Havendo nós de fora, a nota abaixo da barra informa quantos são.' },
+          { label: 'Quando aumentar', desc: 'Raramente é a correção certa. O teto existe para conter a proliferação de shards, e cada shard custa heap e metadados no master — atingir o limite quase sempre significa <strong>shards demais, pequenos demais</strong>. Reduzir shards (menos primários, ILM com rollover por tamanho, <code>_shrink</code>) resolve; subir o teto adia. Aumentar é defensável como medida temporária para destravar a ingestão enquanto a causa é tratada, ou quando o cluster cresceu em nós e o valor foi fixado há muito tempo.' },
+          { label: 'Aviso de oversharding', desc: 'Aparece só quando <strong>as duas</strong> condições valem: o uso do teto está em <strong>65%</strong> ou mais (o mesmo ponto em que a barra fica amarela) <strong>e</strong> ao menos <strong>20% dos shards abertos</strong> estão em índices com oversharding. O percentual é de <strong>shards</strong>, não de índices, porque é ele que diz quanto do teto se recuperaria ao corrigi-los — dez índices oversharded de 100 shards pesam mais que trezentos de dois. Fora desse recorte o aviso não aparece: com o teto folgado ninguém vai aumentá-lo, e com pouco oversharding corrigi-lo não aproximaria o cluster do limite. O <strong>Inventário</strong> lista os índices em qualquer caso.' },
+          { label: 'Valor abaixo do uso atual', desc: 'É aceito, e pode ser intencional — congelar o crescimento de um cluster. Nada é desalocado: os shards existentes continuam servindo e o cluster segue funcionando; o efeito aparece só na próxima criação de índice ou rollover, que falha. Por ser um efeito de gatilho atrasado, a confirmação desse caso vem em vermelho.' },
         ],
       },
     ],
@@ -5765,6 +5776,13 @@ const CLUSTER_TUNABLE_META = {
     desc: 'Quantas recoveries de shard cada nó pode receber e enviar ao mesmo tempo.',
     tip: 'Ajusta juntos os limites de entrada e saída por nó. Mais recoveries dividem a mesma banda de recovery do nó. A Elastic não recomenda mudar o padrão.',
   },
+  'cluster.max_shards_per_node': {
+    label: 'Limite de shards por nó',
+    icon: 'fa-layer-group',
+    helpTopic: 'help-cluster-max-shards',
+    desc: 'Teto de shards abertos por nó de dados. Atingi-lo faz a <strong>criação de índices falhar</strong> — inclusive o rollover do ILM e o índice do dia seguinte.',
+    tip: 'Multiplicado pelo número de nós de dados, dá o teto do cluster inteiro. Nós que servem apenas ao tier frozen ficam fora da conta: esse tier tem limite próprio (<code>cluster.max_shards_per_node.frozen</code>).',
+  },
 };
 
 const CLUSTER_ORIGIN_BADGE = {
@@ -5774,6 +5792,10 @@ const CLUSTER_ORIGIN_BADGE = {
 };
 
 let clusterSettings = null;
+// Contexto de uso de shards (só a seção do limite usa). Vem do GET e é preservado
+// no PUT: o numerador não muda ao aplicar um limite novo, só o teto — que o front
+// recalcula. Null quando o backend não conseguiu apurá-lo.
+let clusterShardBudget = null;
 
 async function loadCluster() {
   const page = document.getElementById('page-cluster');
@@ -5790,11 +5812,13 @@ async function loadCluster() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     clusterSettings = data.settings;
+    clusterShardBudget = data.shard_budget || null;
     renderCluster();
     document.getElementById('lastUpdated').textContent =
       'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
   } catch (e) {
     clusterSettings = null;
+    clusterShardBudget = null;
     page.innerHTML = `<div class="error-state">
       <i class="fas fa-triangle-exclamation"></i>
       <p>Configurações do cluster indisponíveis: ${escHtml(e.message)}</p>
@@ -5809,6 +5833,96 @@ async function loadCluster() {
 function clusterValueText(item, value, raw) {
   if (value !== null && value !== undefined) return item.unit === 'mb' ? `${value} MB` : String(value);
   return raw || '—';
+}
+
+// A única chave com contexto de uso na tela; o resto da página é agnóstico a ela.
+const MAX_SHARDS_KEY = 'cluster.max_shards_per_node';
+
+// Recortes do aviso de oversharding — números são decisão, não acaso. O aviso é o
+// contraponto ao ato de subir o teto, não um alerta de saúde (isso é o Diagnóstico),
+// então ele só aparece quando as duas coisas valem:
+//   · o teto já pressiona (65%, o mesmo limiar amarelo que a barra logo acima usa);
+//   · corrigir o oversharding mudaria o número — ao menos 20% dos shards abertos
+//     estão nesses índices. Abaixo disso, reduzi-los não aproxima o cluster do teto,
+//     e afirmar que "subir o limite adia o problema" seria falso.
+const OVERSHARD_WARN_USAGE_PCT = 65;
+const OVERSHARD_WARN_SHARE_PCT = 20;
+
+// Quanto do teto já está em uso. O teto é calculado aqui — limite em vigor × nós
+// de dados — e não vem do backend: assim a barra acompanha o valor recém-aplicado
+// sem uma releitura do cluster. Null quando não há teto numérico para dividir.
+function clusterBudgetUsage(item) {
+  const b = clusterShardBudget;
+  if (!b || item.key !== MAX_SHARDS_KEY) return null;
+  if (item.value === null || item.value === undefined) return null;
+  const allowed = item.value * b.data_nodes;
+  return { allowed, pct: allowed > 0 ? Math.round((b.open_shards / allowed) * 100) : 0 };
+}
+
+function clusterBudgetHtml(item) {
+  const b = clusterShardBudget;
+  if (!b || item.key !== MAX_SHARDS_KEY) return '';
+  const usedText = fmtNum(b.open_shards);
+  // Índices fechados não contam para o limite do ES; daí a divergência com o
+  // "Total de Shards" dos Sinais Vitais, que soma todos.
+  const openTip = 'Só índices abertos contam para o limite. Por isso este número pode ' +
+    'divergir do "Total de Shards" dos Sinais Vitais, que inclui os fechados.';
+  // "Dedicado a frozen" é o nome do conceito no código (isDedicatedFrozen), não
+  // linguagem de tela: aqui vale dizer o que o leitor consegue conferir — nó que
+  // só serve ao tier frozen. A ressalva do nó que acumula tiers fica na Ajuda.
+  const n = b.frozen_nodes;
+  const frozenNote = n > 0
+    ? ` ${fmtNum(n)} ${n > 1 ? 'nós que servem apenas ao tier frozen ficaram' : 'nó que serve apenas ao tier frozen ficou'} de fora: esse tier tem limite próprio (<code>cluster.max_shards_per_node.frozen</code>).`
+    : '';
+
+  // Sem um limite numérico em vigor (valor cru que não vira inteiro) não há
+  // denominador: mostra o uso sem barra, em vez de inventar uma fração.
+  const usage = clusterBudgetUsage(item);
+  if (!usage) {
+    return `<div class="cluster-tunable-budget">
+        <div class="ctb-line"><span title="${escHtml(openTip)}">Uso atual: <strong>${usedText}</strong> shards abertos em ${fmtNum(b.data_nodes)} nós de dados</span></div>
+        <p class="ctb-note">${frozenNote.trim()}</p>
+      </div>`;
+  }
+
+  const { allowed, pct } = usage;
+  const color = pctColor(pct);
+  return `<div class="cluster-tunable-budget">
+      <div class="ctb-line">
+        <span title="${escHtml(openTip)}">Uso atual: <strong>${usedText}</strong> de <strong>${fmtNum(allowed)}</strong> shards abertos</span>
+        <strong class="ctb-pct text-${color}">${pct}%</strong>
+      </div>
+      <div class="progress-bar"><div class="progress-fill progress-${color}" style="width:${Math.min(pct, 100)}%"></div></div>
+      <p class="ctb-note">${fmtNum(allowed)} = ${fmtNum(item.value)} × ${fmtNum(b.data_nodes)} nós de dados.${frozenNote}</p>
+    </div>`;
+}
+
+// Oversharding é a causa que subir o teto costuma mascarar. O aviso mede a fração
+// de **shards** nesses índices (não de índices): é ela que diz quanto do teto se
+// recuperaria ao corrigi-los, e é o número que a mensagem mostra.
+function clusterOvershardingHtml(item) {
+  const b = clusterShardBudget;
+  if (!b || item.key !== MAX_SHARDS_KEY || !b.oversharded_indices || !b.open_shards) return '';
+  const usage = clusterBudgetUsage(item);
+  if (!usage || usage.pct < OVERSHARD_WARN_USAGE_PCT) return '';
+  const share = Math.round((b.oversharded_shards / b.open_shards) * 100);
+  if (share < OVERSHARD_WARN_SHARE_PCT) return '';
+  return `<div class="cluster-tunable-warn">
+      <i class="fas fa-triangle-exclamation"></i>
+      <span><strong>${share}%</strong> dos shards abertos (${fmtNum(b.oversharded_shards)}) estão em
+        ${fmtNum(b.oversharded_indices)} índice(s) com oversharding — vários shards primários com média abaixo de 1 GB.
+        Reduzi-los libera espaço no teto; subir o limite adia o problema. O <strong>Inventário</strong> lista quais são.</span>
+    </div>`;
+}
+
+// Novo teto abaixo do que já está em uso: devolve os números do aviso, ou null.
+function clusterBudgetShortfall(item, n) {
+  const b = clusterShardBudget;
+  if (!b || item.key !== MAX_SHARDS_KEY) return null;
+  const allowed = n * b.data_nodes;
+  return allowed < b.open_shards
+    ? { allowed, used: b.open_shards, nodes: b.data_nodes }
+    : null;
 }
 
 function renderCluster() {
@@ -5851,6 +5965,8 @@ function clusterTunableHtml(item, idx) {
           <span>Em vigor: <strong>${escHtml(current)}</strong></span>
           ${CLUSTER_ORIGIN_BADGE[item.origin] || ''}
         </div>
+        ${clusterBudgetHtml(item)}
+        ${clusterOvershardingHtml(item)}
         ${transientWarn}
         <div class="cluster-tunable-row">
           ${item.unit === 'mb'
@@ -5895,12 +6011,21 @@ async function applyClusterTunable(idx) {
   const n = clusterInputValue(idx);
   if (n === null) return;
   const next = clusterValueText(item, n, null);
+  // Teto abaixo do uso atual é legítimo (congelar crescimento), mas o efeito não é
+  // óbvio: a confirmação diz o que de fato acontece em vez de barrar o caminho.
+  const short = clusterBudgetShortfall(item, n);
+  const message = short
+    ? `${fmtNum(short.used)} shards abertos já ultrapassam o novo limite de ${fmtNum(short.allowed)} ` +
+      `(${fmtNum(n)} × ${fmtNum(short.nodes)} nós de dados). Nada é desalocado: o cluster continua ` +
+      'funcionando, mas a próxima criação de índice ou rollover do ILM vai falhar. ' +
+      'A mudança vale imediatamente para todo o cluster e fica gravada como persistent.'
+    : `Alterar ${item.key} de ${clusterValueText(item, item.value, item.raw)} para ${next}? ` +
+      'A mudança vale imediatamente para todo o cluster e fica gravada como persistent.';
   const ok = await showConfirm({
     title: 'Aplicar configuração',
-    message: `Alterar ${item.key} de ${clusterValueText(item, item.value, item.raw)} para ${next}? ` +
-      'A mudança vale imediatamente para todo o cluster e fica gravada como persistent.' +
-      (item.transient_raw !== null ? CLUSTER_TRANSIENT_NOTE : ''),
-    confirmLabel: 'Aplicar',
+    message: message + (item.transient_raw !== null ? CLUSTER_TRANSIENT_NOTE : ''),
+    confirmLabel: short ? 'Aplicar assim mesmo' : 'Aplicar',
+    danger: !!short,
   });
   if (ok) await putClusterTunable(idx, n, `Aplicado: ${next}`);
 }

@@ -1630,6 +1630,7 @@ input[type="checkbox"] {
 }
 
 /* ─── Utilitários de cor de texto ─── */
+.text-green  { color: var(--green); }
 .text-yellow { color: var(--yellow); }
 .text-red    { color: var(--red); }
 .text-blue   { color: var(--blue); }
@@ -2582,6 +2583,31 @@ input[type="checkbox"] {
   margin-bottom: 12px;
 }
 .cluster-tunable-status strong { color: var(--text); }
+
+/* Largura de métrica, não de texto corrido: sem o teto, a barra se estica pela
+   coluna inteira e o percentual fica longe demais do número que ele resume. */
+.cluster-tunable-budget { max-width: 520px; margin-bottom: 12px; }
+
+.ctb-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.ctb-line strong { color: var(--text); }
+.ctb-pct { font-size: 13px; }
+
+.ctb-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ctb-note:empty { display: none; }
+.ctb-note code { font-size: 11px; }
 
 .cluster-tunable-warn {
   display: flex;
