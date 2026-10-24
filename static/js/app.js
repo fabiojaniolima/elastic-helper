@@ -5882,9 +5882,9 @@ const CLUSTER_TUNABLE_META = {
 };
 
 const CLUSTER_ORIGIN_BADGE = {
-  default:    '<span class="badge badge-gray">Padrão</span>',
-  persistent: '<span class="badge badge-blue">Persistente</span>',
-  transient:  '<span class="badge badge-yellow">Transient</span>',
+  default:    '<span class="eh-badge eh-badge--outline eh-badge--neutral">Padrão</span>',
+  persistent: '<span class="eh-badge eh-badge--outline eh-badge--accent">Persistente</span>',
+  transient:  '<span class="eh-badge eh-badge--outline eh-badge--warning">Transient</span>',
 };
 
 let clusterSettings = null;
@@ -5975,7 +5975,7 @@ function clusterBudgetHtml(item) {
   const usage = clusterBudgetUsage(item);
   if (!usage) {
     return `<div class="cluster-tunable-budget">
-        <div class="ctb-line"><span title="${escHtml(openTip)}">Uso atual: <strong>${usedText}</strong> shards abertos em ${fmtNum(b.data_nodes)} nós de dados</span></div>
+        <div class="ctb-line"><span title="${escHtml(openTip)}">Uso atual: <strong class="eh-mono">${usedText}</strong> shards abertos em ${fmtNum(b.data_nodes)} nós de dados</span></div>
         <p class="ctb-note">${frozenNote.trim()}</p>
       </div>`;
   }
@@ -5984,10 +5984,10 @@ function clusterBudgetHtml(item) {
   const color = pctColor(pct);
   return `<div class="cluster-tunable-budget">
       <div class="ctb-line">
-        <span title="${escHtml(openTip)}">Uso atual: <strong>${usedText}</strong> de <strong>${fmtNum(allowed)}</strong> shards abertos</span>
-        <strong class="ctb-pct text-${color}">${fmtPct(pct)}</strong>
+        <span title="${escHtml(openTip)}">Uso atual: <strong class="eh-mono">${usedText}</strong> de <strong class="eh-mono">${fmtNum(allowed)}</strong> shards abertos</span>
+        <strong class="ctb-pct lvl-${levelClass(color)}">${fmtPct(pct)}</strong>
       </div>
-      <div class="progress-bar"><div class="progress-fill progress-${color}" style="width:${Math.min(pct, 100)}%"></div></div>
+      <span class="eh-meter eh-meter--md" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(pct, 100)}" aria-label="Uso do limite de shards"><span class="eh-meter__fill is-${levelClass(color)}" style="width:${Math.min(pct, 100)}%"></span></span>
       <p class="ctb-note">${fmtNum(allowed)} = ${fmtNum(item.value)} × ${fmtNum(b.data_nodes)} nós de dados.${frozenNote}</p>
     </div>`;
 }
@@ -6003,7 +6003,7 @@ function clusterOvershardingHtml(item) {
   const share = Math.round((b.oversharded_shards / b.open_shards) * 100);
   if (share < OVERSHARD_WARN_SHARE_PCT) return '';
   return `<div class="cluster-tunable-warn">
-      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
+      ${icon('triangle-alert', 16)}
       <span><strong>${fmtPct(share)}</strong> dos shards abertos (${fmtNum(b.oversharded_shards)}) estão em
         ${fmtNum(b.oversharded_indices)} índice(s) com oversharding — vários shards primários com média abaixo de 1 GB.
         Reduzi-los libera espaço no teto; subir o limite adia o problema. O <strong>Inventário</strong> lista quais são.</span>
@@ -6024,11 +6024,13 @@ function renderCluster() {
   const page = document.getElementById('page-cluster');
   if (!page || !clusterSettings) return;
   page.innerHTML = `<div class="config-page">
-    <div class="kb-warning">
-      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
+    <div class="kb-warning" role="note">
+      ${icon('info', 16)}
       <div>As alterações desta página valem <strong>na hora, para todo o cluster</strong>, e são gravadas como <strong>persistent</strong> — continuam valendo após restart até alguém restaurar o padrão.</div>
     </div>
-    ${clusterSettings.map(clusterTunableHtml).join('')}
+    <section class="eh-panel cluster-settings" aria-label="Ajustes do cluster">
+      ${clusterSettings.map(clusterTunableHtml).join('')}
+    </section>
   </div>`;
 }
 
@@ -6037,47 +6039,54 @@ function clusterTunableHtml(item, idx) {
   const current = clusterValueText(item, item.value, item.raw);
   const transientWarn = item.transient_raw !== null
     ? `<div class="cluster-tunable-warn">
-         <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
+         ${icon('triangle-alert', 16)}
          <span>Há um valor <strong>transient</strong> (<code>${escHtml(item.transient_raw)}</code>) nesta chave. Ele tem precedência e se perde num restart completo do cluster; aplicar ou restaurar o padrão o remove.</span>
        </div>`
     : '';
+  const isMb = item.unit === 'mb';
   const input = `<input type="text" inputmode="numeric" id="clusterInput-${idx}" autocomplete="off"
+      class="eh-input eh-input--mono${isMb ? ' eh-input--unit' : ''}" style="width:150px"
       value="${item.value ?? ''}" placeholder="${item.default ?? ''}"
       oninput="clusterInputChanged(${idx}, this)"
       onkeydown="if(event.key==='Enter' && !document.getElementById('clusterApply-${idx}').disabled) applyClusterTunable(${idx})">`;
 
-  return `<section class="cfg-section">
-      <div class="cfg-section-info">
-        <div class="cfg-section-title">
-          ${icon(meta.icon, 16)}
-          <span>${meta.label}</span>
+  // SettingRow do design system: explicação à esquerda (com a chave técnica em
+  // mono), valor em vigor e controles à direita.
+  return `<div class="eh-setting${idx === 0 ? ' is-first' : ''}">
+      <div class="eh-setting__about">
+        <div class="eh-setting__head">
+          <span class="eh-accent-icon">${icon(meta.icon, 16)}</span>
+          <h3 class="eh-setting__title">${meta.label}</h3>
           ${tooltip(`<code>${escHtml(item.key)}</code><br><br>${meta.tip}`, meta.helpTopic)}
         </div>
-        <p class="cfg-section-desc">${meta.desc}</p>
+        <p class="eh-setting__desc">${meta.desc}</p>
+        <span class="eh-setting__key">${escHtml(item.key)}</span>
       </div>
-      <div class="cfg-section-fields">
-        <div class="cluster-tunable-status">
-          <span>Em vigor: <strong>${escHtml(current)}</strong></span>
+      <div class="eh-setting__controls">
+        <div class="eh-setting__current">
+          <span class="eh-muted">Em vigor</span>
+          <span class="eh-mono eh-strong">${escHtml(current)}</span>
           ${CLUSTER_ORIGIN_BADGE[item.origin] || ''}
         </div>
         ${clusterBudgetHtml(item)}
         ${clusterOvershardingHtml(item)}
         ${transientWarn}
-        <div class="cluster-tunable-row">
-          ${item.unit === 'mb'
-            ? `<div class="input-with-suffix">${input}<span class="input-suffix" title="Megabytes por segundo">MB</span></div>`
-            : `<div class="input-with-suffix">${input}</div>`}
-          <button class="btn btn-primary btn-sm" id="clusterApply-${idx}" onclick="applyClusterTunable(${idx})" disabled>
-            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg> Aplicar
+        <div class="eh-setting__actions">
+          <span class="eh-field">
+            <label class="eh-sr" for="clusterInput-${idx}">Novo valor de ${meta.label}</label>
+            <span class="eh-field__control">${input}${isMb ? '<span class="eh-field__unit" title="Megabytes por segundo">MB</span>' : ''}</span>
+          </span>
+          <button type="button" class="eh-btn eh-btn--primary eh-btn--lg" id="clusterApply-${idx}" onclick="applyClusterTunable(${idx})" disabled>
+            ${icon('check', 16, 'eh-icon--check')} Aplicar
           </button>
-          <button class="btn btn-ghost btn-sm" id="clusterRestore-${idx}" onclick="restoreClusterTunable(${idx})"
+          <button type="button" class="eh-btn eh-btn--secondary eh-btn--lg" id="clusterRestore-${idx}" onclick="restoreClusterTunable(${idx})"
             ${item.origin === 'default' ? 'disabled title="O valor já é o padrão"' : ''}>
-            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw"/></svg> Restaurar padrão
+            ${icon('rotate-ccw', 16)} Restaurar padrão
           </button>
         </div>
         <div class="error-msg cluster-tunable-msg" id="clusterMsg-${idx}"></div>
       </div>
-    </section>`;
+    </div>`;
 }
 
 // Inteiro ≥ mínimo, ou null quando o campo não é um valor aplicável.

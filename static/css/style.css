@@ -686,21 +686,9 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-.error-msg {
-  background: var(--red-bg);
-  border: 1px solid var(--red-dim);
-  border-radius: var(--radius-sm);
-  color: var(--red);
-  padding: 10px 14px;
-  font-size: 13px;
-  margin-bottom: 14px;
-  display: none;
-}
-.error-msg.success {
-  background: var(--green-bg);
-  border-color: var(--green-dim);
-  color: var(--green);
-}
+/* Mensagem de resultado (erro / sucesso), sempre com texto — nunca só a cor */
+.error-msg { display: none; padding: var(--space-10) var(--space-14); margin-bottom: var(--space-14); font-size: var(--caption-size); line-height: 1.5; color: var(--danger-text); background: var(--danger-card); border: 1px solid var(--danger-card-border); border-radius: var(--radius-control); }
+.error-msg.success { color: var(--success); background: var(--success-soft); border-color: var(--success-border); }
 
 /* ─── Botões legados (.btn*) com o visual do Button do design system ─── */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-8); box-sizing: border-box; height: var(--size-control-md); padding: 0 var(--space-14); border-radius: var(--radius-control); font-family: inherit; font-size: var(--button-sm-size); font-weight: 500; cursor: pointer; border: 1px solid transparent; background: transparent; color: var(--text-primary); text-decoration: none; white-space: nowrap; transition: background-color .12s ease, color .12s ease; }
@@ -1953,90 +1941,32 @@ input[type="checkbox"] {
   gap: 10px;
 }
 
-/* ─── Página Cluster: ajustes de _cluster/settings (reusa o layout .cfg-section) ─── */
-.cluster-tunable-status {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-dim);
-  margin-bottom: 12px;
-}
-.cluster-tunable-status strong { color: var(--text); }
+/* ═══════════════════ CLUSTER (SettingRow por propriedade) ═══════════════════ */
+.cluster-settings { overflow: visible; }
+.eh-setting__key { overflow-wrap: anywhere; }
+.eh-setting__current { flex-wrap: wrap; }
+.eh-setting__actions { flex-wrap: wrap; }
+.eh-icon--check { stroke-width: 2.25; }
+.eh-badge--outline.eh-badge--warning { color: var(--warning); border-color: var(--warning-border); }
 
-/* Largura de métrica, não de texto corrido: sem o teto, a barra se estica pela
-   coluna inteira e o percentual fica longe demais do número que ele resume. */
-.cluster-tunable-budget { max-width: 520px; margin-bottom: 12px; }
-
-.ctb-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 12.5px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-.ctb-line strong { color: var(--text); }
-.ctb-pct { font-size: 13px; }
-
-.ctb-note {
-  margin: 6px 0 0;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
+/* Quadro de uso de shards (bg-inset). Largura de métrica, não de texto corrido:
+   sem o teto, a barra se estica pela coluna inteira. */
+.cluster-tunable-budget { display: flex; flex-direction: column; gap: var(--space-10); max-width: 560px; padding: var(--space-14) var(--space-16); background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-note); }
+.ctb-line { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-12); font-size: var(--body-sm-size); color: var(--text-secondary); }
+.ctb-line strong { color: var(--text-primary); font-weight: 500; }
+.ctb-pct { font-family: var(--font-mono); font-size: var(--body-size); font-weight: 600; }
+.ctb-note { margin: 0; font-size: var(--meta-size); line-height: 1.5; color: var(--text-muted); }
 .ctb-note:empty { display: none; }
-.ctb-note code { font-size: 11px; }
+.ctb-note code, .cluster-tunable-warn code { font-family: var(--font-mono); font-size: 11.5px; padding: 1px 4px; border-radius: var(--radius-code); background: var(--bg-chip); color: var(--text-primary); }
 
-.cluster-tunable-warn {
-  display: flex;
-  gap: 8px;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--yellow);
-  background: var(--yellow-bg);
-  border: 1px solid var(--yellow-dim);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  margin-bottom: 12px;
-}
-.cluster-tunable-warn i { margin-top: 3px; }
-
-.cluster-tunable-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.cluster-tunable-row input { padding: 5px 10px; font-size: 13px; }
-/* Sem estilo global de :disabled no app: aqui ele carrega significado (nada a aplicar / já é o padrão) */
-.cluster-tunable-row .btn:disabled,
-.cluster-tunable-row .btn:disabled:hover {
-  opacity: 0.45;
-  cursor: not-allowed;
-  background: var(--blue-dim);
-}
-.cluster-tunable-row .btn-ghost:disabled,
-.cluster-tunable-row .btn-ghost:disabled:hover { background: transparent; color: var(--text-muted); }
-.cluster-tunable-msg { margin: 10px 0 0; }
-
-/* Campo com unidade colada à direita (ex.: MB) */
-.input-with-suffix { display: flex; align-items: stretch; width: 160px; }
-.input-with-suffix input { min-width: 0; }
-.input-with-suffix input:has(+ .input-suffix) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.input-suffix {
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-left: none;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+/* Aviso de atenção (transient, oversharding) */
+.cluster-tunable-warn { display: flex; align-items: flex-start; gap: var(--space-10); max-width: 640px; padding: var(--space-12) var(--space-14); font-size: var(--caption-size); line-height: 1.55; color: var(--text-secondary); background: var(--warning-card); border: 1px solid var(--warning-card-border); border-radius: var(--radius-note); }
+.cluster-tunable-warn > .eh-icon { color: var(--warning); margin-top: 1px; }
+.cluster-tunable-warn strong { color: var(--text-primary); font-weight: 600; }
+.cluster-tunable-msg { margin: 0; }
+.cluster-tunable-msg:empty { display: none; }
+@media (max-width: 1100px) {
+  .eh-setting { grid-template-columns: 1fr; gap: var(--space-20); }
 }
 
 /* Com a sidebar ocupando ~248px, abaixo disso a coluna de campos fica estreita demais */
