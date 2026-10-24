@@ -629,62 +629,18 @@ a.eh-node__name:hover { text-decoration: underline; }
   .conn-list { max-height: 180px; }
 }
 
-.form-group { margin-bottom: 14px; }
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-bottom: 5px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
+/* ─── Formulários: visual do TextField do design system ─── */
+.form-group { display: flex; flex-direction: column; gap: var(--space-8); margin-bottom: var(--space-16); min-width: 0; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-16); }
+label { display: block; font-size: var(--field-label-size); font-weight: var(--field-label-weight); color: var(--text-secondary); }
+.form-group > label { margin: 0; }
 input[type="text"],
 input[type="number"],
-input[type="password"] {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  padding: 8px 12px;
-  font-size: 14px;
-  font-family: inherit;
-  transition: border-color var(--transition), box-shadow var(--transition);
-  outline: none;
-}
-
-input:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.12);
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: var(--text);
-  font-size: 13px;
-  text-transform: none;
-  letter-spacing: 0;
-  margin-top: 20px;
-}
-
-input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--blue);
-  cursor: pointer;
-}
+input[type="password"] { width: 100%; height: var(--size-control-lg); box-sizing: border-box; background: var(--bg-inset); border: 1px solid var(--border-control); border-radius: var(--radius-control); color: var(--text-primary); padding: 0 var(--space-12); font-size: var(--body-size); font-family: inherit; outline: none; transition: border-color .12s ease, box-shadow .12s ease; }
+input::placeholder { color: var(--text-muted); }
+input:focus { border-color: var(--accent); box-shadow: var(--focus-field); }
+.checkbox-label { display: flex; align-items: center; gap: var(--space-8); cursor: pointer; color: var(--text-primary); font-size: var(--caption-size); margin: 0; height: var(--size-control-lg); }
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 
 /* Mensagem de resultado (erro / sucesso), sempre com texto — nunca só a cor */
 .error-msg { display: none; padding: var(--space-10) var(--space-14); margin-bottom: var(--space-14); font-size: var(--caption-size); line-height: 1.5; color: var(--danger-text); background: var(--danger-card); border: 1px solid var(--danger-card-border); border-radius: var(--radius-control); }
@@ -1768,178 +1724,57 @@ input[type="checkbox"] {
 .empty-state__title { font-size: var(--card-title-size); font-weight: var(--card-title-weight); color: var(--text-primary); }
 .empty-state__action { margin-top: var(--space-6); }
 
-/* ─── Página Configuração: um grupo por integração ───
-   O cabeçalho do grupo leva o nome e o switch de ativação; as configurações
-   ficam recuadas logo abaixo, com um filete à esquerda marcando a que grupo
-   pertencem — é ele que delimita o grupo, sem divisor sob o cabeçalho. O
-   rodapé de ações é único, no fim da página. */
-.cfg-group + .cfg-group { margin-top: 40px; }
+/* ═══════════════════ CONFIGURAÇÃO (abas por integração) ═══════════════════ */
+.config-page { display: flex; flex-direction: column; gap: var(--space-20); }
+.cfg-panel { display: flex; flex-direction: column; }
+.eh-tab__note:empty { display: none; }
 
-.cfg-group-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 32px;
-  padding-bottom: 18px;
-}
-.cfg-group-info { min-width: 0; }
-.cfg-group-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 17px;
-  font-weight: 650;
-  color: var(--text);
-}
-.cfg-group-title i { color: var(--blue); font-size: 15px; }
-.cfg-group-desc {
-  font-size: 12.5px;
-  color: var(--text-dim);
-  line-height: 1.65;
-  margin-top: 6px;
-  max-width: 80ch;
-}
-.cfg-group-header .cfg-switch { flex-shrink: 0; padding-top: 2px; }
+/* Cabeçalho do painel: título + descrição à esquerda, switch à direita */
+.cfg-group-header { display: flex; align-items: flex-start; gap: var(--space-24); padding: var(--space-24) var(--space-28); }
+.cfg-group-info { display: flex; flex-direction: column; gap: var(--space-6); flex-grow: 1; min-width: 0; }
+.cfg-group-title { display: flex; align-items: center; gap: var(--space-6); }
+.cfg-group-title h2 { margin: 0; font-size: var(--panel-title-size); font-weight: var(--panel-title-weight); letter-spacing: var(--panel-title-tracking); }
+.cfg-group-desc { margin: 0; font-size: var(--body-size); line-height: 1.55; color: var(--text-secondary); max-width: 640px; text-wrap: pretty; }
 
-.cfg-group-body {
-  margin-left: 22px;
-  padding-left: 24px;
-  border-left: 2px solid var(--border);
-}
-.cfg-group-body > .cfg-section:first-child { border-top: none; }
-
-/* ─── Seções (rótulo à esquerda, controles à direita) ─── */
-/* Sem max-width próprio: as seções ocupam toda a largura da área de conteúdo. */
-.cfg-section {
-  display: grid;
-  grid-template-columns: minmax(220px, 26%) minmax(0, 1fr);
-  gap: 48px;
-  padding: 26px 0;
-  border-top: 1px solid var(--border-subtle);
-}
-.config-page > .cfg-section:first-child,
-.config-page > .kb-warning + .cfg-section { border-top: none; padding-top: 6px; }
-
-.cfg-section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-}
-.cfg-section-title i { color: var(--blue); font-size: 13px; }
-
-.cfg-section-desc {
-  font-size: 12.5px;
-  color: var(--text-dim);
-  line-height: 1.65;
-  margin-top: 6px;
-}
-
-.cfg-section-fields { min-width: 0; padding-top: 2px; }
-.cfg-section-fields .form-group:last-child { margin-bottom: 0; }
-/* Distribui os campos pela largura da coluna em vez de deixá-los espremidos */
-.cfg-section-fields .form-row { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-
-/* Switch de ativação */
-.cfg-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  margin: 0;
-  text-transform: none;
-  letter-spacing: 0;
-}
+/* Switch de ativação: <input type=checkbox role=switch> com o visual do Switch */
+.cfg-switch { position: relative; display: inline-flex; align-items: center; gap: var(--space-10); flex-shrink: 0; margin: 0; cursor: pointer; }
 .cfg-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
-.cfg-switch-track {
-  position: relative;
-  width: 38px;
-  height: 21px;
-  border-radius: 999px;
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  transition: background var(--transition), border-color var(--transition);
-  flex-shrink: 0;
-}
-.cfg-switch-track::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  transition: transform var(--transition), background var(--transition);
-}
-.cfg-switch input:checked + .cfg-switch-track {
-  background: var(--blue-dim);
-  border-color: var(--blue-dim);
-}
-.cfg-switch input:checked + .cfg-switch-track::after {
-  transform: translateX(17px);
-  background: #fff;
-}
-.cfg-switch input:focus-visible + .cfg-switch-track {
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.25);
-}
-.cfg-switch-text { font-size: 13px; color: var(--text); }
+.cfg-switch-text { font-size: var(--caption-size); font-weight: 500; color: var(--text-secondary); }
+.cfg-switch-track { width: 42px; height: 24px; box-sizing: border-box; border-radius: var(--radius-pill); padding: 2px; display: flex; justify-content: flex-start; background: var(--border-strong); transition: background-color .15s ease; }
+.cfg-switch-track::after { content: ""; width: 20px; height: 20px; border-radius: var(--radius-pill); background: var(--switch-thumb); box-shadow: var(--shadow-thumb); }
+.cfg-switch input:checked + .cfg-switch-track { justify-content: flex-end; background: var(--accent); }
+.cfg-switch input:focus-visible + .cfg-switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Lista de instâncias */
-.cfg-instance-list { display: flex; flex-direction: column; gap: 8px; }
+/* Subseções Acesso / Instâncias: rótulo à esquerda, campos à direita */
+.cfg-section { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--space-48); padding: var(--space-28); border-top: 1px solid var(--border-subtle); }
+.cfg-section-title { margin: 0 0 var(--space-8); display: flex; align-items: center; gap: var(--space-8); font-size: var(--subsection-title-size); font-weight: var(--subsection-title-weight); }
+.cfg-section-title .eh-icon { color: var(--accent); }
+.cfg-section-desc { margin: 0; font-size: var(--caption-size); line-height: 1.6; color: var(--text-secondary); max-width: 600px; text-wrap: pretty; }
+.cfg-section-desc strong { color: var(--text-primary); font-weight: 600; }
+.cfg-section-desc code, .cfg-empty code { font-family: var(--font-mono); font-size: 12px; padding: 1px 5px; border-radius: var(--radius-code); background: var(--bg-chip); color: var(--text-primary); }
+.cfg-section-fields { display: flex; flex-direction: column; gap: var(--space-12); min-width: 0; }
+.cfg-section-fields .form-group { margin-bottom: 0; }
 
-.cfg-instance-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.cfg-instance-row input { flex: 1; min-width: 0; }
-
-.cfg-instance-num {
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-dim);
-  width: 16px;
-  text-align: right;
-  flex-shrink: 0;
-}
-
-.cfg-add-btn { margin-top: 10px; }
-
-.kb-url-result {
-  font-size: 12px;
-  color: var(--text-dim);
-  padding: 4px 0 0 24px;
-}
+/* Lista de instâncias: cada URL numa linha embutida (bg-inset) */
+.cfg-instance-list { display: flex; flex-direction: column; gap: var(--space-8); }
+.cfg-instance-row { display: flex; align-items: center; gap: var(--space-10); padding: var(--space-6) var(--space-6) var(--space-6) var(--space-14); background: var(--bg-inset); border: 1px solid var(--border-card); border-radius: var(--radius-tile); }
+.cfg-instance-row:focus-within { border-color: var(--accent); box-shadow: var(--focus-field); }
+.cfg-instance-row input[type="text"] { flex: 1; min-width: 0; height: 36px; padding: 0 var(--space-4); background: transparent; border: none; box-shadow: none; font-family: var(--font-mono); font-size: var(--mono-body-size); }
+.cfg-instance-num { width: 12px; flex-shrink: 0; font-family: var(--font-mono); font-size: var(--meta-size); color: var(--text-muted); }
+.cfg-add-btn { align-self: flex-start; }
+.kb-url-result { display: flex; align-items: center; gap: var(--space-6); margin: var(--space-6) 0 0 var(--space-14); font-size: var(--meta-size); color: var(--text-secondary); }
 .kb-url-result:empty { display: none; }
-.kb-url-result.success { color: var(--green); }
-.kb-url-result.error { color: var(--red); }
+.kb-url-result.success { color: var(--success); }
+.kb-url-result.error { color: var(--danger-text); }
+.cfg-empty { display: flex; flex-direction: column; align-items: center; gap: var(--space-10); padding: var(--space-32) var(--space-28); text-align: center; font-size: var(--caption-size); line-height: 1.55; color: var(--text-secondary); }
+.cfg-empty > .eh-icon { box-sizing: content-box; width: 20px; height: 20px; padding: 12px; border-radius: var(--radius-pill); background: var(--bg-chip); color: var(--text-muted); }
+.cfg-empty p { margin: 0; max-width: 520px; }
+.cfg-empty strong { color: var(--text-primary); font-weight: 600; }
+.cfg-instance-list .cfg-empty { background: var(--bg-inset); border: 1px solid var(--border-card); border-radius: var(--radius-tile); }
 
-.cfg-empty {
-  font-size: 13px;
-  color: var(--text-dim);
-  background: var(--bg);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px;
-  line-height: 1.6;
-}
-
-/* Ações: encostadas no fim do conteúdo, alinhadas à direita */
-.cfg-footer {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 18px;
-  margin-top: 8px;
-}
-.cfg-group + .cfg-footer { margin-top: 30px; }
-.cfg-footer .error-msg { margin-bottom: 12px; }
-.cfg-footer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
+/* Rodapé único (SaveBar): mensagem à esquerda, ações à direita */
+.cfg-footer .error-msg { margin: 0; flex: 1; min-width: 0; }
+.cfg-footer-actions { margin-left: auto; }
 
 /* ═══════════════════ CLUSTER (SettingRow por propriedade) ═══════════════════ */
 .cluster-settings { overflow: visible; }
@@ -1969,11 +1804,11 @@ input[type="checkbox"] {
   .eh-setting { grid-template-columns: 1fr; gap: var(--space-20); }
 }
 
-/* Com a sidebar ocupando ~248px, abaixo disso a coluna de campos fica estreita demais */
+/* Com a sidebar ocupando 256px, abaixo disso a coluna de campos fica estreita demais */
 @media (max-width: 980px) {
-  .cfg-section { grid-template-columns: 1fr; gap: 14px; }
-  .cfg-group-header { flex-direction: column; gap: 14px; }
-  .cfg-group-body { margin-left: 0; padding-left: 14px; }
+  .cfg-section { grid-template-columns: 1fr; gap: var(--space-16); }
+  .cfg-group-header { flex-direction: column; gap: var(--space-14); }
+  .eh-savebar { flex-direction: column; align-items: stretch; }
   .cfg-footer-actions { flex-direction: column-reverse; }
-  .cfg-footer-actions .btn { width: 100%; }
+  .cfg-footer-actions .eh-btn { width: 100%; }
 }

@@ -5580,11 +5580,11 @@ async function renderConfig() {
   const keys = Object.keys(INTEGRATIONS);
 
   if (keys.some(k => !integrationConfig[k])) {
-    page.innerHTML = `<div class="loading-state"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando configuração...</span></div>`;
+    page.innerHTML = `<div class="loading-state">${icon('refresh-cw', 16, 'spin')}<span>Carregando configuração...</span></div>`;
     try {
       await Promise.all(keys.filter(k => !integrationConfig[k]).map(fetchIntegrationConfig));
     } catch (e) {
-      page.innerHTML = `<div class="error-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg><p>${escHtml(e.message)}</p></div>`;
+      page.innerHTML = `<div class="error-state">${icon('triangle-alert', 16)}<p>${escHtml(e.message)}</p></div>`;
       return;
     }
   }
@@ -5603,27 +5603,61 @@ async function renderConfig() {
 
   // O aviso de "conexão não salva" vale para as duas: fica uma vez, no topo.
   const notPersistable = keys.some(k => integrationConfig[k].persistable === false)
-    ? `<div class="kb-warning">
-         <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
+    ? `<div class="kb-warning" role="note">
+         ${icon('info', 16)}
          <div>${escHtml(integrationConfig[keys[0]].reason || '')}</div>
        </div>`
     : '';
+  if (!INTEGRATIONS[configTab]) configTab = keys[0];
+
+  // Abas (Tabs do design system), uma por integração. Os dois painéis ficam no
+  // DOM — só um visível —, e o Salvar continua gravando as duas.
+  const tabs = keys.map(key => {
+    const sel = key === configTab;
+    const on = integrationDraft[key].enabled;
+    return `<button type="button" role="tab" class="eh-tab${sel ? ' is-selected' : ''}" id="cfgTab-${key}"
+        aria-selected="${sel}" aria-controls="cfgPanel-${key}" onclick="cfgSelectTab('${key}')">
+        <span class="eh-tab__dot eh-tab__dot--${on ? 'on' : 'off'}" id="${key}TabDot"></span>${INTEGRATIONS[key].label}<span class="eh-tab__note" id="${key}TabNote">${on ? '' : 'desativado'}</span>
+      </button>`;
+  }).join('');
 
   page.innerHTML = `<div class="config-page">
     ${notPersistable}
-    ${keys.map(integrationConfigHtml).join('')}
-    <div class="cfg-footer">
-      <div class="error-msg" id="configMsg"></div>
-      <div class="cfg-footer-actions">
-        <button class="btn btn-ghost" onclick="cfgResetDrafts()" title="Descarta as alterações não salvas">
-          Cancelar
-        </button>
-        <button class="btn btn-primary" id="configSaveBtn" onclick="saveIntegrationsConfig()">
-          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-save"/></svg> Salvar
-        </button>
+    <section class="eh-panel cfg-panel">
+      <div class="eh-tabs" role="tablist" aria-label="Integrações">${tabs}</div>
+      ${keys.map(key => `<div role="tabpanel" id="cfgPanel-${key}" aria-labelledby="cfgTab-${key}"${key === configTab ? '' : ' hidden'}>
+        ${integrationConfigHtml(key)}
+      </div>`).join('')}
+      <div class="eh-savebar cfg-footer">
+        <div class="error-msg" id="configMsg"></div>
+        <div class="eh-savebar__actions cfg-footer-actions">
+          <button type="button" class="eh-btn eh-btn--secondary eh-btn--38" onclick="cfgResetDrafts()" title="Descarta as alterações não salvas">
+            Cancelar
+          </button>
+          <button type="button" class="eh-btn eh-btn--primary eh-btn--38" id="configSaveBtn" onclick="saveIntegrationsConfig()">
+            ${icon('save', 16)} Salvar
+          </button>
+        </div>
       </div>
-    </div>
+    </section>
   </div>`;
+}
+
+// Aba visível da Configuração (só apresentação: os rascunhos das duas seguem vivos).
+let configTab = 'kibana';
+
+function cfgSelectTab(key) {
+  configTab = key;
+  for (const k of Object.keys(INTEGRATIONS)) {
+    const sel = k === key;
+    const tab = document.getElementById(`cfgTab-${k}`);
+    if (tab) {
+      tab.classList.toggle('is-selected', sel);
+      tab.setAttribute('aria-selected', String(sel));
+    }
+    const panel = document.getElementById(`cfgPanel-${k}`);
+    if (panel) panel.hidden = !sel;
+  }
 }
 
 function integrationConfigHtml(key) {
@@ -5637,57 +5671,57 @@ function integrationConfigHtml(key) {
       <div class="cfg-instance">
         <div class="cfg-instance-row">
           <span class="cfg-instance-num">${idx + 1}</span>
-          <input type="text" value="${escHtml(inst.url)}" data-url-key="${key}" data-url-idx="${idx}"
-            placeholder="${escHtml(meta.urlPlaceholder)}"
+          <label class="eh-sr" for="cfgUrl-${key}-${idx}">URL da instância ${idx + 1}</label>
+          <input type="text" id="cfgUrl-${key}-${idx}" value="${escHtml(inst.url)}" data-url-key="${key}" data-url-idx="${idx}"
+            placeholder="${escHtml(meta.urlPlaceholder)}" spellcheck="false"
             oninput="cfgUrlChanged('${key}', ${idx}, this.value)">
-          <button class="btn btn-ghost btn-sm" onclick="cfgTestUrl('${key}', ${idx})" title="Testar esta instância">
-            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-plug"/></svg> Testar
+          <button type="button" class="eh-btn eh-btn--secondary eh-btn--sm" onclick="cfgTestUrl('${key}', ${idx})" title="Testar esta instância">
+            ${icon('plug', 14)} Testar
           </button>
-          <button class="btn-icon" onclick="cfgRemoveUrl('${key}', ${idx})" title="Remover">
-            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-trash-2"/></svg>
+          <button type="button" class="eh-iconbtn eh-iconbtn--sm eh-iconbtn--ghost" onclick="cfgRemoveUrl('${key}', ${idx})" title="Remover" aria-label="Remover instância ${idx + 1}">
+            ${icon('trash-2', 16)}
           </button>
         </div>
         <div class="kb-url-result" id="urlResult-${key}-${idx}"></div>
       </div>`).join('')
-    : `<div class="cfg-empty">${meta.emptyInstances}</div>`;
+    : `<div class="cfg-empty">${icon('server', 20)}<p>${meta.emptyInstances}</p></div>`;
 
   return `<section class="cfg-group">
       <header class="cfg-group-header">
         <div class="cfg-group-info">
           <div class="cfg-group-title">
-            ${icon(meta.icon, 16)}
-            <span>${meta.label}</span>
+            <h2>${meta.label}</h2>
             ${tooltip(meta.switchTip, meta.helpTopic)}
           </div>
           <p class="cfg-group-desc">${meta.switchDesc}</p>
         </div>
         <label class="cfg-switch">
-          <input type="checkbox" id="${key}Enabled" ${draft.enabled ? 'checked' : ''}
-            onchange="cfgToggleEnabled('${key}', this.checked)">
-          <span class="cfg-switch-track"></span>
           <span class="cfg-switch-text" id="${key}EnabledLabel">${draft.enabled ? 'Ativado' : 'Desativado'}</span>
+          <input type="checkbox" role="switch" id="${key}Enabled" ${draft.enabled ? 'checked' : ''}
+            aria-label="Monitorar ${meta.label}" onchange="cfgToggleEnabled('${key}', this.checked)">
+          <span class="cfg-switch-track" aria-hidden="true"></span>
         </label>
       </header>
 
       <div class="cfg-group-body" id="${key}Fields" ${draft.enabled ? '' : 'hidden'}>
         <section class="cfg-section">
           <div class="cfg-section-info">
-            <div class="cfg-section-title"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-key-round"/></svg><span>Acesso</span></div>
+            <h3 class="cfg-section-title">${icon('key-round', 16)}<span>Acesso</span></h3>
             <p class="cfg-section-desc">${meta.accessDesc}</p>
           </div>
           <div class="cfg-section-fields">
             <div class="form-row">
               <div class="form-group">
-                <label>Usuário${meta.userRequired ? '' : ' <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span>'}</label>
+                <label for="${key}Username">Usuário${meta.userRequired ? '' : ' <span class="eh-field__optional">(opcional)</span>'}</label>
                 <input type="text" id="${key}Username" value="${escHtml(draft.username || '')}"
                   placeholder="elastic" autocomplete="username"
                   oninput="integrationDraft['${key}'].username = this.value">
               </div>
               <div class="form-group">
-                <label>Senha</label>
+                <label${locked ? '' : ` for="${key}Password"`}>Senha</label>
                 ${locked
-                  ? `<button type="button" class="btn btn-ghost btn-full" onclick="cfgEnablePasswordChange('${key}')">
-                       <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-key-round"/></svg> Alterar senha
+                  ? `<button type="button" class="eh-btn eh-btn--secondary eh-btn--lg btn-full" onclick="cfgEnablePasswordChange('${key}')">
+                       ${icon('key-round', 16)} Alterar senha
                      </button>`
                   : `<input type="password" id="${key}Password" value="${escHtml(draft.password || '')}"
                        placeholder="••••••••" autocomplete="current-password"
@@ -5699,13 +5733,13 @@ function integrationConfigHtml(key) {
 
         <section class="cfg-section">
           <div class="cfg-section-info">
-            <div class="cfg-section-title"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-server"/></svg><span>Instâncias</span></div>
+            <h3 class="cfg-section-title">${icon('server', 16)}<span>Instâncias</span></h3>
             <p class="cfg-section-desc">${meta.instancesDesc}</p>
           </div>
           <div class="cfg-section-fields">
             <div class="cfg-instance-list">${urlRows}</div>
-            <button class="btn btn-ghost btn-sm cfg-add-btn" onclick="cfgAddUrl('${key}')">
-              <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-plus"/></svg> Adicionar instância
+            <button type="button" class="eh-btn eh-btn--dashed eh-btn--md cfg-add-btn" onclick="cfgAddUrl('${key}')">
+              ${icon('plus', 16)} Adicionar instância
             </button>
           </div>
         </section>
@@ -5719,6 +5753,11 @@ function cfgToggleEnabled(key, checked) {
   if (fields) fields.hidden = !checked;
   const label = document.getElementById(`${key}EnabledLabel`);
   if (label) label.textContent = checked ? 'Ativado' : 'Desativado';
+  // Ponto e nota da aba acompanham o switch (o estado nunca só pela cor).
+  const dot = document.getElementById(`${key}TabDot`);
+  if (dot) dot.className = `eh-tab__dot eh-tab__dot--${checked ? 'on' : 'off'}`;
+  const note = document.getElementById(`${key}TabNote`);
+  if (note) note.textContent = checked ? '' : 'desativado';
 }
 
 function cfgEnablePasswordChange(key) {
@@ -5769,7 +5808,7 @@ async function cfgTestUrl(key, idx) {
     return;
   }
   out.className = 'kb-url-result';
-  out.innerHTML = '<svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Testando...';
+  out.innerHTML = `${icon('refresh-cw', 14, 'spin')} Testando...`;
 
   try {
     const res = await fetch(`/api/${key}/test`, {
@@ -5785,14 +5824,14 @@ async function cfgTestUrl(key, idx) {
     const data = await res.json();
     if (data.success) {
       out.className = 'kb-url-result success';
-      out.innerHTML = `<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg> ${escHtml(data.name || 'instância')} · v${escHtml(data.version || '?')} · ${escHtml(data.status || '')}`;
+      out.innerHTML = `${icon('circle-check', 14)} ${escHtml(data.name || 'instância')} · v${escHtml(data.version || '?')} · ${escHtml(data.status || '')}`;
     } else {
       out.className = 'kb-url-result error';
-      out.innerHTML = `<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-alert"/></svg> ${escHtml(data.error || 'falhou')}`;
+      out.innerHTML = `${icon('circle-alert', 14)} ${escHtml(data.error || 'falhou')}`;
     }
   } catch (e) {
     out.className = 'kb-url-result error';
-    out.innerHTML = `<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-alert"/></svg> ${escHtml(e.message)}`;
+    out.innerHTML = `${icon('circle-alert', 14)} ${escHtml(e.message)}`;
   }
 }
 
@@ -5802,7 +5841,7 @@ async function cfgTestUrl(key, idx) {
 async function saveIntegrationsConfig() {
   const btn = document.getElementById('configSaveBtn');
   btn.disabled = true;
-  btn.innerHTML = '<svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Salvando...';
+  btn.innerHTML = `${icon('refresh-cw', 16, 'spin')} Salvando...`;
 
   const errors = [];
   let saved = 0;
