@@ -532,6 +532,9 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .eh-card__link, .eh-card__label { min-width: 0; }
 
 /* Painel com cabeçalho próprio (ícone + título + "?") */
+/* Painéis sem recorte: o balão do "?" do cabeçalho precisa poder sair do painel */
+.eh-panel { overflow: visible; }
+.eh-panel > .resource-table-wrap:last-child, .eh-panel > .tasks-table-wrap:last-child { border-radius: 0 0 var(--radius-panel) var(--radius-panel); }
 .panel-head { display: flex; align-items: center; gap: var(--space-8); padding: var(--space-18) var(--space-28) var(--space-14); }
 .panel-title { margin: 0; font-size: var(--card-label-size); font-weight: 600; color: var(--text-primary); }
 .panel-click { cursor: pointer; transition: border-color .15s ease; }
@@ -563,7 +566,10 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .hs-labelrow .tooltip-wrap { position: relative; z-index: 1; }
 /* A licença da app é mais longa que a do protótipo ("ENTERPRISE · expira em 19d"):
    a coluna de fatos cresce até caber, com 220 px de mínimo como no design system. */
-.health-summary { grid-template-columns: 260px minmax(0, 1fr) auto; }
+.health-summary { grid-template-columns: 260px minmax(0, 1fr) auto; overflow: visible; }
+/* Sem overflow:hidden (o balão do "?" precisa sair da faixa), o brilho da área de
+   status acompanha o canto arredondado por conta própria. */
+.health-summary .eh-health__status { border-radius: var(--radius-panel) 0 0 var(--radius-panel); }
 .health-summary .eh-health__facts { min-width: 220px; }
 .health-summary .eh-health__label, .health-summary .eh-health__total .eh-meta, .health-summary .eh-health__fact .eh-meta, .health-summary .eh-health__factvalue { white-space: nowrap; }
 /* As contagens variam (Ativos e Atraso só aparecem quando > 0): quebram em linhas em vez de se sobrepor */
@@ -604,22 +610,27 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
   .card-grid, .card-grid--5, .card-grid--3 { grid-template-columns: 1fr; }
 }
 @media (max-width: 1100px) {
-  .eh-health { grid-template-columns: 1fr; }
+  .eh-health, .health-summary { grid-template-columns: 1fr; }
+  .health-summary .eh-health__status { border-radius: var(--radius-panel) var(--radius-panel) 0 0; }
   .eh-health__counts, .eh-health__facts { border-left: none; border-top: 1px solid var(--border-subtle); }
   .eh-health__counts { flex-wrap: wrap; gap: var(--space-24); }
+  .eh-health__divider { display: none; }
+  .health-summary .eh-health__facts { min-width: 0; }
+  .health-summary .eh-health__factvalue { white-space: normal; text-align: right; }
 }
 
 /* ─── Tooltip: "?" (IconButton xs circle-help) + balão de ajuda no hover/foco ─── */
 .tooltip-wrap { position: relative; flex-shrink: 0; display: inline-flex; }
 .tooltip-btn { cursor: default; }
 .tooltip-btn-link { cursor: pointer; }
-.tooltip-box { position: absolute; right: 0; top: calc(100% + 6px); width: 440px; max-width: min(440px, 80vw); box-sizing: border-box; background: var(--bg-card); border: 1px solid var(--border-control); border-radius: var(--radius-note); padding: var(--space-12) var(--space-14); font-size: var(--meta-size); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text-secondary); line-height: 1.55; white-space: normal; text-align: left; z-index: 50; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+.tooltip-box { position: absolute; right: 0; top: calc(100% + 6px); width: 440px; max-width: min(440px, 80vw); box-sizing: border-box; background: var(--bg-card); border: 1px solid var(--border-control); border-radius: var(--radius-note); padding: var(--space-12) var(--space-14); font-size: var(--meta-size); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text-secondary); line-height: 1.55; white-space: normal; text-align: left; z-index: 50; display: none; pointer-events: none; }
 .tooltip-box strong { color: var(--text-primary); font-weight: 600; }
 .tooltip-box code { font-family: var(--font-mono); font-size: 11.5px; padding: 1px 4px; border-radius: var(--radius-code); background: var(--bg-chip); color: var(--text-primary); }
 /* Em cards de coluna esquerda o tooltip transbordaria sob a sidebar; ao detectar
    falta de espaço à esquerda (ver app.js) ele inverte e abre para a direita. */
 .tooltip-box.flip-left { right: auto; left: 0; }
-.tooltip-wrap:hover .tooltip-box, .tooltip-wrap:focus-within .tooltip-box { opacity: 1; }
+/* display (não só opacidade): balão escondido não pode alargar a área de rolagem */
+.tooltip-wrap:hover .tooltip-box, .tooltip-wrap:focus-within .tooltip-box { display: block; }
 .tooltip-help-hint { margin-top: var(--space-10); padding-top: var(--space-10); border-top: 1px solid var(--border-subtle); font-size: 11.5px; color: var(--accent-link); display: flex; align-items: center; gap: var(--space-6); }
 
 /* ─── Carregando / erro ─── */
@@ -708,6 +719,11 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .empty-state code { font-family: var(--font-mono); font-size: 12px; padding: 1px 5px; border-radius: var(--radius-code); background: var(--bg-chip); color: var(--text-primary); }
 
 /* ─── Responsivo (moldura e formulários) ─── */
+.eh-sectionhead { flex-wrap: wrap; }
+@media (max-width: 560px) {
+  .eh-topbar { height: auto; min-height: var(--size-topbar); flex-wrap: wrap; row-gap: var(--space-6); padding-top: var(--space-10); padding-bottom: var(--space-10); }
+  .eh-sectionhead__actions { flex-wrap: wrap; gap: var(--space-10); }
+}
 @media (max-width: 768px) {
   .eh-topbar { padding: 0 var(--space-16); }
   .page-scroll { padding: var(--space-20) var(--space-16) var(--space-24); }
@@ -1039,6 +1055,7 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .cfg-instance-list .cfg-empty { background: var(--bg-inset); border: 1px solid var(--border-card); border-radius: var(--radius-tile); }
 
 /* Rodapé único (SaveBar): mensagem à esquerda, ações à direita */
+.cfg-panel > .eh-savebar { border-radius: 0 0 var(--radius-panel) var(--radius-panel); }
 .cfg-footer .error-msg { margin: 0; flex: 1; min-width: 0; }
 .cfg-footer-actions { margin-left: auto; }
 

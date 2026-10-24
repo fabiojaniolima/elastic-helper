@@ -3186,7 +3186,7 @@ function openHeapRamDetail() {
     const color = pct >= 75 ? 'red' : 'yellow';
     return `<tr>
       <td>${nodeNameCell(n.name, n.roles, n.is_master)}</td>
-      <td><span class="text-${color}" style="font-weight:700">${fmtPct(pct)}</span></td>
+      <td><span class="lvl-${levelClass(color)}" style="font-weight:600">${fmtPct(pct)}</span></td>
       <td>${fmtBytes(n.heap_max)}</td>
       <td>${fmtBytes(n.ram_total)}</td>
     </tr>`;
@@ -4342,7 +4342,7 @@ function renderNodeDetail(d) {
   function loadVal(v) {
     if (!v && v !== 0) return '';
     const c = loadColor(v);
-    return `<span class="text-${c}" style="font-weight:700">${v.toFixed(2)}</span>`;
+    return `<span class="lvl-${levelClass(c)}" style="font-weight:600">${v.toFixed(2).replace('.', ',')}</span>`;
   }
   const loadLine = [cpu.load_1m, cpu.load_5m, cpu.load_15m].some(v => v != null)
     ? `<div class="nd-row"><span class="nd-label">Load avg (1m/5m/15m)</span><span class="nd-value">${
@@ -4361,7 +4361,7 @@ function renderNodeDetail(d) {
   const heapOverHalf = heapPctRam != null && heapPctRam > 50;
   const heapOver32 = heapMax > 32 * GB;
   const heapRatioRow = heapPctRam != null
-    ? valRow('Heap / RAM física', `<span class="text-${heapOverHalf ? 'yellow' : 'green'}">${fmtPct(heapPctRam)}</span>`)
+    ? valRow('Heap / RAM física', `<span class="lvl-${heapOverHalf ? 'warning' : 'normal'}">${fmtPct(heapPctRam)}</span>`)
     : '';
   // Aviso de heap > 50% da RAM foi movido para o Diagnóstico (card de insight);
   // aqui fica só a linha informativa "Heap / RAM física" (colorida) e o aviso de
@@ -5265,7 +5265,7 @@ function lsOsSection(os, cgroup) {
       `${fmtNum(os.processors)} que o SO informa — <code>pipeline.workers</code> segue a contagem do SO ` +
       'e fica superdimensionado se não for fixado à mão.') : '',
     throttlePct != null
-      ? ndValRow('Throttling de CPU', `<span class="text-${throttleColor}">${fmtPct(throttlePct)}</span> ` +
+      ? ndValRow('Throttling de CPU', `<span class="lvl-${levelClass(throttleColor)}">${fmtPct(throttlePct)}</span> ` +
         `<span class="nd-dim">dos períodos · ${fmtNum(cg.throttled_times)} vezes · ` +
         `${fmtDuration(cg.throttled_ms)} parado</span>`)
       : '',
@@ -5285,7 +5285,7 @@ function lsCpuSection(m, proc, os) {
   const loadRow = loads.some(v => v != null)
     ? ndValRow('Load average (1m/5m/15m)',
       `${loads.map(v => v != null
-        ? `<span class="text-${loadColor(v)}" style="font-weight:700">${v.toFixed(2)}</span>` : '—').join(' / ')}` +
+        ? `<span class="lvl-${levelClass(loadColor(v))}" style="font-weight:600">${v.toFixed(2).replace('.', ',')}</span>` : '—').join(' / ')}` +
       (procs ? ` <span class="nd-dim">· ${fmtNum(procs)} vCPU${procs === 1 ? '' : 's'}</span>` : ''))
     : '';
 
