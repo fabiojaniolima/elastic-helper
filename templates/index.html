@@ -392,23 +392,26 @@
             <p class="help-lead">Referência dos cards e métricas dos <strong>Sinais Vitais</strong> e do <strong>Inventário</strong>: o que cada card mostra, o significado de cada dado e o que ele pode indicar. Use o índice ao lado ou o "?" de cada card para chegar direto ao tópico.</p>
 
             <div class="help-search">
-              <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-search"/></svg>
+              <svg class="eh-icon" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg>
+              <label for="helpSearch" class="eh-sr">Buscar na ajuda</label>
               <input type="text" id="helpSearch" placeholder="Buscar nos termos e métricas… (ex: shard, ILM, circuit breaker)" oninput="filterHelp(this.value)">
             </div>
 
             <!-- Seções geradas por renderHelp() em app.js (uma entrada por card dos Sinais Vitais e do Inventário) -->
             <div id="helpGroups"></div>
 
-            <div class="help-no-results" id="helpNoResults" hidden>
-              <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-search"/></svg>
-              Nenhum termo encontrado para a busca.
+            <div class="help-no-results empty-state" id="helpNoResults" hidden>
+              <svg class="eh-icon" width="20" height="20" aria-hidden="true"><use href="#i-search"/></svg>
+              <p>Nenhum termo encontrado para a busca.</p>
             </div>
           </div>
 
           <!-- Índice lateral (gerado por renderHelp()) -->
           <aside class="help-toc">
-            <div class="help-toc-title">Nesta página</div>
-            <nav class="help-toc-nav" id="helpToc"></nav>
+            <nav class="eh-toc" aria-label="Nesta página">
+              <div class="eh-toc__head"><span class="eh-overline">Nesta página</span></div>
+              <div class="help-toc-nav" id="helpToc"></div>
+            </nav>
           </aside>
 
         </div>

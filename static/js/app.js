@@ -1232,11 +1232,14 @@ const HELP_CONTENT = [
 function renderHelpItem(t) {
   const dataText = [t.q, t.summary, ...t.data.map(d => `${d.label} ${d.desc}`)]
     .join(' ').replace(/<[^>]+>/g, '').toLowerCase();
+  // "Dados apresentados" como DescriptionList do design system (termo | explicação).
   const dataList = t.data.length ? `
-        <div class="help-data-title">Dados apresentados</div>
-        <ul class="help-data-list">
-          ${t.data.map(d => `<li><span class="help-data-label">${d.label}</span> — ${d.desc}</li>`).join('')}
-        </ul>` : '';
+        <div class="help-data">
+          <span class="eh-overline">Dados apresentados</span>
+          <dl class="eh-dl help-data-list">
+            ${t.data.map((d, i) => `<dt${i ? ' class="is-sep"' : ''}>${d.label}</dt><dd${i ? ' class="is-sep"' : ''}>${d.desc}</dd>`).join('')}
+          </dl>
+        </div>` : '';
   return `<article class="help-article" id="${t.id}" data-text="${escHtml(dataText)}">
       <h3 class="help-article-title">${t.q}</h3>
       <p class="help-summary">${t.summary}</p>${dataList}
@@ -1249,16 +1252,21 @@ function renderHelp() {
 
   container.innerHTML = HELP_CONTENT.map(group => `
     <section class="help-section">
-      <h2 class="help-section-title">${icon(group.icon, 18)} ${group.label}</h2>
+      <div class="help-section-head">
+        <span class="eh-tile" style="width:32px;height:32px;border-radius:var(--radius-control)">${icon(group.icon, 16)}</span>
+        <h2 class="help-section-title">${group.label}</h2>
+      </div>
       ${group.topics.map(renderHelpItem).join('')}
     </section>`).join('');
 
   const toc = document.getElementById('helpToc');
   if (toc) {
     toc.innerHTML = HELP_CONTENT.map(group => `
-      <div class="help-toc-section">
-        <span class="help-toc-group">${group.label}</span>
-        ${group.topics.map(t => `<span class="help-toc-link" data-target="${t.id}" onclick="goToHelp('${t.id}')">${t.q}</span>`).join('')}
+      <div class="eh-toc__group help-toc-section">
+        <span class="eh-toc__toggle help-toc-group">${group.label}</span>
+        <div class="eh-toc__items">
+          ${group.topics.map(t => `<a href="#${t.id}" class="eh-toc__item help-toc-link" data-target="${t.id}" onclick="goToHelp('${t.id}');return false;">${t.q}</a>`).join('')}
+        </div>
       </div>`).join('');
   }
 
