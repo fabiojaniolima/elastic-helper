@@ -1,32 +1,3 @@
-:root {
-  /* Camada de compatibilidade: nomes antigos (ainda usados inline pelo app.js)
-     apontando para os tokens do design system (static/css/tokens.css). */
-  --bg: var(--bg-app);
-  --surface: var(--bg-card);
-  --surface-2: var(--bg-subtle);
-  --surface-hover: var(--bg-chip);
-  --border: var(--border-control);
-
-  --text: var(--text-primary);
-  --text-dim: var(--text-muted);
-
-  --green: var(--success);
-  --green-dim: var(--success);
-  --green-bg: var(--success-soft);
-  --yellow: var(--warning);
-  --yellow-dim: var(--warning-muted);
-  --yellow-bg: var(--warning-soft);
-  --red: var(--danger);
-  --red-dim: var(--danger);
-  --red-bg: var(--danger-soft);
-  --blue: var(--info);
-  --blue-dim: var(--accent);
-  --blue-bg: var(--info-tile);
-
-  --radius: var(--radius-tile);
-  --transition: 0.15s ease;
-}
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -42,7 +13,7 @@ body {
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border-control); border-radius: 3px; }
 
 /* ═══════════════════ DESIGN SYSTEM: COMPONENTES ═══════════════════
    Porte do components/bundle.css do design system "Elastic Helper" (classes eh-*),
@@ -486,9 +457,8 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
 .btn-full { width: 100%; }
 .btn-ghost { border-color: var(--border-control); color: var(--text-primary); }
-.btn-danger { border-color: var(--border-control); color: var(--danger-text); }
 .btn-danger-solid { border: 1px solid var(--danger-card-border); background: var(--danger-card); color: var(--danger-text); font-weight: 600; }
-.btn-ghost:hover, .btn-danger:hover { background: var(--bg-chip); }
+.btn-ghost:hover { background: var(--bg-chip); }
 .btn-ghost:hover { color: var(--text-primary); }
 .btn-danger-solid:hover { border-color: var(--danger-card-hover); }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.4; cursor: default; }
@@ -552,9 +522,6 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .card-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .card-grid > .loading-state, .card-grid > .error-state { grid-column: 1 / -1; }
 
-/* Legados ainda usados pelas telas não migradas */
-.metric-card.card-full { grid-column: 1 / -1; }
-.section-volume-cards { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-14); }
 
 /* MetricCard sem link (estático): sem hover de borda */
 .eh-metric.is-static:hover { border-color: var(--border-card); }
@@ -642,83 +609,6 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
   .eh-health__counts { flex-wrap: wrap; gap: var(--space-24); }
 }
 
-/* ─── Cards ─── */
-.metric-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  cursor: pointer;
-  transition: all var(--transition);
-  position: relative;
-  z-index: 1;
-}
-
-.metric-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--card-accent, var(--blue-dim));
-  opacity: 0;
-  transition: opacity var(--transition);
-}
-
-.metric-card:hover {
-  border-color: var(--surface-hover);
-  background: var(--surface-2);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  z-index: 100;
-}
-
-.metric-card:hover::before { opacity: 1; }
-
-.metric-card-static { cursor: default; }
-
-.metric-card.status-green { --card-accent: var(--green); }
-.metric-card.status-yellow { --card-accent: var(--yellow); }
-.metric-card.status-red { --card-accent: var(--red); }
-.metric-card.status-blue { --card-accent: var(--blue); }
-.metric-card.status-muted { --card-accent: var(--text-dim); }
-
-.card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.card-icon-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.card-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  flex-shrink: 0;
-  background: var(--card-icon-bg, var(--blue-bg));
-  color: var(--card-icon-color, var(--blue));
-}
-
-.card-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  line-height: 1.3;
-}
-
 /* ─── Tooltip: "?" (IconButton xs circle-help) + balão de ajuda no hover/foco ─── */
 .tooltip-wrap { position: relative; flex-shrink: 0; display: inline-flex; }
 .tooltip-btn { cursor: default; }
@@ -731,93 +621,6 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .tooltip-box.flip-left { right: auto; left: 0; }
 .tooltip-wrap:hover .tooltip-box, .tooltip-wrap:focus-within .tooltip-box { opacity: 1; }
 .tooltip-help-hint { margin-top: var(--space-10); padding-top: var(--space-10); border-top: 1px solid var(--border-subtle); font-size: 11.5px; color: var(--accent-link); display: flex; align-items: center; gap: var(--space-6); }
-
-/* ─── Card Values ─── */
-.card-value-wrap { margin-bottom: 14px; }
-
-.card-value {
-  font-size: 38px;
-  font-weight: 700;
-  letter-spacing: -1.5px;
-  line-height: 1;
-  color: var(--text);
-  margin-bottom: 3px;
-}
-
-.card-value.value-green { color: var(--green); }
-.card-value.value-yellow { color: var(--yellow); }
-.card-value.value-red { color: var(--red); }
-.card-value.value-muted { color: var(--text-dim); }
-
-.card-label {
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-/* ─── Health Badge ─── */
-.health-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 20px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 6px;
-}
-
-.health-badge.green {
-  background: var(--green-bg);
-  color: var(--green);
-  border: 1px solid var(--green-dim);
-}
-.health-badge.yellow {
-  background: var(--yellow-bg);
-  color: var(--yellow);
-  border: 1px solid var(--yellow-dim);
-}
-.health-badge.red {
-  background: var(--red-bg);
-  color: var(--red);
-  border: 1px solid var(--red-dim);
-}
-
-.health-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.card-footer {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.footer-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.footer-stat-label {
-  font-size: 10px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.footer-stat-val {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
 
 /* ─── Carregando / erro ─── */
 .loading-state, .error-state { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-12); padding: 60px var(--space-20); color: var(--text-secondary); font-size: var(--caption-size); }
@@ -904,29 +707,12 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .empty-state p { max-width: 520px; }
 .empty-state code { font-family: var(--font-mono); font-size: 12px; padding: 1px 5px; border-radius: var(--radius-code); background: var(--bg-chip); color: var(--text-primary); }
 
-/* ─── Responsive ─── */
-@media (max-width: 1200px) {
-  .metrics-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-@media (max-width: 900px) {
-  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-  .section-health-cards { grid-template-columns: repeat(2, 1fr); }
-  .section-volume-cards { grid-template-columns: repeat(2, 1fr); }
-  .section-signals-cards { grid-template-columns: 1fr; }
-}
-
+/* ─── Responsivo (moldura e formulários) ─── */
 @media (max-width: 768px) {
   .eh-topbar { padding: 0 var(--space-16); }
   .page-scroll { padding: var(--space-20) var(--space-16) var(--space-24); }
   .detail-card { max-height: calc(100vh - 20px); }
   .form-row { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 560px) {
-  .metrics-grid { grid-template-columns: 1fr; }
-  .section-health-cards { grid-template-columns: 1fr; }
-  .section-volume-cards { grid-template-columns: 1fr; }
 }
 
 /* ═══════════════════ MODAIS: CONTEÚDO ═══════════════════ */
@@ -969,10 +755,10 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 .eh-dialog__foot { flex-shrink: 0; border-top: 1px solid var(--border-subtle); }
 
 /* ─── Utilitários de cor de texto ─── */
-.text-green  { color: var(--green); }
-.text-yellow { color: var(--yellow); }
-.text-red    { color: var(--red); }
-.text-blue   { color: var(--blue); }
+.text-green  { color: var(--success); }
+.text-yellow { color: var(--warning); }
+.text-red    { color: var(--danger); }
+.text-blue   { color: var(--info); }
 
 /* ═══════════════════ DIAGNÓSTICO ═══════════════════ */
 .page-insights { display: flex; flex-direction: column; gap: var(--space-30); }

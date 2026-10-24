@@ -750,55 +750,55 @@ function setActiveTocLink(topic) {
 // cards existem / quando cada um aparece).
 const HELP_CONTENT = [
   {
-    label: 'Saúde e Infraestrutura', icon: 'heart-pulse',
+    label: 'Saúde e infraestrutura', icon: 'heart-pulse',
     topics: [
       {
-        id: 'help-cluster-health', q: 'Saúde do Cluster',
-        summary: 'Card-resumo da <strong>disponibilidade geral</strong> do cluster — o primeiro lugar a olhar. Reflete se todos os shards (primários e réplicas) estão alocados e operacionais. O rodapé traz a <strong>versão do cluster</strong> e a <strong>licença</strong>; o detalhe de primários e a <strong>taxa de alocação (% Shards Ativos)</strong> ficam no card Total de Shards. Clique no card para ver a saúde índice a índice.',
+        id: 'help-cluster-health', q: 'Saúde do cluster',
+        summary: 'Card-resumo da <strong>disponibilidade geral</strong> do cluster — o primeiro lugar a olhar. Reflete se todos os shards (primários e réplicas) estão alocados e operacionais. O rodapé traz a <strong>versão do cluster</strong> e a <strong>licença</strong>; o detalhe de primários e a <strong>taxa de alocação (% Shards Ativos)</strong> ficam no card Total de shards. Clique no card para ver a saúde índice a índice.',
         data: [
           { label: 'Status (GREEN / YELLOW / RED)', desc: '<strong>GREEN</strong>: todos os shards primários e réplicas alocados — saudável. <strong>YELLOW</strong>: primários ok, mas há réplicas não alocadas; perder um nó pode deixar dados temporariamente indisponíveis. <strong>RED</strong>: ao menos um shard primário não alocado — parte dos dados inacessível ou em risco de perda permanente; exige ação imediata.' },
-          { label: 'Versão do Cluster (rodapé)', desc: 'Versão do Elasticsearch do cluster conectado. Útil para conferir compatibilidade de recursos e planejar upgrades — é aqui (e não na sidebar) que a versão aparece.' },
-          { label: 'Licença (rodapé)', desc: 'Tipo da licença do cluster (BASIC, GOLD, PLATINUM, ENTERPRISE…) e seu status. Fica <span style="color:var(--yellow)">amarela</span> quando expira em até 30 dias e <span style="color:var(--red)">vermelha</span> se expira em 7 dias ou já expirou. A licença basic é perpétua (sem expiração). O tipo também explica a ausência de recursos pagos (ex.: certas integrações de segurança ou ML). Omitida quando a consulta de licença está indisponível.' },
+          { label: 'Versão do cluster (rodapé)', desc: 'Versão do Elasticsearch do cluster conectado. Útil para conferir compatibilidade de recursos e planejar upgrades — é aqui (e não na sidebar) que a versão aparece.' },
+          { label: 'Licença (rodapé)', desc: 'Tipo da licença do cluster (BASIC, GOLD, PLATINUM, ENTERPRISE…) e seu status. Fica <span style="color:var(--warning)">amarela</span> quando expira em até 30 dias e <span style="color:var(--danger)">vermelha</span> se expira em 7 dias ou já expirou. A licença basic é perpétua (sem expiração). O tipo também explica a ausência de recursos pagos (ex.: certas integrações de segurança ou ML). Omitida quando a consulta de licença está indisponível.' },
         ],
       },
       {
-        id: 'help-total-nodes', q: 'Total de Nós',
+        id: 'help-total-nodes', q: 'Total de nós',
         summary: 'Quantidade de nós que compõem o cluster agora, detalhada por função. Monitorar a <strong>estabilidade desse número</strong> é essencial: uma queda inesperada indica que um nó saiu (falha, rede ou manutenção), o que dispara realocação de shards e pode degradar o desempenho. Clique para ver CPU, Heap e Disco por nó.',
         data: [
           { label: 'Total de nós', desc: 'Soma de todos os nós conectados ao cluster (data, master, ingest, ML (Machine Learning), etc.).' },
-          { label: 'Data Nodes', desc: 'Nós que armazenam dados (shards). Determinam a capacidade de armazenamento e a distribuição de carga. Poucos data nodes para muitos shards concentram carga e risco.' },
+          { label: 'Data nodes', desc: 'Nós que armazenam dados (shards). Determinam a capacidade de armazenamento e a distribuição de carga. Poucos data nodes para muitos shards concentram carga e risco.' },
           { label: 'Master', desc: 'Nós master dedicados (exibido apenas quando existem). Cuidam do cluster state; em produção, o recomendado são 3 masters dedicados para garantir quórum e evitar split-brain.' },
           { label: 'HOT / WARM / COLD / FROZEN', desc: 'Quantos data nodes pertencem a cada tier de dados. Cada tier só é exibido quando há nós nele, e um nó só é contado quando tem <strong>exatamente um</strong> desses roles de tier — nós que acumulam mais de um tier (ex.: <code>data_hot</code> + <code>data_warm</code>) não entram em nenhuma contagem. Quando o nó também é master (comum em ambientes menores), o rótulo vira <strong>MASTER/HOT</strong>, <strong>MASTER/WARM</strong>, etc. Roles complementares (ingest, <code>data_content</code>, etc.) não afetam a contagem.' },
         ],
       },
       {
-        id: 'help-total-indices', q: 'Total de Índices',
+        id: 'help-total-indices', q: 'Total de índices',
         summary: 'Contagem total de índices, incluindo os de sistema (prefixo <code>.</code>, como <code>.kibana</code> e <code>.security</code>). Uma contagem muito alta — e, sobretudo, um excesso de shards — pressiona a memória do master e degrada o desempenho; para séries temporais, prefira data streams. Clique para listar todos os índices.',
         data: [
           { label: 'Total de índices', desc: 'Número total de índices, visíveis e ocultos.' },
         ],
       },
       {
-        id: 'help-data-volume', q: 'Volume de Dados',
-        summary: 'Soma do tamanho <strong>em disco</strong> (store) de todos os índices, incluindo réplicas e índices de sistema. É a métrica mais direta do tamanho do cluster. O rodapé traz o total de <strong>documentos indexados</strong>. O uso de disco agregado por <strong>tier</strong> (HOT / WARM / COLD / FROZEN) fica no card <strong>Capacidade por tier</strong>, logo abaixo, na seção Disco por Tier.',
+        id: 'help-data-volume', q: 'Volume de dados',
+        summary: 'Soma do tamanho <strong>em disco</strong> (store) de todos os índices, incluindo réplicas e índices de sistema. É a métrica mais direta do tamanho do cluster. O rodapé traz o total de <strong>documentos indexados</strong>. O uso de disco agregado por <strong>tier</strong> (HOT / WARM / COLD / FROZEN) fica no card <strong>Capacidade por tier</strong>, logo abaixo, na seção Disco por tier.',
         data: [
           { label: 'Volume em disco (store)', desc: 'Tamanho ocupado por todos os shards (primários + réplicas). Difere do volume "lógico" dos dados, pois inclui as cópias.' },
           { label: 'Documentos (rodapé)', desc: 'Soma de <code>docs.count</code> de todos os índices — o total de documentos vivos no cluster. Não conta documentos marcados para exclusão que ainda não passaram por merge. Serve como ordem de grandeza do conteúdo indexado: cresce com a ingestão e diminui com expurgo/ILM.' },
         ],
       },
       {
-        id: 'help-tier-disk', q: 'Disco por Tier',
+        id: 'help-tier-disk', q: 'Disco por tier',
         summary: 'Gráfico de barras horizontais com a capacidade de disco por <strong>tier de dados</strong> (HOT / WARM / COLD) — uma barra por tier, somando todos os data nodes daquele tier. O <strong>trilho cinza</strong> é a capacidade total do tier e o <strong>preenchimento colorido</strong> é o uso; o <strong>% de uso</strong> fica à direita e os bytes (usado · total · livre) logo abaixo da barra. Só conta nós com role de tier (<code>data_hot/warm/cold</code>).',
         data: [
           { label: 'Barra (trilho cinza)', desc: 'Capacidade total de disco do tier — a soma de todos os data nodes daquela camada.' },
           { label: 'Preenchimento colorido', desc: 'Espaço em uso. A cor segue o uso: cinza < 70%, amarelo ≥ 70%, vermelho ≥ 85%.' },
           { label: '% à direita', desc: 'Percentual de uso da barra (usado ÷ total).' },
           { label: 'Usado · Total · Livre (abaixo)', desc: 'Os valores absolutos, centralizados sob a barra, com o <strong>percentual livre</strong> entre parênteses. Livre = total − usado. Watermarks padrão do ES: low 85% / high 90% / flood 95%.' },
-          { label: 'Por que FROZEN não aparece', desc: 'O disco de um nó frozen não é capacidade de armazenamento: é o <strong>cache dos searchable snapshots</strong> (<code>xpack.searchable.snapshot.shared_cache.size</code>), pré-alocado num tamanho fixo e mantido cheio pelo Elasticsearch. Ele opera perto de 100% mesmo com o repositório inteiro à disposição, então somá-lo aos demais tiers criaria uma barra permanentemente vermelha sem significar falta de espaço. Os dados do tier frozen vivem no repositório de snapshots. Pelo mesmo motivo, o disco desses nós aparece como <strong>—</strong> em toda visão por nó: "Utilização por Nó", modal "Nós do Cluster", caixinha da Topologia, modal de detalhe do nó e os alertas de disco do Diagnóstico.' },
+          { label: 'Por que FROZEN não aparece', desc: 'O disco de um nó frozen não é capacidade de armazenamento: é o <strong>cache dos searchable snapshots</strong> (<code>xpack.searchable.snapshot.shared_cache.size</code>), pré-alocado num tamanho fixo e mantido cheio pelo Elasticsearch. Ele opera perto de 100% mesmo com o repositório inteiro à disposição, então somá-lo aos demais tiers criaria uma barra permanentemente vermelha sem significar falta de espaço. Os dados do tier frozen vivem no repositório de snapshots. Pelo mesmo motivo, o disco desses nós aparece como <strong>—</strong> em toda visão por nó: "Utilização por nó", modal "Nós do cluster", caixinha da Topologia, modal de detalhe do nó e os alertas de disco do Diagnóstico.' },
         ],
       },
       {
-        id: 'help-cluster-topology', q: 'Topologia do Cluster',
+        id: 'help-cluster-topology', q: 'Topologia do cluster',
         summary: 'Representação visual da <strong>infraestrutura do cluster</strong> agrupada por camada (tier). Cada faixa reúne os nós de um mesmo tier de dados; nós que acumulam múltiplos tiers (ex.: <code>data_hot</code> + <code>data_warm</code> no mesmo nó) formam uma <strong>faixa combinada</strong> (HOT / WARM). O layout é <strong>totalmente dinâmico</strong>: faixas surgem e somem conforme os tiers presentes no cluster, sem configuração manual.',
         data: [
           { label: 'Faixa MASTER', desc: 'Lista apenas os nós <strong>master dedicados</strong> — que têm a role <code>master</code> mas nenhuma role <code>data*</code>. O master eleito que também é data node <strong>não</strong> entra aqui; aparece no seu tier com um ★.' },
@@ -811,7 +811,7 @@ const HELP_CONTENT = [
         ],
       },
       {
-        id: 'help-snapshot-running', q: 'Snapshot em Execução',
+        id: 'help-snapshot-running', q: 'Snapshot em execução',
         summary: 'Snapshots em <strong>criação</strong> neste momento — visão ao vivo de qual backup está sendo gerado, em qual repositório, há quanto tempo e o progresso total (bytes e shards). Diferente do <strong>Backup (SLM)</strong>, que mostra o histórico das políticas, este card reflete o que está acontecendo <em>agora</em>. O conteúdo do modal é buscado ao vivo a cada abertura — sem cache. Clique para abrir o painel com barra de progresso por snapshot.',
         data: [
           { label: 'N em andamento', desc: 'Há N snapshots sendo criados agora. Clique para ver o progresso de cada um.' },
@@ -819,11 +819,11 @@ const HELP_CONTENT = [
           { label: '— (indisponível)', desc: 'A API <code>_snapshot/_status</code> não respondeu (licença insuficiente ou falta de permissão). O card não consegue avaliar e não emite alarme.' },
           { label: 'Estado do snapshot', desc: '<strong>Iniciado</strong>: aceito, aguardando início da transferência. <strong>Em progresso</strong>: copiando dados dos shards para o repositório (estado esperado durante a maior parte da execução). <strong>Concluído</strong>: todos os shards copiados. <strong>Falhou</strong>: erro durante a criação — verifique logs do nó master e estado do repositório. <strong>Abortado</strong>: cancelado via API antes de concluir. <strong>Ausente</strong>: snapshot não encontrado no repositório (pode ter sido excluído externamente). <strong>Incompatível</strong>: criado em versão incompatível com a atual.' },
           { label: 'Barra de progresso', desc: 'Calculada por <strong>bytes processados / bytes totais</strong>. Nos primeiros instantes (antes de o ES calcular o total), o fallback é <strong>shards concluídos / shards totais</strong>.' },
-          { label: 'Snapshot × Restauração', desc: 'Este card cobre apenas a <strong>criação</strong> de snapshots. Restaurações (restore) aparecem na seção <strong>Realocação e Recuperação de Shards</strong>, dentro do modal "Total de Shards", com tipo <em>Restauração (snapshot)</em>.' },
+          { label: 'Snapshot × Restauração', desc: 'Este card cobre apenas a <strong>criação</strong> de snapshots. Restaurações (restore) aparecem na seção <strong>Realocação e recuperação de shards</strong>, dentro do modal "Total de shards", com tipo <em>Restauração (snapshot)</em>.' },
         ],
       },
       {
-        id: 'help-total-shards', q: 'Total de Shards',
+        id: 'help-total-shards', q: 'Total de shards',
         summary: 'Número total de shards configurados (primários + réplicas). Cada shard tem um custo fixo de memória e metadados no master; <strong>excesso de shards</strong> é uma das causas mais comuns de instabilidade. A regra prática é manter abaixo de ~20 shards por GB de heap em cada nó. Clique para ver o resumo detalhado de primários, taxa de alocação, média por nó, operações de recovery em andamento e, quando houver shards não alocados, um aviso com link direto para o diagnóstico de alocação.',
         data: [
           { label: 'Total de shards', desc: 'Soma de primários e réplicas de todos os índices, incluindo os de sistema.' },
@@ -833,7 +833,7 @@ const HELP_CONTENT = [
           { label: 'Média por data node (detalhe)', desc: 'Total de shards dividido pelo nº de data nodes. Amarelo a partir de ~600 e vermelho a partir de ~1000 por nó — sinaliza oversharding no nível do cluster.' },
           { label: 'Aviso de shards não alocados (detalhe)', desc: 'Quando <code>unassigned_shards > 0</code>, o modal exibe um <strong>aviso informativo azul</strong> entre os números e a seção de recovery. Pode indicar restaurações de snapshot (<code>NEW_INDEX_RESTORED</code>) ou réplicas pendentes que ainda aguardam alocação (sem operação de recovery ativa). O botão <strong>"Ver diagnóstico"</strong> abre a tabela de diagnóstico de alocação (<code>_cluster/allocation/explain</code>), com o motivo exato de cada shard. Sem chamada extra — usa o <code>unassigned_shards</code> já presente no dashboard.' },
           { label: 'Realocação e Recuperação (detalhe)', desc: 'Lista das operações de shard <strong>em andamento</strong> (<code>_recovery?active_only</code>): índice, shard, se é primário ou réplica, tipo (realocação, restauração de snapshot, recuperação local), origem → destino, estágio, % concluído com barra de progresso, bytes migrados / total, tempo decorrido e o avanço de arquivos e translog. Vazio quando nenhuma recuperação está <em>ativa</em> — não equivale a "tudo alocado" (shards podem estar aguardando, visíveis no aviso acima).' },
-          { label: 'Não Alocados (rodapé)', desc: 'Shards que o cluster não conseguiu atribuir a nenhum nó. Se forem primários, o índice fica inacessível e o cluster vai a RED. O ideal é 0.' },
+          { label: 'Não alocados (rodapé)', desc: 'Shards que o cluster não conseguiu atribuir a nenhum nó. Se forem primários, o índice fica inacessível e o cluster vai a RED. O ideal é 0.' },
           { label: 'Atraso (timeout) (rodapé)', desc: 'Parte dos não alocados que apenas aguarda o timeout de realocação após a saída de um nó (<code>node_left.delayed_timeout</code>, padrão 1m). Costuma se resolver sozinho — não é bloqueio real.' },
           { label: 'Realocando (rodapé)', desc: 'Shards migrando de um nó para outro, em geral após rebalanceamento ou adição de nó. Estado transitório.' },
           { label: 'Inicializando (rodapé)', desc: 'Shards sendo carregados pela primeira vez — ocorre na criação de índices ou na restauração de snapshot. Estado transitório.' },
@@ -842,10 +842,10 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Sinais de Alerta', icon: 'triangle-alert',
+    label: 'Sinais de alerta', icon: 'triangle-alert',
     topics: [
       {
-        id: 'help-pending-tasks', q: 'Tarefas Pendentes',
+        id: 'help-pending-tasks', q: 'Tarefas pendentes',
         summary: 'Tarefas de atualização do <strong>cluster state</strong> (criação de índices, alterações de mapping, alocação de shards) enfileiradas aguardando o nó <strong>master</strong>. Valores persistentemente acima de zero — e principalmente uma espera máxima alta — indicam um master sobrecarregado, causa comum de lentidão generalizada. Clique para ver a fila (<code>_cluster/pending_tasks</code>).',
         data: [
           { label: 'Nº na fila (pílula)', desc: 'Quantidade de tarefas aguardando o master agora. Neutro = 0 (sem fila, com ✓); amarelo = há fila; vermelho = fila com espera alta (≥ 200ms).' },
@@ -860,8 +860,8 @@ const HELP_CONTENT = [
         ],
       },
       {
-        id: 'help-circuit-breakers', q: 'Circuit Breakers',
-        summary: 'Os circuit breakers abortam requisições para proteger a JVM de estouro de memória; o contador <code>tripped</code> soma quantas já foram derrubadas — cada disparo é uma query ou indexação rejeitada. O breaker <strong>parent</strong> é o mais crítico: agrega o uso de todos os demais e, ao atingir o limite (~95% do heap), passa a rejeitar tudo. <strong>Atenção:</strong> o contador é <strong>acumulado desde o boot</strong> — não reflete o instante atual; para o estado <em>agora</em>, use <strong>Parent CB % (Parent Circuit Breaker)</strong> e <strong>Fila TP (Fila de Thread Pool)</strong> na tabela Utilização por Nó. Clique para ver o uso por nó.',
+        id: 'help-circuit-breakers', q: 'Circuit breakers',
+        summary: 'Os circuit breakers abortam requisições para proteger a JVM de estouro de memória; o contador <code>tripped</code> soma quantas já foram derrubadas — cada disparo é uma query ou indexação rejeitada. O breaker <strong>parent</strong> é o mais crítico: agrega o uso de todos os demais e, ao atingir o limite (~95% do heap), passa a rejeitar tudo. <strong>Atenção:</strong> o contador é <strong>acumulado desde o boot</strong> — não reflete o instante atual; para o estado <em>agora</em>, use <strong>Parent CB % (Parent Circuit Breaker)</strong> e <strong>Fila TP (Fila de Thread Pool)</strong> na tabela Utilização por nó. Clique para ver o uso por nó.',
         data: [
           { label: 'Total de disparos (tripped)', desc: 'Soma de disparos de todos os breakers desde o boot do nó. Neutro = 0 (com ✓); vermelho = houve disparos (pressão de memória severa em algum momento).' },
           { label: 'Parent', desc: 'Nº de disparos do breaker parent (o agregador). Disparos aqui são os mais graves — indicam que o nó esgotou a proteção global de memória.' },
@@ -871,7 +871,7 @@ const HELP_CONTENT = [
         id: 'help-slm-policies', q: 'Backup (SLM)',
         summary: 'Estado das políticas de <strong>snapshot (SLM — Snapshot Lifecycle Management)</strong>, os backups automáticos do cluster. Sem backups em dia, uma perda de dados pode ser irreversível. Clique para ver cada política: repositório, agendamento, último sucesso/falha e próxima execução.',
         data: [
-          { label: 'Estado (pílula)', desc: '<strong>Neutro, com ✓</strong> = backups em dia. <span style="color:var(--yellow)">Amarelo</span> = nenhuma política configurada (sem backup automático). <span style="color:var(--red)">Vermelho</span> = a execução mais recente de alguma política falhou — os backups podem estar desatualizados.' },
+          { label: 'Estado (pílula)', desc: '<strong>Neutro, com ✓</strong> = backups em dia. <span style="color:var(--warning)">Amarelo</span> = nenhuma política configurada (sem backup automático). <span style="color:var(--danger)">Vermelho</span> = a execução mais recente de alguma política falhou — os backups podem estar desatualizados.' },
           { label: '— (indisponível)', desc: 'A API de SLM não respondeu (licença insuficiente ou falta de permissão). O card não consegue avaliar o backup e não emite alarme.' },
         ],
       },
@@ -879,17 +879,17 @@ const HELP_CONTENT = [
         id: 'help-flood-stage', q: 'Flood-stage',
         summary: 'Índices com <strong>bloqueio de escrita aplicado automaticamente</strong> pelo Elasticsearch quando o disco de um nó passou de <strong>95%</strong> (flood-stage watermark). É um <strong>incidente de disponibilidade ao vivo</strong>: enquanto durar, os índices afetados não aceitam escrita. O bloqueio <strong>persiste mesmo após liberar disco</strong> — remova com <code>"index.blocks.read_only_allow_delete": null</code> depois de resolver o espaço. Clique para listar os índices bloqueados.',
         data: [
-          { label: 'Nº em flood-stage (pílula)', desc: '<strong>Neutro, com ✓</strong> = 0 (nenhum índice bloqueado por disco). <span style="color:var(--red)">Vermelho</span> = há índices com escrita bloqueada — libere disco e remova o bloqueio.' },
+          { label: 'Nº em flood-stage (pílula)', desc: '<strong>Neutro, com ✓</strong> = 0 (nenhum índice bloqueado por disco). <span style="color:var(--danger)">Vermelho</span> = há índices com escrita bloqueada — libere disco e remova o bloqueio.' },
           { label: 'Read-only manual (Diagnóstico)', desc: 'Bloqueios <code>read_only</code>/<code>write</code> definidos manualmente fora do ILM <strong>não</strong> entram aqui — são higiene, não incidente, e aparecem como apontamento amarelo na página Diagnóstico. Read-only definido pelo próprio ILM é esperado.' },
         ],
       },
     ],
   },
   {
-    label: 'Utilização de Recursos', icon: 'cpu',
+    label: 'Utilização de recursos', icon: 'cpu',
     topics: [
       {
-        id: 'help-resource-table', q: 'Utilização por Nó',
+        id: 'help-resource-table', q: 'Utilização por nó',
         summary: 'Tabela com indicadores ao vivo por nó — um por dimensão de saturação. Permite identificar nós sobrecarregados, com pressão de memória ou disco perto do limite. Clique para a visão completa, que inclui Heap JVM, GC Overhead, Rejeições e shards por nó.',
         data: [
           { label: 'Nó', desc: 'Nome do nó e suas roles principais (HOT / WARM / COLD…); o master eleito recebe ★.' },
@@ -907,31 +907,31 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Configuração de Índices', icon: 'layers',
+    label: 'Configuração de índices', icon: 'layers',
     topics: [
       {
-        id: 'help-without-replicas', q: 'Sem Réplica',
+        id: 'help-without-replicas', q: 'Sem réplica',
         summary: 'Índices configurados com <code>number_of_replicas = 0</code>. Sem réplica, o shard primário é um <strong>ponto único de falha</strong>: perder o nó que o hospeda significa perda de dados permanente. Aceitável para dados descartáveis ou reconstruíveis, mas perigoso em produção. Clique para ver a lista.',
         data: [
           { label: 'Nº de índices', desc: 'Quantos índices estão sem réplica. Neutro = 0; amarelo = há índices sem redundância — avalie quais são críticos.' },
         ],
       },
       {
-        id: 'help-large-shards', q: 'Shards Primários > 50 GB',
+        id: 'help-large-shards', q: 'Shards primários > 50 GB',
         summary: 'Índices que têm <strong>algum shard primário individual</strong> acima de 50 GB (não a soma do índice). Shards primários grandes causam recuperação lenta, realocação demorada e queda de desempenho. A recomendação da Elastic é manter shards entre 10 e 50 GB — considere reindexar com mais shards ou ajustar o rollover da política de ILM. Clique para ver os índices e o tamanho do maior shard.',
         data: [
           { label: 'Nº de índices', desc: 'Quantos índices têm ao menos um shard primário acima de 50 GB. Neutro = 0; amarelo = há shards grandes demais.' },
         ],
       },
       {
-        id: 'help-without-ilm', q: 'Sem Política de ILM',
+        id: 'help-without-ilm', q: 'Sem política de ILM',
         summary: 'Índices sem <code>index.lifecycle.name</code>, ou seja, sem Index Lifecycle Management. Sem ILM, o índice cresce indefinidamente e exige gestão manual de rollover, migração entre tiers e expurgo. O ILM automatiza essas transições (hot → warm → cold → delete), otimizando recursos. Clique para a lista.',
         data: [
           { label: 'Nº de índices', desc: 'Quantos índices não têm política de ILM atribuída. Neutro = 0; amarelo = há índices sem ciclo de vida automatizado.' },
         ],
       },
       {
-        id: 'help-ilm-without-delete', q: 'ILM sem Fase DELETE',
+        id: 'help-ilm-without-delete', q: 'ILM sem fase delete',
         summary: 'Políticas de ILM sem a fase <strong>delete</strong>. Elas movem dados entre tiers mas nunca os removem — a retenção fica infinita e o disco só cresce. Pode ser intencional (dados que devem ser mantidos para sempre), mas costuma ser um esquecimento. Clique para ver as políticas e suas fases.',
         data: [
           { label: 'Nº de políticas', desc: 'Quantas políticas de ILM não têm fase delete. Neutro = 0; amarelo = há políticas sem expurgo automático.' },
@@ -940,10 +940,10 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Tarefas em Execução', icon: 'list',
+    label: 'Tarefas em execução', icon: 'list',
     topics: [
       {
-        id: 'help-running-tasks', q: 'Tarefas em Execução',
+        id: 'help-running-tasks', q: 'Tarefas em execução',
         summary: 'Lista as tarefas do cluster com tempo de execução acima de <strong>5s</strong> (ignora ações internas de baixo nível, como <code>health-node[c]</code>). Útil para flagrar operações travadas, reindexações longas ou consultas pesadas. Operações que se dividem em <strong>slices</strong> (reindex, update_by_query, delete_by_query com <code>slices=N</code>) são <strong>agrupadas sob a tarefa-pai</strong> — a linha do pai traz um badge com o nº de sub-tarefas e um chevron para expandir/recolher as filhas (recolhido por padrão). A <strong>contagem</strong> exibida é de <strong>operações</strong> (pais), não de tarefas brutas. Cada tarefa pode ser inspecionada (JSON completo) e, quando cancelável, cancelada.',
         data: [
           { label: 'Nó', desc: 'Nó onde a tarefa está em execução. Nas tarefas-pai que fatiam em slices, o chevron à esquerda expande/recolhe as sub-tarefas.' },
@@ -961,10 +961,10 @@ const HELP_CONTENT = [
     topics: [
       {
         id: 'help-insights-overview', q: 'O que é a página de Diagnóstico',
-        summary: 'O <strong>Diagnóstico</strong> é uma leitura <strong>interpretada</strong> dos mesmos dados dos Sinais Vitais e do Inventário — ele reaproveita o que já foi carregado (<strong>sem novas requisições ao cluster</strong>) e destaca apenas <strong>o que merece atenção</strong>. Cada card é <strong>condicional</strong>: só aparece quando a situação que ele descreve está de fato ocorrendo. Quando está tudo saudável, a grade fica vazia, com uma mensagem positiva. Os cards são ordenados por severidade: <span style="color:var(--red)">críticos</span> primeiro, depois <span style="color:var(--yellow)">atenção</span> e por fim <span style="color:var(--blue)">info</span>.',
+        summary: 'O <strong>Diagnóstico</strong> é uma leitura <strong>interpretada</strong> dos mesmos dados dos Sinais Vitais e do Inventário — ele reaproveita o que já foi carregado (<strong>sem novas requisições ao cluster</strong>) e destaca apenas <strong>o que merece atenção</strong>. Cada card é <strong>condicional</strong>: só aparece quando a situação que ele descreve está de fato ocorrendo. Quando está tudo saudável, a grade fica vazia, com uma mensagem positiva. Os cards são ordenados por severidade: <span style="color:var(--danger)">críticos</span> primeiro, depois <span style="color:var(--warning)">atenção</span> e por fim <span style="color:var(--info)">info</span>.',
         data: [
           { label: 'Resumo de severidade (topo)', desc: 'A cor e o ícone seguem a <strong>disponibilidade</strong> do cluster (status GREEN/YELLOW/RED), e não as severidades de configuração — um cluster GREEN aparece verde mesmo havendo riscos a tratar. Ao lado ficam os contadores Crítico / Atenção / Info.' },
-          { label: 'Crítico / Atenção / Info', desc: '<span style="color:var(--red)">Crítico</span> = cards vermelhos (ação urgente). <span style="color:var(--yellow)">Atenção</span> = amarelos (avaliar). <span style="color:var(--blue)">Info</span> = azuis (apenas informativo).' },
+          { label: 'Crítico / Atenção / Info', desc: '<span style="color:var(--danger)">Crítico</span> = cards vermelhos (ação urgente). <span style="color:var(--warning)">Atenção</span> = amarelos (avaliar). <span style="color:var(--info)">Info</span> = azuis (apenas informativo).' },
           { label: 'Badge na sidebar', desc: 'O número ao lado de "Diagnóstico" no menu reflete a soma de <strong>Crítico + Atenção</strong> (fica oculto quando é zero).' },
         ],
       },
@@ -972,26 +972,26 @@ const HELP_CONTENT = [
         id: 'help-insights-cards', q: 'Cards de Diagnóstico e quando aparecem',
         summary: 'A lista abaixo descreve cada card de insight, a sua <strong>severidade</strong> e a <strong>condição</strong> que faz com que ele apareça. A maioria abre um modal de detalhe ao clicar no botão de ação.',
         data: [
-          { label: 'Índices sem réplica', desc: '<span style="color:var(--red)">Vermelho</span>. Aparece quando há índices com <code>number_of_replicas = 0</code>. Abre "Sem Réplica".' },
-          { label: 'Índices sem política de ILM', desc: '<span style="color:var(--yellow)">Amarelo</span>. Há índices sem <code>index.lifecycle.name</code>. Abre "Sem Política de ILM".' },
-          { label: 'Disco alto no tier (um card por tier)', desc: '<span style="color:var(--yellow)">Amarelo</span> ≥ 70% / <span style="color:var(--red)">vermelho</span> ≥ 85%. Um card por tier (HOT/WARM/COLD/FROZEN) que tenha algum nó com disco ≥ 70%. O botão "Ver detalhes" abre o modal "Uso de disco por nó".' },
-          { label: 'Políticas de ILM sem fase delete', desc: '<span style="color:var(--yellow)">Amarelo</span>. Há política de ILM sem a fase <code>delete</code> (retenção infinita). Abre "ILM sem Fase DELETE".' },
-          { label: 'Réplicas não alocáveis', desc: '<span style="color:var(--red)">Vermelho</span>. Algum índice tem nº de réplicas ≥ nº de data nodes — réplicas que nunca alocam e mantêm o cluster em YELLOW. Abre "Réplicas Não Alocáveis".' },
-          { label: 'Quorum de master frágil', desc: '<span style="color:var(--red)">Vermelho</span> (menos de 3 master-eligible) / <span style="color:var(--yellow)">amarelo</span> (número par). Só em clusters com mais de um nó. Abre "Nós do Cluster".' },
-          { label: 'Oversharding', desc: '<span style="color:var(--yellow)">Amarelo</span>. Há índices com mais de um shard primário e tamanho médio por shard abaixo de 1 GB. Abre "Índices com Oversharding".' },
-          { label: 'Pressão de memória', desc: '<span style="color:var(--yellow)">Amarelo</span>. Algum nó com GC overhead ≥ 25% ou memory pressure ≥ 75%. Abre "Nós do Cluster".' },
-          { label: 'Heap acima de 50% da RAM', desc: '<span style="color:var(--yellow)">Amarelo</span>. Algum nó com heap máximo acima de 50% da RAM física — sobra pouca memória para o <em>filesystem cache</em>, essencial ao desempenho de busca (o recomendado é heap ≤ 50% da RAM). O botão "Ver nós" abre a lista só dos nós alertados, com nome + role, o % do heap sobre a RAM, o heap e a RAM total.' },
-          { label: 'Pressão de escrita', desc: '<span style="color:var(--yellow)">Amarelo</span> (≥ 70%) / <span style="color:var(--red)">vermelho</span> (≥ 90%). Algum nó com a memória de buffer de indexação (<code>indexing_pressure</code>) acima de 70% do limite — ao chegar a 100% o nó rejeita escritas (HTTP 429). Abre "Nós do Cluster".' },
-          { label: 'Versões de Elasticsearch mistas', desc: '<span style="color:var(--yellow)">Amarelo</span>. Há mais de uma versão de Elasticsearch entre os nós (rolling upgrade em andamento ou incompleto). Abre "Nós do Cluster".' },
-          { label: 'Backup / SLM', desc: '<span style="color:var(--red)">Vermelho</span> (a execução de uma política de SLM falhou) / <span style="color:var(--yellow)">amarelo</span> (nenhuma política de SLM configurada). Só quando a consulta de SLM está disponível. Abre "Políticas de Snapshot (SLM)".' },
-          { label: 'Tarefa longa em execução', desc: '<span style="color:var(--blue)">Info</span>. Há tarefa(s) em execução há mais de 5 segundos.' },
-          { label: 'Índices bloqueados por flood-stage', desc: '<span style="color:var(--red)">Vermelho</span>. Há índices com <code>read_only_allow_delete</code> — bloqueio de escrita aplicado automaticamente quando o disco passou de 95%. Abre "Índices Read-only".' },
-          { label: 'Índices read-only sem ILM', desc: '<span style="color:var(--yellow)">Amarelo</span>. Há índices com bloqueio manual (<code>read_only</code>/<code>write</code>) fora do ILM (read-only definido pelo ILM não conta). Abre "Índices Read-only".' },
-          { label: 'Configurações de cluster de risco', desc: '<span style="color:var(--red)">Vermelho</span> / <span style="color:var(--yellow)">amarelo</span>. Há sobrescritas de risco no <code>_cluster/settings</code> e a consulta está disponível. Abre "Configurações de Cluster de Risco".' },
-          { label: 'Deprecations', desc: '<span style="color:var(--red)">Vermelho</span> (há item crítico) / <span style="color:var(--yellow)">amarelo</span>. A Deprecation Info API está disponível e retornou avisos. Abre "Deprecations".' },
-          { label: 'Licença expirada / expirando', desc: '<span style="color:var(--red)">Vermelho</span> (expirada ou ≤ 7 dias) / <span style="color:var(--yellow)">amarelo</span> (≤ 30 dias). A licença está próxima de vencer ou já venceu.' },
-          { label: 'Shards não alocados — diagnóstico', desc: '<span style="color:var(--red)">Vermelho</span>. Há shards não alocados no cluster. Abre "Diagnóstico de Alocação" (<code>allocation explain</code>).' },
-          { label: 'Disponibilidade comprometida', desc: '<span style="color:var(--red)">Vermelho</span> / <span style="color:var(--yellow)">amarelo</span>. Aparece só quando o status ≠ green, há shards não alocados ou houve disparos de circuit breaker — fica oculto quando tudo está saudável.' },
+          { label: 'Índices sem réplica', desc: '<span style="color:var(--danger)">Vermelho</span>. Aparece quando há índices com <code>number_of_replicas = 0</code>. Abre "Sem réplica".' },
+          { label: 'Índices sem política de ILM', desc: '<span style="color:var(--warning)">Amarelo</span>. Há índices sem <code>index.lifecycle.name</code>. Abre "Sem política de ILM".' },
+          { label: 'Disco alto no tier (um card por tier)', desc: '<span style="color:var(--warning)">Amarelo</span> ≥ 70% / <span style="color:var(--danger)">vermelho</span> ≥ 85%. Um card por tier (HOT/WARM/COLD/FROZEN) que tenha algum nó com disco ≥ 70%. O botão "Ver detalhes" abre o modal "Uso de disco por nó".' },
+          { label: 'Políticas de ILM sem fase delete', desc: '<span style="color:var(--warning)">Amarelo</span>. Há política de ILM sem a fase <code>delete</code> (retenção infinita). Abre "ILM sem fase delete".' },
+          { label: 'Réplicas não alocáveis', desc: '<span style="color:var(--danger)">Vermelho</span>. Algum índice tem nº de réplicas ≥ nº de data nodes — réplicas que nunca alocam e mantêm o cluster em YELLOW. Abre "Réplicas não alocáveis".' },
+          { label: 'Quorum de master frágil', desc: '<span style="color:var(--danger)">Vermelho</span> (menos de 3 master-eligible) / <span style="color:var(--warning)">amarelo</span> (número par). Só em clusters com mais de um nó. Abre "Nós do cluster".' },
+          { label: 'Oversharding', desc: '<span style="color:var(--warning)">Amarelo</span>. Há índices com mais de um shard primário e tamanho médio por shard abaixo de 1 GB. Abre "Índices com oversharding".' },
+          { label: 'Pressão de memória', desc: '<span style="color:var(--warning)">Amarelo</span>. Algum nó com GC overhead ≥ 25% ou memory pressure ≥ 75%. Abre "Nós do cluster".' },
+          { label: 'Heap acima de 50% da RAM', desc: '<span style="color:var(--warning)">Amarelo</span>. Algum nó com heap máximo acima de 50% da RAM física — sobra pouca memória para o <em>filesystem cache</em>, essencial ao desempenho de busca (o recomendado é heap ≤ 50% da RAM). O botão "Ver nós" abre a lista só dos nós alertados, com nome + role, o % do heap sobre a RAM, o heap e a RAM total.' },
+          { label: 'Pressão de escrita', desc: '<span style="color:var(--warning)">Amarelo</span> (≥ 70%) / <span style="color:var(--danger)">vermelho</span> (≥ 90%). Algum nó com a memória de buffer de indexação (<code>indexing_pressure</code>) acima de 70% do limite — ao chegar a 100% o nó rejeita escritas (HTTP 429). Abre "Nós do cluster".' },
+          { label: 'Versões de Elasticsearch mistas', desc: '<span style="color:var(--warning)">Amarelo</span>. Há mais de uma versão de Elasticsearch entre os nós (rolling upgrade em andamento ou incompleto). Abre "Nós do cluster".' },
+          { label: 'Backup / SLM', desc: '<span style="color:var(--danger)">Vermelho</span> (a execução de uma política de SLM falhou) / <span style="color:var(--warning)">amarelo</span> (nenhuma política de SLM configurada). Só quando a consulta de SLM está disponível. Abre "Políticas de Snapshot (SLM)".' },
+          { label: 'Tarefa longa em execução', desc: '<span style="color:var(--info)">Info</span>. Há tarefa(s) em execução há mais de 5 segundos.' },
+          { label: 'Índices bloqueados por flood-stage', desc: '<span style="color:var(--danger)">Vermelho</span>. Há índices com <code>read_only_allow_delete</code> — bloqueio de escrita aplicado automaticamente quando o disco passou de 95%. Abre "Índices read-only".' },
+          { label: 'Índices read-only sem ILM', desc: '<span style="color:var(--warning)">Amarelo</span>. Há índices com bloqueio manual (<code>read_only</code>/<code>write</code>) fora do ILM (read-only definido pelo ILM não conta). Abre "Índices read-only".' },
+          { label: 'Configurações de cluster de risco', desc: '<span style="color:var(--danger)">Vermelho</span> / <span style="color:var(--warning)">amarelo</span>. Há sobrescritas de risco no <code>_cluster/settings</code> e a consulta está disponível. Abre "Configurações de cluster de risco".' },
+          { label: 'Deprecations', desc: '<span style="color:var(--danger)">Vermelho</span> (há item crítico) / <span style="color:var(--warning)">amarelo</span>. A Deprecation Info API está disponível e retornou avisos. Abre "Deprecations".' },
+          { label: 'Licença expirada / expirando', desc: '<span style="color:var(--danger)">Vermelho</span> (expirada ou ≤ 7 dias) / <span style="color:var(--warning)">amarelo</span> (≤ 30 dias). A licença está próxima de vencer ou já venceu.' },
+          { label: 'Shards não alocados — diagnóstico', desc: '<span style="color:var(--danger)">Vermelho</span>. Há shards não alocados no cluster. Abre "Diagnóstico de alocação" (<code>allocation explain</code>).' },
+          { label: 'Disponibilidade comprometida', desc: '<span style="color:var(--danger)">Vermelho</span> / <span style="color:var(--warning)">amarelo</span>. Aparece só quando o status ≠ green, há shards não alocados ou houve disparos de circuit breaker — fica oculto quando tudo está saudável.' },
         ],
       },
     ],
@@ -1010,17 +1010,17 @@ const HELP_CONTENT = [
         ],
       },
       {
-        id: 'help-kibana-instances', q: 'Instâncias Saudáveis',
+        id: 'help-kibana-instances', q: 'Instâncias saudáveis',
         summary: 'Card de topo da página: quantas instâncias estão disponíveis, com a <strong>versão</strong> e as instâncias inacessíveis no rodapé.',
         data: [
           { label: 'Valor principal', desc: 'Proporção de instâncias com status <strong>disponível</strong>. O status vem do <code>/api/status</code> ao vivo quando a URL está cadastrada; sem URL, vem do self-monitoring — que pode estar alguns minutos atrasado.' },
-          { label: 'Versão (rodapé)', desc: 'Versão das instâncias. Quando há mais de uma, todas são listadas e o valor fica <span style="color:var(--yellow)">amarelo</span> — sinal de upgrade em andamento ou incompleto. Instâncias em versões diferentes atrás do mesmo load balancer podem se comportar de forma inconsistente.' },
+          { label: 'Versão (rodapé)', desc: 'Versão das instâncias. Quando há mais de uma, todas são listadas e o valor fica <span style="color:var(--warning)">amarelo</span> — sinal de upgrade em andamento ou incompleto. Instâncias em versões diferentes atrás do mesmo load balancer podem se comportar de forma inconsistente.' },
           { label: 'Inacessíveis (rodapé)', desc: 'Instâncias com URL cadastrada que não responderam: timeout, erro de TLS, credencial inválida ou serviço fora do ar. Só aparece quando há alguma. O motivo exato fica no tooltip da linha correspondente na tabela.' },
         ],
       },
       {
-        id: 'help-kibana-utilization', q: 'Utilização por Instância',
-        summary: 'Tabela de recursos por instância, no mesmo formato da <strong>Utilização por Nó</strong> dos Sinais Vitais. Cada célula informa no tooltip a <strong>origem</strong> do número. Um traço significa <strong>ausência de fonte</strong> para aquela métrica — não é zero.',
+        id: 'help-kibana-utilization', q: 'Utilização por instância',
+        summary: 'Tabela de recursos por instância, no mesmo formato da <strong>Utilização por nó</strong> dos Sinais Vitais. Cada célula informa no tooltip a <strong>origem</strong> do número. Um traço significa <strong>ausência de fonte</strong> para aquela métrica — não é zero.',
         data: [
           { label: 'CPU e Disco', desc: 'São do <strong>host</strong> e vêm exclusivamente da integração <code>system</code> do <strong>Elastic Agent</strong> (<code>metrics-system.cpu-*</code> e <code>metrics-system.filesystem-*</code>), casada pelo nome do host. <strong>A API do Kibana não expõe nenhum dos dois</strong>, e o self-monitoring também não — ambos coletam o mesmo conjunto da API. Sem agente naquele host, a célula fica com um traço. No disco é considerado o <strong>ponto de montagem mais cheio</strong>.' },
           { label: 'RAM', desc: 'Memória do host onde a instância roda. Vem do Elastic Agent quando disponível; senão, do self-monitoring ou da API.' },
@@ -1045,7 +1045,7 @@ const HELP_CONTENT = [
         id: 'help-kibana-fleet', q: 'Fleet — Agentes',
         summary: 'Resumo da frota de <strong>Elastic Agents</strong> gerenciada pelo Fleet (<code>/api/fleet/agent_status</code>, uma única chamada). Os estados usam os <strong>mesmos rótulos da UI do Fleet</strong>, para o número bater com o que você vê lá. Exige URL cadastrada e o privilégio <code>fleet-agents-read</code>; sem ele o card mostra <strong>—</strong> em vez de alarme falso.',
         data: [
-          { label: 'Total', desc: 'Agentes registrados no Fleet, <strong>sem contar os unenrolled</strong> (usa o campo <code>active</code> da API — o <code>all</code> incluiria agentes já removidos da frota e o <code>total</code> está deprecated). Fica <span style="color:var(--red)">vermelho</span> se houver algum <strong>Unhealthy</strong> e <span style="color:var(--yellow)">amarelo</span> se houver <strong>Offline</strong>.' },
+          { label: 'Total', desc: 'Agentes registrados no Fleet, <strong>sem contar os unenrolled</strong> (usa o campo <code>active</code> da API — o <code>all</code> incluiria agentes já removidos da frota e o <code>total</code> está deprecated). Fica <span style="color:var(--danger)">vermelho</span> se houver algum <strong>Unhealthy</strong> e <span style="color:var(--warning)">amarelo</span> se houver <strong>Offline</strong>.' },
           { label: 'Healthy', desc: 'Agentes enrolled, com check-in recente e sem atualização em andamento — operando normalmente. Corresponde ao campo <code>online</code> da API.' },
           { label: 'Unhealthy', desc: 'Agente em execução mas <strong>com erro ou degradado</strong>: política inválida, integração quebrada, permissão insuficiente no host. Costuma significar coleta parcial ou interrompida. Soma os campos <code>error</code> e <code>degraded</code> da API — é assim que a UI do Fleet compõe esse número.' },
           { label: 'Offline', desc: 'Sem check-in há pelo menos <strong>5 minutos</strong>: host desligado, problema de rede ou agente parado. Enquanto isso, os dados daquele host não estão chegando. Passado o timeout de inatividade, o agente vira <em>Inactive</em> e sai da visão padrão do Fleet.' },
@@ -1079,16 +1079,16 @@ const HELP_CONTENT = [
         ],
       },
       {
-        id: 'help-logstash-instances', q: 'Instâncias Saudáveis',
+        id: 'help-logstash-instances', q: 'Instâncias saudáveis',
         summary: 'Card de topo: quantas instâncias estão com status verde, com a <strong>versão</strong> e as inacessíveis no rodapé.',
         data: [
           { label: 'Valor principal', desc: 'Proporção de instâncias com status <strong>verde</strong>. Com URL cadastrada, o status vem do <code>/_health_report</code> — a avaliação do próprio Logstash, que enxerga pipeline parado e falha de reload, coisas que o campo <code>status</code> do <code>/_node/stats</code> ignora. Sem o endpoint (versões antigas) ou sem URL, cai para esse campo ou para o self-monitoring.' },
-          { label: 'Versão (rodapé)', desc: 'Versão das instâncias. Mais de uma fica <span style="color:var(--yellow)">amarela</span> — upgrade em andamento ou incompleto. Instâncias em versões diferentes processando o mesmo pipeline podem se comportar de forma distinta.' },
+          { label: 'Versão (rodapé)', desc: 'Versão das instâncias. Mais de uma fica <span style="color:var(--warning)">amarela</span> — upgrade em andamento ou incompleto. Instâncias em versões diferentes processando o mesmo pipeline podem se comportar de forma distinta.' },
           { label: 'Inacessíveis (rodapé)', desc: 'Instâncias com URL cadastrada que não responderam: timeout, porta 9600 fechada (a API só escuta em <code>127.0.0.1</code> quando <code>api.http.host</code> não é configurado), credencial inválida ou processo fora do ar. O motivo exato fica no tooltip da linha correspondente na tabela.' },
         ],
       },
       {
-        id: 'help-logstash-throughput', q: 'Vazão de Eventos',
+        id: 'help-logstash-throughput', q: 'Vazão de eventos',
         summary: 'Vazão somando todas as instâncias. Os contadores do Logstash são <strong>acumulados desde o start</strong> do processo, então o valor é a <strong>média desde o start</strong> (eventos de saída ÷ uptime) — não a taxa deste instante, que exigiria duas coletas. Ler a média como se fosse "agora" é o erro mais comum aqui: um pico de ontem continua diluído nela.',
         data: [
           { label: 'Eventos/s (média desde o start)', desc: 'Eventos de saída divididos pelo uptime da JVM. Serve para dimensionar ordem de grandeza e comparar instâncias entre si, não para detectar um pico agora.' },
@@ -1097,7 +1097,7 @@ const HELP_CONTENT = [
         ],
       },
       {
-        id: 'help-logstash-queue', q: 'Fila Persistente',
+        id: 'help-logstash-queue', q: 'Fila persistente',
         summary: 'Situação das filas dos pipelines. A <strong>fila persistente</strong> (PQ) grava os eventos em disco antes de processá-los — absorve picos e sobrevive a restart; a de <strong>memória</strong> não tem teto em bytes e perde o que estiver em trânsito se o processo cair.',
         data: [
           { label: 'Valor principal', desc: 'Ocupação da <strong>fila mais cheia</strong> entre as persistentes (bytes em uso ÷ <code>queue.max_bytes</code>). Só nelas existe um máximo para dividir, por isso é o pior caso entre as persistentes e não uma média.' },
@@ -1108,26 +1108,26 @@ const HELP_CONTENT = [
         ],
       },
       {
-        id: 'help-logstash-dlq', q: 'Dead Letter Queue',
+        id: 'help-logstash-dlq', q: 'Dead letter queue',
         summary: 'A <strong>dead letter queue</strong> guarda eventos que o output rejeitou de forma definitiva — tipicamente <em>mapping conflict</em> no Elasticsearch (HTTP 400). Cada evento aqui é um evento que <strong>não chegou ao destino</strong>, e nada o reprocessa sozinho: é preciso lê-la com o input <code>dead_letter_queue</code> e tratar.',
         data: [
-          { label: 'Descartados', desc: 'Eventos escritos na DLQ. Qualquer valor acima de zero fica <span style="color:var(--red)">vermelho</span>: é perda de dado silenciosa do ponto de vista do pipeline, que segue verde.' },
+          { label: 'Descartados', desc: 'Eventos escritos na DLQ. Qualquer valor acima de zero fica <span style="color:var(--danger)">vermelho</span>: é perda de dado silenciosa do ponto de vista do pipeline, que segue verde.' },
           { label: 'Tamanho', desc: 'Espaço ocupado pela DLQ em disco. Cresce até <code>dead_letter_queue.max_bytes</code> (1 GB por padrão) e, ao bater o limite, o comportamento depende do <code>storage_policy</code>.' },
           { label: 'Expirados', desc: 'Eventos que <strong>saíram</strong> da DLQ por idade ou tamanho (<code>dead_letter_queue.retain.age</code>, ou <code>storage_policy: drop_older</code>). Esses estão <strong>perdidos</strong> — não há mais o que reprocessar.' },
           { label: 'Card neutro (—)', desc: 'A DLQ é <strong>desativada por padrão</strong> (<code>dead_letter_queue.enable: false</code>). Sem ela, um evento rejeitado pelo output só aparece no log do Logstash e desaparece: o card neutro não é garantia de que nada foi descartado.' },
         ],
       },
       {
-        id: 'help-logstash-reloads', q: 'Reloads com Falha',
+        id: 'help-logstash-reloads', q: 'Reloads com falha',
         summary: 'Recargas automáticas de configuração (<code>config.reload.automatic</code>) que <strong>falharam</strong>. Uma falha significa que o Logstash continua rodando a configuração <strong>anterior</strong>: a alteração feita não está em vigor, e fora do log nada avisa.',
         data: [
-          { label: 'Valor', desc: 'Soma das falhas de recarga de todos os pipelines (ou o total do nó, quando não há URL cadastrada). <span style="color:var(--red)">Vermelho</span> a partir de uma.' },
+          { label: 'Valor', desc: 'Soma das falhas de recarga de todos os pipelines (ou o total do nó, quando não há URL cadastrada). <span style="color:var(--danger)">Vermelho</span> a partir de uma.' },
           { label: 'Causas típicas', desc: 'Erro de sintaxe no arquivo de pipeline, plugin não instalado, credencial inválida em um output, referência a arquivo inexistente. O motivo da última falha fica no tooltip da coluna <strong>Reloads</strong> da tabela de pipelines.' },
         ],
       },
       {
-        id: 'help-logstash-utilization', q: 'Utilização por Instância',
-        summary: 'Tabela de recursos por instância, no mesmo formato da <strong>Utilização por Nó</strong> dos Sinais Vitais. Cada célula informa no tooltip a <strong>origem</strong> do número; um traço significa <strong>ausência de fonte</strong> para aquela métrica — não é zero.',
+        id: 'help-logstash-utilization', q: 'Utilização por instância',
+        summary: 'Tabela de recursos por instância, no mesmo formato da <strong>Utilização por nó</strong> dos Sinais Vitais. Cada célula informa no tooltip a <strong>origem</strong> do número; um traço significa <strong>ausência de fonte</strong> para aquela métrica — não é zero.',
         data: [
           { label: 'CPU', desc: 'CPU do <strong>processo</strong> Logstash (<code>process.cpu.percent</code>), não do host. Diferente do Kibana, aqui a API expõe CPU — e é a do processo que responde se o Logstash está no limite. Vem do self-monitoring ou da API.' },
           { label: 'Heap', desc: 'Heap da JVM sobre o máximo configurado (<code>-Xmx</code> no <code>jvm.options</code>). Acima de ~75% de forma sustentada, o GC passa a consumir CPU que seria do pipeline e a vazão cai sem que nada apareça como erro. Heap muito grande também prejudica: aumenta a pausa do GC.' },
@@ -1140,10 +1140,10 @@ const HELP_CONTENT = [
       },
       {
         id: 'help-logstash-instance-detail', q: 'Detalhe da instância (modal)',
-        summary: 'Aberta pelo <strong>nome da instância</strong> na tabela Utilização por Instância. Consolida o que só faz sentido olhando <strong>uma</strong> instância por vez: SO, JVM, pools e GC, processo, limites de cgroup, vazão e pipelines. <strong>Não faz requisição</strong>: tudo já veio na última atualização da página. A linha <strong>Fonte deste detalhe</strong> diz de onde o bloco saiu, e cada métrica traz a origem no tooltip do rótulo.',
+        summary: 'Aberta pelo <strong>nome da instância</strong> na tabela Utilização por instância. Consolida o que só faz sentido olhando <strong>uma</strong> instância por vez: SO, JVM, pools e GC, processo, limites de cgroup, vazão e pipelines. <strong>Não faz requisição</strong>: tudo já veio na última atualização da página. A linha <strong>Fonte deste detalhe</strong> diz de onde o bloco saiu, e cada métrica traz a origem no tooltip do rótulo.',
         data: [
           { label: 'Identificação', desc: 'Status (com o sintoma do health report quando há), host, endereço da API, URL monitorada, versão (marcada quando é <em>snapshot</em>), ID do nó, uptime e a data de início da JVM. <strong>Fonte deste detalhe</strong> diz se o bloco veio da API (ao vivo) ou da última amostra do self-monitoring — os dados nunca são misturados entre as duas, para a foto não ficar internamente incoerente.' },
-          { label: 'Sistema Operacional e cgroup', desc: 'SO, arquitetura e <strong>processadores disponíveis</strong> — a contagem que o <code>pipeline.workers</code> segue por padrão. Em container, o <strong>limite de CPU do cgroup</strong> e o <strong>throttling</strong>: quando a cota é menor que os vCPUs do SO, o Logstash tem menos CPU do que a contagem sugere e os workers ficam superdimensionados. Throttling acima de 10% fica vermelho — o processo está sendo parado ao fim dos períodos em que estoura a cota, e a latência sobe sem a CPU parecer saturada.' },
+          { label: 'Sistema operacional e cgroup', desc: 'SO, arquitetura e <strong>processadores disponíveis</strong> — a contagem que o <code>pipeline.workers</code> segue por padrão. Em container, o <strong>limite de CPU do cgroup</strong> e o <strong>throttling</strong>: quando a cota é menor que os vCPUs do SO, o Logstash tem menos CPU do que a contagem sugere e os workers ficam superdimensionados. Throttling acima de 10% fica vermelho — o processo está sendo parado ao fim dos períodos em que estoura a cota, e a latência sobe sem a CPU parecer saturada.' },
           { label: 'CPU', desc: 'CPU do <strong>processo</strong> Logstash, o <strong>load average</strong> do host (1m/5m/15m, colorido contra a contagem de vCPUs) e o tempo total de CPU acumulado desde o start.' },
           { label: 'Memória e JVM', desc: 'RAM do host (Elastic Agent), heap usada, os <strong>pools</strong> (young/survivor/old — sem percentual nos que não declaram máximo, como é o padrão no G1), <strong>non-heap</strong> (metaspace e code cache, que ficam fora do <code>-Xmx</code>) e <code>-Xms</code>/<code>-Xmx</code>: valores diferentes geram aviso, porque o Logstash recomenda os dois iguais para a JVM não redimensionar a heap em runtime.' },
           { label: 'Overhead de GC', desc: 'Tempo de GC ÷ uptime — a fração da vida do processo gasta coletando. Honesto mesmo com contadores acumulados, porque numerador e denominador começam no mesmo instante. É o sinal que a barra de heap não dá: 40% de heap com 20% de overhead é pior que 80% de heap sem GC. Amarelo a partir de 10%, vermelho a partir de 25%.' },
@@ -1220,7 +1220,7 @@ const HELP_CONTENT = [
         id: 'help-cluster-max-shards', q: 'Limite de shards por nó',
         summary: '<code>cluster.max_shards_per_node</code> é o teto de <strong>shards abertos por nó de dados</strong>. Multiplicado pelo número de nós de dados, dá o teto do cluster inteiro. Diferente dos demais ajustes desta página, ele não afeta a recuperação: ao ser atingido, a <strong>criação de índices falha</strong> — com o erro <code>this action would add [N] total shards, but this cluster currently has [X]/[Y] maximum shards open</code>. Quem sente primeiro costuma ser o rollover do ILM ou o índice do dia seguinte, e o sintoma chega como "parou de indexar", sem nada vermelho na saúde do cluster.',
         data: [
-          { label: 'Uso atual', desc: 'A barra mostra quantos shards abertos o cluster já tem sobre o teto em vigor (limite × nós de dados), com as mesmas faixas de cor do resto da aplicação: cinza abaixo de 65%, amarelo até 80%, vermelho a partir daí. <strong>Só índices abertos contam</strong> — por isso o número pode divergir do "Total de Shards" dos Sinais Vitais, que inclui os fechados.' },
+          { label: 'Uso atual', desc: 'A barra mostra quantos shards abertos o cluster já tem sobre o teto em vigor (limite × nós de dados), com as mesmas faixas de cor do resto da aplicação: cinza abaixo de 65%, amarelo até 80%, vermelho a partir daí. <strong>Só índices abertos contam</strong> — por isso o número pode divergir do "Total de shards" dos Sinais Vitais, que inclui os fechados.' },
           { label: 'Nós frozen', desc: 'Nós que servem <strong>apenas</strong> ao tier frozen não entram no cálculo: esse tier tem um teto separado, <code>cluster.max_shards_per_node.frozen</code>, que esta tela não altera. Um nó que acumule o frozen com outro tier de dados (ex.: <code>data_frozen</code> + <code>data_warm</code>) conta normalmente. Havendo nós de fora, a nota abaixo da barra informa quantos são.' },
           { label: 'Quando aumentar', desc: 'Raramente é a correção certa. O teto existe para conter a proliferação de shards, e cada shard custa heap e metadados no master — atingir o limite quase sempre significa <strong>shards demais, pequenos demais</strong>. Reduzir shards (menos primários, ILM com rollover por tamanho, <code>_shrink</code>) resolve; subir o teto adia. Aumentar é defensável como medida temporária para destravar a ingestão enquanto a causa é tratada, ou quando o cluster cresceu em nós e o valor foi fixado há muito tempo.' },
           { label: 'Aviso de oversharding', desc: 'Aparece só quando <strong>as duas</strong> condições valem: o uso do teto está em <strong>65%</strong> ou mais (o mesmo ponto em que a barra fica amarela) <strong>e</strong> ao menos <strong>20% dos shards abertos</strong> estão em índices com oversharding. O percentual é de <strong>shards</strong>, não de índices, porque é ele que diz quanto do teto se recuperaria ao corrigi-los — dez índices oversharded de 100 shards pesam mais que trezentos de dois. Fora desse recorte o aviso não aparece: com o teto folgado ninguém vai aumentá-lo, e com pouco oversharding corrigi-lo não aproximaria o cluster do limite. O <strong>Inventário</strong> lista os índices em qualquer caso.' },
@@ -1450,7 +1450,7 @@ function cardAlertSignals(d, h) {
   const cbSub = cb > 0 ? `Parent: ${fmtNum(d.circuit_breaker_parent_trips)} disparo(s)` : 'sem disparos desde o boot';
   const cbTip = 'Os <strong>circuit breakers</strong> do Elasticsearch abortam requisições para proteger a JVM de estouro de memória. O contador <code>tripped</code> conta quantas requisições já foram <strong>derrubadas por proteção de memória</strong> — cada disparo é uma query ou indexação rejeitada.<br><br>' +
     'O breaker <strong>parent</strong> é o mais crítico: ele soma o uso de todos os demais (fielddata, request, in-flight, etc.) e, ao atingir o limite (padrão ~95% do heap), começa a rejeitar tudo. Disparos acima de zero indicam pressão de memória severa e instabilidade — o cluster pode estar derrubando consultas silenciosamente. Clique para ver o uso atual de cada breaker por nó.<br><br>' +
-    '<strong>Atenção:</strong> este contador é <strong>acumulado desde o boot do nó</strong> — não reflete o instante atual. Para avaliar o estado <em>agora</em>, observe o <strong>Parent CB %</strong> e a <strong>Fila TP</strong> na tabela <em>Utilização por Nó</em>, que são indicadores vivos e antecipados.';
+    '<strong>Atenção:</strong> este contador é <strong>acumulado desde o boot do nó</strong> — não reflete o instante atual. Para avaliar o estado <em>agora</em>, observe o <strong>Parent CB %</strong> e a <strong>Fila TP</strong> na tabela <em>Utilização por nó</em>, que são indicadores vivos e antecipados.';
 
   // Backup / SLM: indisponível (licença/permissão) → neutro; falha → red;
   // não configurado → yellow; em dia → green. Espelha o insight de backup.
@@ -1483,16 +1483,16 @@ function cardAlertSignals(d, h) {
     'Bloqueios <em>read-only manuais</em> (fora do ILM) não são incidente e aparecem como apontamento na página <strong>Diagnóstico</strong>; read-only definido pelo ILM é esperado. Clique para listar os índices bloqueados e a categoria de cada um.';
 
   return [
-    signalItem('pending_tasks', 'Tarefas Pendentes', 'Tarefas de cluster state aguardando o nó master', 'list', 'Tarefas Pendentes', pending, pendColor, pendSub, pendTip, 'help-pending-tasks'),
+    signalItem('pending_tasks', 'Tarefas pendentes', 'Tarefas de cluster state aguardando o nó master', 'list', 'Tarefas pendentes', pending, pendColor, pendSub, pendTip, 'help-pending-tasks'),
     signalItem('ilm_errors', 'ILM com Falha', '', 'circle-alert', 'ILM com Falha', ilm, ilmColor, ilmSub, ilmTip, 'help-ilm-errors'),
-    signalItem('circuit_breakers', 'Circuit Breakers', '', 'zap', 'Circuit Breakers', cb, cbColor, cbSub, cbTip, 'help-circuit-breakers'),
+    signalItem('circuit_breakers', 'Circuit breakers', '', 'zap', 'Circuit breakers', cb, cbColor, cbSub, cbTip, 'help-circuit-breakers'),
     signalItem('slm_policies', 'Políticas de Snapshot (SLM)', 'Último backup, falhas e agendamento', 'database', 'Backup (SLM)', slmVal, slmColor, slmSub, slmTip, 'help-slm-policies'),
-    signalItem('read_only_indices', 'Índices Read-only', '', 'waves', 'Flood-stage', flood, floodColor, floodSub, floodTip, 'help-flood-stage'),
+    signalItem('read_only_indices', 'Índices read-only', '', 'waves', 'Flood-stage', flood, floodColor, floodSub, floodTip, 'help-flood-stage'),
   ].join('');
 }
 
 // Snapshots em criação agora (_snapshot/_status, via d.snapshots_running) —
-// vive no Inventário (Volume e Capacidade), não nos Sinais Vitais: é dado de
+// vive no Inventário (Volume e capacidade), não nos Sinais Vitais: é dado de
 // infraestrutura/capacidade, não de disponibilidade do cluster.
 function cardSnapshotRunning(d) {
   const snapRun = d.snapshots_running || {};
@@ -1506,7 +1506,7 @@ function cardSnapshotRunning(d) {
   }
   const tip = 'Snapshots em <strong>criação</strong> neste momento — visão ao vivo de qual backup está rodando, em qual repositório, há quanto tempo e o progresso total (bytes e shards).<br><br>' +
     'Clique para abrir o painel com barra de progresso por snapshot em andamento.';
-  return cardStat('openSnapshotModal()', 'Snapshot em Execução', 'camera', valueHtml, unit, color, tip, [], 'help-snapshot-running');
+  return cardStat('openSnapshotModal()', 'Snapshot em execução', 'camera', valueHtml, unit, color, tip, [], 'help-snapshot-running');
 }
 
 // color: 'green' (ok, com check) | 'yellow'/'red'/'blue' (alerta, sub colorido) |
@@ -1564,22 +1564,22 @@ function sectionCardsResources(d) {
 
 function sectionCardsIndices(d) {
   return [
-    cardCount('indices_without_replicas', 'Sem Réplica', 'shield', d.indices_without_replicas,
+    cardCount('indices_without_replicas', 'Sem réplica', 'shield', d.indices_without_replicas,
       'índices', d.indices_without_replicas > 0 ? 'yellow' : 'green',
       d.indices_without_replicas > 0 ? 'yellow' : 'green',
       'Índices sem réplicas são pontos únicos de falha. A perda de um nó com um shard primário sem réplica resulta em perda de dados permanente.',
       [], null, 'help-without-replicas'),
-    cardCount('large_primary_shards', 'Shards Primários > 50 GB', 'hard-drive', d.large_primary_shards,
+    cardCount('large_primary_shards', 'Shards primários > 50 GB', 'hard-drive', d.large_primary_shards,
       'índices', d.large_primary_shards > 0 ? 'yellow' : 'green',
       d.large_primary_shards > 0 ? 'yellow' : 'green',
       'Sinaliza índices que têm <strong>algum shard primário individual</strong> acima de 50 GB (não a soma do índice). Shards primários grandes causam recuperação lenta, realocação demorada e queda de desempenho. Considere reindexar com mais shards ou revisar a política de ILM.',
       [], null, 'help-large-shards'),
-    cardCount('indices_without_ilm', 'Sem Política de ILM', 'history', d.indices_without_ilm,
+    cardCount('indices_without_ilm', 'Sem política de ILM', 'history', d.indices_without_ilm,
       'índices', d.indices_without_ilm > 0 ? 'yellow' : 'green',
       d.indices_without_ilm > 0 ? 'yellow' : 'green',
       'Índices sem ILM podem crescer indefinidamente. O ILM automatiza a transição por fases (hot → warm → cold → delete), otimizando uso de recursos.',
       [], null, 'help-without-ilm'),
-    cardCount('ilm_without_delete', 'ILM sem Fase DELETE', 'trash-2', d.ilm_without_delete,
+    cardCount('ilm_without_delete', 'ILM sem fase delete', 'trash-2', d.ilm_without_delete,
       'políticas', d.ilm_without_delete > 0 ? 'yellow' : 'green',
       d.ilm_without_delete > 0 ? 'yellow' : 'green',
       'Políticas de ILM sem fase de exclusão acumulam dados antigos indefinidamente, levando ao esgotamento de disco ao longo do tempo.',
@@ -1594,13 +1594,13 @@ function renderCards(d) {
   const grid = document.getElementById('metricsGrid');
 
   grid.innerHTML = [
-    `<section class="page-section">${section('Saúde do Cluster', 'health')}
+    `<section class="page-section">${section('Saúde do cluster', 'health')}
       <div id="section-cards-health">${sectionCardsHealth(d)}</div></section>`,
 
-    `<section class="page-section">${section('Sinais de Alerta', 'signals')}
+    `<section class="page-section">${section('Sinais de alerta', 'signals')}
       <div id="section-cards-signals" class="card-grid card-grid--5">${sectionCardsSignals(d)}</div></section>`,
 
-    `<section class="page-section">${section('Utilização de Recursos', 'resources', { actions: legendHtml() })}
+    `<section class="page-section">${section('Utilização de recursos', 'resources', { actions: legendHtml() })}
       <div id="section-cards-resources">${sectionCardsResources(d)}</div></section>`,
   ].join('');
 }
@@ -1613,16 +1613,16 @@ function renderCapacity(d = dashboardData) {
   if (!grid || !d) return;
 
   grid.innerHTML = [
-    `<section class="page-section">${section('Volume e Capacidade', 'volume')}
+    `<section class="page-section">${section('Volume e capacidade', 'volume')}
       <div id="section-cards-volume" class="card-grid">${sectionCardsVolume(d)}</div></section>`,
 
-    `<section class="page-section">${section('Disco por Tier', 'tierdisk')}
+    `<section class="page-section">${section('Disco por tier', 'tierdisk')}
       <div id="section-cards-tierdisk">${sectionCardsTierDisk(d)}</div></section>`,
 
-    `<section class="page-section">${section('Configuração de Índices', 'indices')}
+    `<section class="page-section">${section('Configuração de índices', 'indices')}
       <div id="section-cards-indices" class="card-grid">${sectionCardsIndices(d)}</div></section>`,
 
-    `<section class="page-section">${section('Topologia do Cluster', 'topology')}
+    `<section class="page-section">${section('Topologia do cluster', 'topology')}
       <div id="section-cards-topology">${sectionCardsTopology(d)}</div></section>`,
   ].join('');
 }
@@ -1685,8 +1685,8 @@ function licenseFooterStat(license) {
   return { label: 'Licença', val: `${escHtml(type)}${suffix}`, color };
 }
 
-// Faixa HealthSummary do design system: junta os antigos cards "Saúde do Cluster"
-// (área de status → Saúde por Índice) e "Total de Shards" (área de contagens →
+// Faixa HealthSummary do design system: junta os antigos cards "Saúde do cluster"
+// (área de status → Saúde por índice) e "Total de shards" (área de contagens →
 // openShardsDetail). Cada área continua clicável por um link que a cobre inteira.
 const HEALTH_SUMMARY = {
   green: { tone: 'success', icon: 'check' },
@@ -1712,13 +1712,13 @@ function healthSummary(h, totalShards, version, license) {
       val: fmtPct(Math.min(99.9, Math.round(activePct * 10) / 10)),
       color: activePct >= 90 ? 'yellow' : 'red',
     }] : []),
-    { label: 'Não Alocados',  val: fmtNum(h.unassigned_shards),   color: h.unassigned_shards > 0   ? 'red'    : null },
+    { label: 'Não alocados',  val: fmtNum(h.unassigned_shards),   color: h.unassigned_shards > 0   ? 'red'    : null },
     ...(h.delayed_unassigned_shards > 0 ? [{ label: 'Atraso (timeout)', val: fmtNum(h.delayed_unassigned_shards), color: 'yellow' }] : []),
     { label: 'Realocando',    val: fmtNum(h.relocating_shards),   color: h.relocating_shards > 0   ? 'yellow' : null },
     { label: 'Inicializando', val: fmtNum(h.initializing_shards), color: h.initializing_shards > 0 ? 'yellow' : null },
   ];
 
-  const facts = [{ label: 'Versão do Cluster', val: version ? `v${escHtml(version)}` : '-', color: null }];
+  const facts = [{ label: 'Versão do cluster', val: version ? `v${escHtml(version)}` : '-', color: null }];
   const lic = licenseFooterStat(license);
   if (lic) facts.push({ ...lic, color: lic.color === 'text' ? null : lic.color });
   const valCls = c => c ? ` lvl-${levelClass(c)}` : '';
@@ -1728,7 +1728,7 @@ function healthSummary(h, totalShards, version, license) {
       <span class="eh-health__ring">${icon(hs.icon, 26, 'eh-icon--bold')}</span>
       <span class="eh-health__words">
         <span class="hs-labelrow">
-          <a href="#" class="eh-overline eh-health__label hs-link" onclick="openDetail('cluster_health','Saúde por Índice','Status e shards por índice');return false;">Saúde do Cluster</a>
+          <a href="#" class="eh-overline eh-health__label hs-link" onclick="openDetail('cluster_health','Saúde por índice','Status e shards por índice');return false;">Saúde do cluster</a>
           ${tooltip(tip, 'help-cluster-health')}
         </span>
         <span class="eh-health__word">${word}</span>
@@ -1737,7 +1737,7 @@ function healthSummary(h, totalShards, version, license) {
     <div class="eh-health__counts hs-area">
       <span class="eh-health__total">
         <span class="hs-labelrow">
-          <a href="#" class="eh-meta hs-link" onclick="openShardsDetail();return false;">Total de Shards</a>
+          <a href="#" class="eh-meta hs-link" onclick="openShardsDetail();return false;">Total de shards</a>
           ${tooltip(shardsTip, 'help-total-shards')}
         </span>
         <span class="eh-health__totalvalue">${fmtNum(totalShards)}</span>
@@ -1784,14 +1784,14 @@ function cardNodes(total, h, dedicatedMasters, nodes) {
   const tip = 'Monitore a estabilidade do número de nós. Uma diminuição inesperada indica falha. O número de data nodes impacta a distribuição de shards.';
   const tiers = tierNodeCounts(nodes || []);
   const breakdown = [
-    { label: 'Data Nodes', val: fmtNum(h.number_of_data_nodes) },
+    { label: 'Data nodes', val: fmtNum(h.number_of_data_nodes) },
     ...(dedicatedMasters > 0 ? [{ label: 'Master', val: fmtNum(dedicatedMasters) }] : []),
     ...TIER_LABEL_ORDER.filter(t => tiers[t] > 0).map(t => ({ label: t, val: fmtNum(tiers[t]) })),
   ];
   return statCard({
-    ic: 'server', label: 'Total de Nós', value: fmtNum(total), caption: 'nós no cluster',
+    ic: 'server', label: 'Total de nós', value: fmtNum(total), caption: 'nós no cluster',
     breakdown, tip, topic: 'help-total-nodes',
-    onclick: `openDetail('nodes','Nós do Cluster','Detalhes de CPU, Heap e Disco por nó')`,
+    onclick: `openDetail('nodes','Nós do cluster','Detalhes de CPU, Heap e Disco por nó')`,
   });
 }
 
@@ -1850,7 +1850,7 @@ function statCard({ ic, label, value, caption, tone, breakdown, onclick, tip, to
 }
 
 // Capacidade de disco agregada por tier (bytes): total, usado e livre, somando
-// todos os data nodes de cada tier. Base do card "Disco por Tier" (página Inventário).
+// todos os data nodes de cada tier. Base do card "Disco por tier" (página Inventário).
 function tierDiskAgg(nodes) {
   const tiers = {};
   for (const n of nodes) {
@@ -1903,7 +1903,7 @@ function sectionCardsTierDisk(d) {
   </section>`;
 }
 
-// ─── Seção: Topologia do Cluster ──────────────────────────
+// ─── Seção: Topologia do cluster ──────────────────────────
 // Diagrama de fluxo dinâmico: MASTER → HOT → WARM → COLD → FROZEN,
 // com setas conectando as camadas. Tiers unificados (hot+warm no mesmo nó)
 // formam uma faixa combinada. Faixas surgem/somem conforme as roles reais.
@@ -2009,7 +2009,7 @@ function sectionCardsTopology(d) {
     'O <strong>master eleito</strong> (★) aparece no seu tier; masters <strong>dedicados</strong> ficam na camada MASTER. ' +
     'A barrinha de cada nó mostra o <strong>uso de disco</strong> (amarelo ≥ 70%, vermelho ≥ 85%).';
 
-  const header = panelHead('workflow', 'Topologia do Cluster', tooltip(tip, 'help-cluster-topology'));
+  const header = panelHead('workflow', 'Topologia do cluster', tooltip(tip, 'help-cluster-topology'));
 
   if (!allLayers.length) {
     return `<section class="eh-panel">${header}
@@ -2039,13 +2039,13 @@ function sectionCardsVolume(d) {
   const h = d.cluster_health || {};
   return [
     cardNodes(d.total_nodes, h, d.dedicated_master_nodes || 0, d.nodes_summary || []),
-    cardStat(null, 'Volume de Dados', 'database', fmtBytes(d.total_store_bytes || 0), 'em disco (store, com réplicas)', 'blue',
+    cardStat(null, 'Volume de dados', 'database', fmtBytes(d.total_store_bytes || 0), 'em disco (store, com réplicas)', 'blue',
       'Soma do tamanho em disco de todos os índices (primários + réplicas, incluindo índices de sistema). ' +
       'No rodapé, o total de <strong>documentos indexados</strong>: a soma de <code>docs.count</code>, ' +
       'que não conta os documentos marcados para exclusão ainda não expurgados por merge.',
       [{ label: 'Documentos', val: fmtNum(d.total_docs || 0), color: null }], 'help-data-volume'),
     // StatCard (como no novo layout), mas clicável: abre a mesma lista de antes.
-    cardStat("openDetail('all_indices','Todos os Índices','')", 'Total de Índices', 'layers', fmtNum(d.total_indices),
+    cardStat("openDetail('all_indices','Todos os Índices','')", 'Total de índices', 'layers', fmtNum(d.total_indices),
       'índices', 'blue',
       'Contagem total de índices do cluster, incluindo índices de sistema (prefixo <code>.</code>). Uma contagem elevada pode impactar o desempenho — avalie o uso de data streams para séries temporais. Clique para listar todos os índices.',
       [], 'help-total-indices'),
@@ -2097,8 +2097,8 @@ function cardResourceTable(d) {
 
   const emptyRow = `<tr><td colspan="${colCount}" class="table-empty">Nenhum nó encontrado</td></tr>`;
 
-  return `<section class="eh-panel panel-click" onclick="openDetail('nodes','Nós do Cluster','Detalhes completos — roles, shards e recursos por nó')">
-    ${panelHead('server', 'Utilização por Nó', tooltip(tip, 'help-resource-table'), true)}
+  return `<section class="eh-panel panel-click" onclick="openDetail('nodes','Nós do cluster','Detalhes completos — roles, shards e recursos por nó')">
+    ${panelHead('server', 'Utilização por nó', tooltip(tip, 'help-resource-table'), true)}
     <div class="resource-table-wrap">
       <table class="data-table resource-table">
         <thead><tr>
@@ -2304,7 +2304,7 @@ function openShardsDetail() {
   clusterHealthFilters.clear();
   detailNavStack.length = 0;
   setDetailChrome('shards');
-  document.getElementById('detailTitle').textContent = 'Total de Shards';
+  document.getElementById('detailTitle').textContent = 'Total de shards';
   document.getElementById('detailTitleTip').innerHTML = '';
   document.getElementById('detailSubtitle').textContent = '';
   document.getElementById('detailSearch').value = '';
@@ -2333,7 +2333,7 @@ function openShardsDetail() {
         <span class="eh-callout__title">${unassignedLabel}</span>
         <span class="eh-callout__text">Pode incluir restaurações de snapshot e réplicas pendentes. Consulte o diagnóstico para ver o motivo de cada shard.${delayedNote}</span>
       </div>
-      <button type="button" class="eh-btn eh-btn--secondary eh-btn--md" onclick="openDetail('allocation_explain','Diagnóstico de Alocação','Por que cada shard não aloca')">Ver diagnóstico ${icon('arrow-right', 14)}</button>
+      <button type="button" class="eh-btn eh-btn--secondary eh-btn--md" onclick="openDetail('allocation_explain','Diagnóstico de alocação','Por que cada shard não aloca')">Ver diagnóstico ${icon('arrow-right', 14)}</button>
     </div>` : '';
 
   document.getElementById('detailBody').innerHTML = `
@@ -2349,7 +2349,7 @@ function openShardsDetail() {
       <section class="shards-recovery" aria-labelledby="h-recovery">
         <div class="shards-recovery-head">
           <span class="eh-accent-icon">${icon('arrow-left-right', 16)}</span>
-          <h3 id="h-recovery">Realocação e Recuperação de Shards</h3>
+          <h3 id="h-recovery">Realocação e recuperação de shards</h3>
           <span id="recoveryCount" class="eh-badge eh-badge--soft shards-recovery-count"></span>
         </div>
         <div id="recoveryBody">
@@ -2477,11 +2477,11 @@ function renderRecovery(rows) {
 // Tooltip de ajuda exibido ao lado do título de certas modais de detalhe, quando a
 // lista tem uma regra de recorte que não é óbvia. Mesmo visual dos tooltips dos cards.
 const DETAIL_TITLE_TIPS = {
-  circuit_breakers: `<strong style="color:var(--text);display:block;margin-bottom:6px">Regra de listagem</strong>
+  circuit_breakers: `<strong style="color:var(--text-primary);display:block;margin-bottom:6px">Regra de listagem</strong>
 A lista mostra <strong>um breaker por linha</strong> (nó × breaker) e exibe apenas os que merecem atenção — um breaker só aparece quando:<br><br>
-<span style="color:var(--red)">●</span>&nbsp;<strong>Disparos &gt; 0</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">(já abortou requisições), <strong>ou</strong></span><br>
-<span style="color:var(--yellow)">●</span>&nbsp;<strong>Uso &ge; 65% do limite</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">(faixa de atenção)</span><br><br>
-Nós cujos breakers estão todos abaixo desses limiares são <strong>omitidos</strong> — o inventário completo de nós fica no card <em>Utilização por Nó</em>.`,
+<span style="color:var(--danger)">●</span>&nbsp;<strong>Disparos &gt; 0</strong>&nbsp;&nbsp;<span style="color:var(--text-muted)">(já abortou requisições), <strong>ou</strong></span><br>
+<span style="color:var(--warning)">●</span>&nbsp;<strong>Uso &ge; 65% do limite</strong>&nbsp;&nbsp;<span style="color:var(--text-muted)">(faixa de atenção)</span><br><br>
+Nós cujos breakers estão todos abaixo desses limiares são <strong>omitidos</strong> — o inventário completo de nós fica no card <em>Utilização por nó</em>.`,
 };
 
 // Ícone do cabeçalho do Dialog por métrica (o mesmo do card que o abre) e as
@@ -2671,7 +2671,7 @@ function loadBadge(load, availableProcessors) {
 
 function tableClusterHealth(rows) {
   const filterDefs = [
-    { key: 'unassigned_shards',   label: 'Não Alocados'  },
+    { key: 'unassigned_shards',   label: 'Não alocados'  },
     { key: 'relocating_shards',   label: 'Realocando'    },
     { key: 'initializing_shards', label: 'Inicializando' },
   ].filter(f => rows.some(r => (r[f.key] || 0) > 0));
@@ -2699,7 +2699,7 @@ function tableClusterHealth(rows) {
       <th data-col="status">Status <span class="sort-icon">↕</span></th>
       <th data-col="active_primary_shards" data-type="num">Primários <span class="sort-icon">↕</span></th>
       <th data-col="number_of_replicas" data-type="num">Réplicas <span class="sort-icon">↕</span></th>
-      <th data-col="unassigned_shards" data-type="num">Não Alocados <span class="sort-icon">↕</span></th>
+      <th data-col="unassigned_shards" data-type="num">Não alocados <span class="sort-icon">↕</span></th>
       <th data-col="relocating_shards" data-type="num">Realocando <span class="sort-icon">↕</span></th>
       <th data-col="initializing_shards" data-type="num">Inicializando <span class="sort-icon">↕</span></th>
     </tr></thead>
@@ -2707,10 +2707,10 @@ function tableClusterHealth(rows) {
       <td class="mono"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td>${healthBadge(r.status)}</td>
       <td>${fmtNum(r.active_primary_shards)}</td>
-      <td style="color:${r.number_of_replicas === 0 ? 'var(--yellow)' : 'var(--text)'}">${fmtNum(r.number_of_replicas)}</td>
-      <td style="color:${r.unassigned_shards > 0 ? 'var(--red)' : 'var(--text-muted)'}">${fmtNum(r.unassigned_shards)}</td>
-      <td style="color:${r.relocating_shards > 0 ? 'var(--yellow)' : 'var(--text-muted)'}">${fmtNum(r.relocating_shards)}</td>
-      <td style="color:${r.initializing_shards > 0 ? 'var(--yellow)' : 'var(--text-muted)'}">${fmtNum(r.initializing_shards)}</td>
+      <td style="color:${r.number_of_replicas === 0 ? 'var(--warning)' : 'var(--text-primary)'}">${fmtNum(r.number_of_replicas)}</td>
+      <td style="color:${r.unassigned_shards > 0 ? 'var(--danger)' : 'var(--text-muted)'}">${fmtNum(r.unassigned_shards)}</td>
+      <td style="color:${r.relocating_shards > 0 ? 'var(--warning)' : 'var(--text-muted)'}">${fmtNum(r.relocating_shards)}</td>
+      <td style="color:${r.initializing_shards > 0 ? 'var(--warning)' : 'var(--text-muted)'}">${fmtNum(r.initializing_shards)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -2740,7 +2740,7 @@ function tableIndices(rows) {
       <td class="mono"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td>${healthBadge(r.health)}</td>
       <td>${r.pri || '-'}</td>
-      <td><span style="color:${r.rep === '0' ? 'var(--yellow)' : 'var(--text)'}">${r.rep || '-'}</span></td>
+      <td><span style="color:${r.rep === '0' ? 'var(--warning)' : 'var(--text-primary)'}">${r.rep || '-'}</span></td>
       <td>${r['store.size'] || '-'}</td>
       <td>${fmtNum(r['docs.count'])}</td>
     </tr>`).join('')}</tbody>
@@ -2762,7 +2762,7 @@ function tableOversharded(rows) {
       <td>${fmtNum(r.pri)}</td>
       <td>${fmtNum(r.rep)}</td>
       <td>${fmtBytes(r.pri_store_bytes)}</td>
-      <td style="color:var(--yellow);font-weight:600">${fmtBytes(r.avg_shard_bytes)}</td>
+      <td style="color:var(--warning);font-weight:600">${fmtBytes(r.avg_shard_bytes)}</td>
       <td>${fmtNum(r.docs)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -2780,7 +2780,7 @@ function tableLargeShards(rows) {
     <tbody>${rows.map(r => `<tr>
       <td class="mono">${r.index}</td>
       <td>${r.shard_count}</td>
-      <td style="color:var(--red);font-weight:600">${fmtBytes(r.max_shard_bytes)}</td>
+      <td style="color:var(--danger);font-weight:600">${fmtBytes(r.max_shard_bytes)}</td>
       <td>${fmtBytes(r.total_size_bytes)}</td>
       <td>${fmtBytes(r.shard_count > 0 ? r.total_size_bytes / r.shard_count : 0)}</td>
     </tr>`).join('')}</tbody>
@@ -2820,11 +2820,11 @@ function tableIlmErrors(rows) {
       <td class="mono"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td class="mono">${escHtml(r.policy)}</td>
       <td><span class="badge badge-blue">${escHtml(r.phase)}</span></td>
-      <td class="mono" style="color:var(--red)">${escHtml(r.failed_step)}</td>
+      <td class="mono" style="color:var(--danger)">${escHtml(r.failed_step)}</td>
       <td style="text-align:center;color:var(--text-muted)">${r.failed_step_retry_count ?? '-'}</td>
       <td><span class="badge badge-red">${escHtml(r.error_type)}</span></td>
       <td class="prose" style="color:var(--text-muted);font-size:12px;max-width:480px;white-space:normal">${escHtml(r.error_reason)}</td>
-      <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-code"/></svg></td>
+      <td style="text-align:right;color:var(--text-muted)" title="Ver JSON completo"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-code"/></svg></td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -2889,8 +2889,8 @@ function tableDeprecations(rows) {
       <th data-col="message">Aviso</th>
     </tr></thead>
     <tbody>${rows.map(r => {
-      const details = r.details ? `<div style="color:var(--text-dim);font-size:11px;margin-top:4px">${escHtml(r.details)}</div>` : '';
-      const url = r.url ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:11px;margin-top:4px;display:inline-block"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg> Documentação</a>` : '';
+      const details = r.details ? `<div style="color:var(--text-muted);font-size:11px;margin-top:4px">${escHtml(r.details)}</div>` : '';
+      const url = r.url ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener" style="color:var(--info);font-size:11px;margin-top:4px;display:inline-block"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg> Documentação</a>` : '';
       return `<tr>
       <td><span class="badge ${DEP_LEVEL_BADGE[r.level] || 'badge-gray'}">${r.level === 'critical' ? 'Crítico' : 'Aviso'}</span></td>
       <td><span class="badge badge-blue">${escHtml(r.category_label)}</span></td>
@@ -2924,7 +2924,7 @@ function tableAllocationExplain(rows) {
       <td><span class="badge badge-gray">${escHtml(r.reason)}</span></td>
       <td><span class="badge badge-${canColor}">${escHtml(r.can_allocate)}</span></td>
       <td class="prose" style="max-width:560px;white-space:normal"><div>${escHtml(r.explanation)}</div>${deciders}</td>
-      <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-code"/></svg></td>
+      <td style="text-align:right;color:var(--text-muted)" title="Ver JSON completo"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-code"/></svg></td>
     </tr>`;
     }).join('')}</tbody>
   </table>`;
@@ -2934,7 +2934,7 @@ function showAllocationJson(idx, shard, pri) {
   const row = currentRows.find(r =>
     r.index === idx && String(r.shard) === String(shard) && String(r.primary) === String(pri));
   if (!row) return;
-  showJsonModal('Diagnóstico de Alocação', `${idx} [shard ${shard}]`, row.raw || row);
+  showJsonModal('Diagnóstico de alocação', `${idx} [shard ${shard}]`, row.raw || row);
 }
 
 const SLM_STATE_BADGE = { ok: ['badge-green', 'OK'], failed: ['badge-red', 'Falha'], never: ['badge-gray', 'Nunca executou'] };
@@ -2957,16 +2957,16 @@ function tableSlmPolicies(rows) {
     </tr></thead>
     <tbody>${rows.map(r => {
       const success = r.last_success_time
-        ? `<span style="color:var(--green)">${fmtMillisDate(r.last_success_time)}</span>`
-        : '<span style="color:var(--text-dim)">—</span>';
+        ? `<span style="color:var(--success)">${fmtMillisDate(r.last_success_time)}</span>`
+        : '<span style="color:var(--text-muted)">—</span>';
       const successTitle = r.last_success_time && r.last_success_snapshot && r.last_success_snapshot !== '-'
         ? ` title="Snapshot: ${escHtml(r.last_success_snapshot)}"` : '';
       const failure = r.last_failure_time
-        ? `<span style="color:var(--red)">${fmtMillisDate(r.last_failure_time)}</span>`
-        : '<span style="color:var(--text-dim)">—</span>';
+        ? `<span style="color:var(--danger)">${fmtMillisDate(r.last_failure_time)}</span>`
+        : '<span style="color:var(--text-muted)">—</span>';
       const failureTitle = r.last_failure_time && r.last_failure_reason && r.last_failure_reason !== '-'
         ? ` title="${escHtml(r.last_failure_reason)}"` : '';
-      const snaps = `<span style="color:var(--green)">${fmtNum(r.snapshots_taken)}</span>${r.snapshots_failed > 0 ? ` / <span style="color:var(--red)">${fmtNum(r.snapshots_failed)}</span>` : ''}`;
+      const snaps = `<span style="color:var(--success)">${fmtNum(r.snapshots_taken)}</span>${r.snapshots_failed > 0 ? ` / <span style="color:var(--danger)">${fmtNum(r.snapshots_failed)}</span>` : ''}`;
       return `<tr class="task-row" data-name="${escHtml(r.name)}" onclick="showSlmJson(this.dataset.name)">
         <td class="mono" style="font-weight:600">${escHtml(r.name)}${r.in_progress ? ' <span class="badge badge-blue" style="font-size:10px">em execução</span>' : ''}</td>
         <td>${slmStateBadge(r.state)}</td>
@@ -2983,14 +2983,14 @@ function tableSlmPolicies(rows) {
 function showSlmJson(name) {
   const row = currentRows.find(r => r.name === name);
   if (!row) return;
-  showJsonModal('Detalhes da Política SLM', name, row.raw || row);
+  showJsonModal('Detalhes da política SLM', name, row.raw || row);
 }
 
 // Abre o JSON completo da entrada de _ilm/explain para o índice clicado
 function showIlmErrorJson(indexName) {
   const row = currentRows.find(r => r.index === indexName);
   if (!row) return;
-  showJsonModal('Detalhes do Erro de ILM', indexName, row);
+  showJsonModal('Detalhes do erro de ILM', indexName, row);
 }
 
 // ─── Modal de JSON genérico ───────────────────────────────
@@ -3232,7 +3232,7 @@ function renderInsights() {
       total ? `≈ ${fmtPct(pct)} do total` : '',
       'Índices sem cópia — a perda de um único data node pode significar perda de dados.',
       'Listar índices sem réplica',
-      `openDetail('indices_without_replicas','Índices sem Réplica','')`);
+      `openDetail('indices_without_replicas','Índices sem réplica','')`);
   }
 
   // 2. Índices sem política de ILM
@@ -3243,7 +3243,7 @@ function renderInsights() {
       'sem ciclo de vida',
       'Crescem sem rollover nem expurgo automático — risco de saturar o disco com o tempo.',
       'Listar índices sem política de ILM',
-      `openDetail('indices_without_ilm','Sem Política de ILM','')`);
+      `openDetail('indices_without_ilm','Sem política de ILM','')`);
   }
 
   // 3. Disco alto por tier — um card por tier afetado (≥70%); vermelho se ≥85%
@@ -3285,7 +3285,7 @@ function renderInsights() {
       'retenção infinita',
       'Dados gerenciados por essas políticas migram entre tiers mas nunca são removidos.',
       'Listar políticas sem fase delete',
-      `openDetail('ilm_without_delete','ILM sem Fase DELETE','')`);
+      `openDetail('ilm_without_delete','ILM sem fase delete','')`);
   }
 
   // 5. Réplicas não alocáveis (rep >= nº de data nodes) — mantém o cluster YELLOW
@@ -3297,7 +3297,7 @@ function renderInsights() {
       `≥ ${dataNodes} data node${plural(dataNodes)}`,
       'O número de réplicas é maior ou igual ao de data nodes, então essas réplicas nunca alocam e mantêm o cluster em YELLOW. Reduza as réplicas ou adicione data nodes.',
       'Listar índices afetados',
-      `openDetail('unassignable_replicas','Réplicas Não Alocáveis','')`);
+      `openDetail('unassignable_replicas','Réplicas não alocáveis','')`);
   }
 
   // 6. Quorum de master frágil (poucos master-eligible ou número par)
@@ -3313,7 +3313,7 @@ function renderInsights() {
       `${fmtNum(me)} master-eligible`,
       msg,
       'Ver nós',
-      `openDetail('nodes','Nós do Cluster','')`);
+      `openDetail('nodes','Nós do cluster','')`);
   }
 
   // 7. Oversharding — vários primários com tamanho médio por shard < 1 GB
@@ -3324,7 +3324,7 @@ function renderInsights() {
       'shards pequenos demais',
       'Índices com mais de um shard primário e tamanho médio por shard abaixo de 1 GB — muitos shards pequenos desperdiçam heap e geram overhead de cluster.',
       'Listar índices',
-      `openDetail('oversharded_indices','Índices com Oversharding','')`);
+      `openDetail('oversharded_indices','Índices com oversharding','')`);
   }
 
   // 8. Pressão de memória (GC overhead ≥ 25% ou mem pressure ≥ 75% em algum nó)
@@ -3336,7 +3336,7 @@ function renderInsights() {
       'GC / heap alto',
       `${list} — GC overhead ≥ 25% ou memory pressure ≥ 75%, sinal de heap pressionado (risco de pausas longas de GC).`,
       'Ver nós',
-      `openDetail('nodes','Nós do Cluster','')`);
+      `openDetail('nodes','Nós do cluster','')`);
   }
 
   // 8a2. Heap acima de 50% da RAM física (pouca memória para o filesystem cache)
@@ -3361,7 +3361,7 @@ function renderInsights() {
       'Indexing pressure alto',
       `${list} — memória de buffer de indexação acima de 70% do limite. Ao chegar a 100% o nó passa a rejeitar escritas (HTTP 429). Veja a coluna "Pressão Escrita" na tabela de nós.`,
       'Ver nós',
-      `openDetail('nodes','Nós do Cluster','')`);
+      `openDetail('nodes','Nós do cluster','')`);
   }
 
   // 9. Versões de ES mistas (rolling upgrade em andamento/incompleto)
@@ -3372,7 +3372,7 @@ function renderInsights() {
       `${versions.length} versões`,
       `Nós rodando versões diferentes (${escHtml(versions.join(', '))}) — rolling upgrade em andamento ou incompleto. Evite operações prolongadas (reindex, snapshots grandes) até concluir.`,
       'Ver nós',
-      `openDetail('nodes','Nós do Cluster','')`);
+      `openDetail('nodes','Nós do cluster','')`);
   }
 
   // 10. Backup / SLM (só avalia quando a consulta de SLM esteve disponível)
@@ -3421,7 +3421,7 @@ function renderInsights() {
       'disco / escrita bloqueada',
       'Bloqueio de escrita aplicado automaticamente pelo ES quando o disco passou de 95% (flood-stage). Pode persistir mesmo após liberar disco — verifique e remova com <code>"index.blocks.read_only_allow_delete": null</code> depois de resolver o espaço.',
       'Listar índices bloqueados',
-      `openDetail('read_only_indices','Índices Read-only','')`);
+      `openDetail('read_only_indices','Índices read-only','')`);
   }
   if (roManual > 0) {
     add('yellow', 'lock',
@@ -3429,7 +3429,7 @@ function renderInsights() {
       'bloqueio manual',
       'Índices com bloqueio de escrita (<code>read_only</code>/<code>write</code>) que <strong>não</strong> são gerenciados por ILM — pode ser intencional (dados arquivados) ou um bloqueio manual esquecido. Índices deixados read-only pelo ILM não entram aqui.',
       'Listar índices bloqueados',
-      `openDetail('read_only_indices','Índices Read-only','')`);
+      `openDetail('read_only_indices','Índices read-only','')`);
   }
 
   // 13. Configurações de cluster de risco (alocação desligada, watermarks, read-only…)
@@ -3441,7 +3441,7 @@ function renderInsights() {
       'overrides',
       'Sobrescritas no cluster que podem causar problemas — por exemplo alocação de shards restrita, watermarks de disco desabilitados ou cluster em read-only.',
       'Revisar configurações',
-      `openDetail('cluster_settings','Configurações de Cluster de Risco','')`);
+      `openDetail('cluster_settings','Configurações de cluster de risco','')`);
   }
 
   // 14. Deprecations (prontidão para upgrade)
@@ -3482,7 +3482,7 @@ function renderInsights() {
       'allocation explain',
       'Descubra a razão exata pela qual cada shard não aloca (a decisão dos deciders por nó) via <code>_cluster/allocation/explain</code>.',
       'Diagnosticar alocação',
-      `openDetail('allocation_explain','Diagnóstico de Alocação','Por que cada shard não aloca')`);
+      `openDetail('allocation_explain','Diagnóstico de alocação','Por que cada shard não aloca')`);
   }
 
   // 17. Disponibilidade — só aparece quando há problema (oculta se tudo saudável)
@@ -3499,7 +3499,7 @@ function renderInsights() {
       status.toUpperCase(),
       parts.join(', ') + '.',
       'Revisar saúde do cluster',
-      `openDetail('cluster_health','Saúde por Índice','Status e shards por índice')`);
+      `openDetail('cluster_health','Saúde por índice','Status e shards por índice')`);
   }
 
   // ─── Resumo de severidade (topo) ───
@@ -3573,7 +3573,7 @@ function diskByNodeContent() {
   const rows = diskNodes.map(n => {
     const disk = n.disk_used_percent;
     const color = disk >= 85 ? 'red' : 'yellow';
-    // Mesma célula nome + roles principais dos Sinais Vitais (Utilização por Nó).
+    // Mesma célula nome + roles principais dos Sinais Vitais (Utilização por nó).
     return `<div class="disk-row">
       <div class="disk-label">${nodeNameCell(n.name, n.roles, n.is_master)}</div>
       <span class="eh-meter eh-meter--md disk-track"><span class="eh-meter__fill is-${levelClass(color)}" style="width:${Math.min(disk, 100)}%"></span></span>
@@ -3599,7 +3599,7 @@ function closeDiskModal() {
   document.body.style.overflow = '';
 }
 
-// ─── Modal: Snapshots em Execução ────────────────────────
+// ─── Modal: Snapshots em execução ────────────────────────
 function openSnapshotModal() {
   document.getElementById('snapshotModalBody').innerHTML =
     `<div class="loading-state section-loading"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando...</span></div>`;
@@ -3667,15 +3667,15 @@ function renderSnapshots(rows) {
 }
 
 function tableNodes(rows) {
-  const loadTip = `<strong style="color:var(--text);display:block;margin-bottom:6px">Como as cores do Load são calculadas</strong>
-<span style="color:var(--text-dim)">O load average do Linux <strong>não mede só CPU</strong>: ele conta processos rodando ou aguardando a CPU <strong>e também processos bloqueados em I/O</strong> (ex.: espera de disco). Um load alto pode indicar gargalo de disco/merge/flush no Elasticsearch mesmo com a CPU tranquila — por isso é um indicador de demanda geral do nó, não um substituto do CPU%.</span><br><br>
-A cor reflete a proporção entre o load e o número de processadores disponíveis no nó (<code style="color:var(--blue);background:var(--surface-hover);padding:1px 4px;border-radius:3px">os.available_processors</code>):<br><br>
+  const loadTip = `<strong style="color:var(--text-primary);display:block;margin-bottom:6px">Como as cores do Load são calculadas</strong>
+<span style="color:var(--text-muted)">O load average do Linux <strong>não mede só CPU</strong>: ele conta processos rodando ou aguardando a CPU <strong>e também processos bloqueados em I/O</strong> (ex.: espera de disco). Um load alto pode indicar gargalo de disco/merge/flush no Elasticsearch mesmo com a CPU tranquila — por isso é um indicador de demanda geral do nó, não um substituto do CPU%.</span><br><br>
+A cor reflete a proporção entre o load e o número de processadores disponíveis no nó (<code style="color:var(--info);background:var(--bg-chip);padding:1px 4px;border-radius:3px">os.available_processors</code>):<br><br>
 <code style="color:var(--text-muted);font-size:11px">utilização = load / os.available_processors</code><br><br>
-<span style="color:var(--data-neutral)">●</span>&nbsp;<strong>Normal</strong>&nbsp;&nbsp;&nbsp;— utilização &lt; 70%&nbsp;&nbsp;<span style="color:var(--text-dim)">(carga saudável)</span><br>
-<span style="color:var(--yellow)">●</span>&nbsp;<strong style="color:var(--yellow)">Amarelo</strong>&nbsp;— utilização &gt;= 70% e &lt; 90%&nbsp;&nbsp;<span style="color:var(--text-dim)">(atenção)</span><br>
-<span style="color:var(--red)">●</span>&nbsp;<strong style="color:var(--red)">Vermelho</strong>&nbsp;— utilização &gt;= 90%&nbsp;&nbsp;<span style="color:var(--text-dim)">(risco de sobrecarga)</span><br><br>
-<span style="color:var(--text-dim)">Ex.: nó com 8 processadores e load 1m = 6.4 → 80% → amarelo.<br>Regra aplicada igualmente para 1m, 5m e 15m.</span><br><br>
-<span style="color:var(--text-dim)"><strong style="color:var(--text)">Como diagnosticar a causa:</strong> cruze com a coluna <strong>CPU%</strong> desta mesma linha. Load e CPU% altos juntos → gargalo de CPU. Load alto com CPU% normal/baixo → provável espera por I/O (disco lento, merge/flush, GC ou swap), já que o load conta processos bloqueados em I/O, não só os que disputam CPU.</span>`;
+<span style="color:var(--data-neutral)">●</span>&nbsp;<strong>Normal</strong>&nbsp;&nbsp;&nbsp;— utilização &lt; 70%&nbsp;&nbsp;<span style="color:var(--text-muted)">(carga saudável)</span><br>
+<span style="color:var(--warning)">●</span>&nbsp;<strong style="color:var(--warning)">Amarelo</strong>&nbsp;— utilização &gt;= 70% e &lt; 90%&nbsp;&nbsp;<span style="color:var(--text-muted)">(atenção)</span><br>
+<span style="color:var(--danger)">●</span>&nbsp;<strong style="color:var(--danger)">Vermelho</strong>&nbsp;— utilização &gt;= 90%&nbsp;&nbsp;<span style="color:var(--text-muted)">(risco de sobrecarga)</span><br><br>
+<span style="color:var(--text-muted)">Ex.: nó com 8 processadores e load 1m = 6.4 → 80% → amarelo.<br>Regra aplicada igualmente para 1m, 5m e 15m.</span><br><br>
+<span style="color:var(--text-muted)"><strong style="color:var(--text-primary)">Como diagnosticar a causa:</strong> cruze com a coluna <strong>CPU%</strong> desta mesma linha. Load e CPU% altos juntos → gargalo de CPU. Load alto com CPU% normal/baixo → provável espera por I/O (disco lento, merge/flush, GC ou swap), já que o load conta processos bloqueados em I/O, não só os que disputam CPU.</span>`;
   return `<table class="data-table data-table--freeze-first">
     <thead><tr>
       <th data-col="name" data-role-sort="true">Nó <span class="sort-icon">↕</span></th>
@@ -3716,19 +3716,19 @@ A cor reflete a proporção entre o load e o número de processadores disponíve
 }
 
 function tableCircuitBreakers(rows) {
-  const trippedTip = `<strong style="color:var(--text);display:block;margin-bottom:6px">O que são os Disparos (tripped)</strong>
-Cada vez que o breaker <strong>aborta uma requisição</strong> para proteger a JVM de estouro de memória, o contador <code style="color:var(--blue);background:var(--surface-hover);padding:1px 4px;border-radius:3px">tripped</code> é incrementado. Cada disparo é uma query ou indexação <strong>rejeitada</strong>.<br><br>
+  const trippedTip = `<strong style="color:var(--text-primary);display:block;margin-bottom:6px">O que são os Disparos (tripped)</strong>
+Cada vez que o breaker <strong>aborta uma requisição</strong> para proteger a JVM de estouro de memória, o contador <code style="color:var(--info);background:var(--bg-chip);padding:1px 4px;border-radius:3px">tripped</code> é incrementado. Cada disparo é uma query ou indexação <strong>rejeitada</strong>.<br><br>
 É um indicador <strong>tardio</strong>: quando ele sobe, o nó já esteve sob pressão de memória e derrubou trabalho.<br><br>
-<span style="color:var(--text-muted)">●</span>&nbsp;<strong style="color:var(--text-muted)">0 disparos</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">(nenhuma requisição derrubada)</span><br>
-<span style="color:var(--red)">●</span>&nbsp;<strong style="color:var(--red)">&gt; 0 disparos</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">(pressão de memória — requer investigação)</span>`;
+<span style="color:var(--text-muted)">●</span>&nbsp;<strong style="color:var(--text-muted)">0 disparos</strong>&nbsp;&nbsp;<span style="color:var(--text-muted)">(nenhuma requisição derrubada)</span><br>
+<span style="color:var(--danger)">●</span>&nbsp;<strong style="color:var(--danger)">&gt; 0 disparos</strong>&nbsp;&nbsp;<span style="color:var(--text-muted)">(pressão de memória — requer investigação)</span>`;
 
-  const usageTip = `<strong style="color:var(--text);display:block;margin-bottom:6px">Como o % do Limite é calculado</strong>
+  const usageTip = `<strong style="color:var(--text-primary);display:block;margin-bottom:6px">Como o % do Limite é calculado</strong>
 A cor reflete a proporção entre o uso estimado do breaker e o limite configurado para ele:<br><br>
 <code style="color:var(--text-muted);font-size:11px">% do limite = uso_estimado / limite</code><br><br>
-<span style="color:var(--data-neutral)">●</span>&nbsp;<strong>Normal</strong>&nbsp;&nbsp;&nbsp;— &lt; 65%&nbsp;&nbsp;<span style="color:var(--text-dim)">(folga)</span><br>
-<span style="color:var(--yellow)">●</span>&nbsp;<strong style="color:var(--yellow)">Amarelo</strong>&nbsp;— &gt;= 65% e &lt; 80%&nbsp;&nbsp;<span style="color:var(--text-dim)">(atenção)</span><br>
-<span style="color:var(--red)">●</span>&nbsp;<strong style="color:var(--red)">Vermelho</strong>&nbsp;— &gt;= 80%&nbsp;&nbsp;<span style="color:var(--text-dim)">(próximo de disparar)</span><br><br>
-<span style="color:var(--text-dim)">É o indicador <em>antecipado</em>: ao chegar a 100% o breaker começa a derrubar requisições (sobem os disparos).</span>`;
+<span style="color:var(--data-neutral)">●</span>&nbsp;<strong>Normal</strong>&nbsp;&nbsp;&nbsp;— &lt; 65%&nbsp;&nbsp;<span style="color:var(--text-muted)">(folga)</span><br>
+<span style="color:var(--warning)">●</span>&nbsp;<strong style="color:var(--warning)">Amarelo</strong>&nbsp;— &gt;= 65% e &lt; 80%&nbsp;&nbsp;<span style="color:var(--text-muted)">(atenção)</span><br>
+<span style="color:var(--danger)">●</span>&nbsp;<strong style="color:var(--danger)">Vermelho</strong>&nbsp;— &gt;= 80%&nbsp;&nbsp;<span style="color:var(--text-muted)">(próximo de disparar)</span><br><br>
+<span style="color:var(--text-muted)">É o indicador <em>antecipado</em>: ao chegar a 100% o breaker começa a derrubar requisições (sobem os disparos).</span>`;
 
   return `<table class="data-table">
     <thead><tr>
@@ -3774,7 +3774,7 @@ function tablePendingTasks(rows) {
       <td><span class="badge badge-${pc}">${escHtml(r.priority || '-')}</span></td>
       <td class="mono" style="max-width:520px;white-space:normal">${escHtml(r.source || '-')}</td>
       <td>${r.executing ? '<span class="badge badge-green">sim</span>' : '<span class="badge badge-gray">não</span>'}</td>
-      <td style="text-align:right;color:${wait >= 200 ? 'var(--red)' : wait > 0 ? 'var(--yellow)' : 'var(--text-muted)'};font-weight:${wait > 0 ? '700' : '400'}">${fmtDuration(wait)}</td>
+      <td style="text-align:right;color:${wait >= 200 ? 'var(--danger)' : wait > 0 ? 'var(--warning)' : 'var(--text-muted)'};font-weight:${wait > 0 ? '700' : '400'}">${fmtDuration(wait)}</td>
     </tr>`;
     }).join('')}</tbody>
   </table>`;
@@ -3870,7 +3870,7 @@ function tableIndexShards(rows) {
       <th>Realocação / Motivo</th>
     </tr></thead>
     <tbody>${rows.map(r => {
-      let infoCell = '<span style="color:var(--text-dim)">—</span>';
+      let infoCell = '<span style="color:var(--text-muted)">—</span>';
       if (r.state === 'RELOCATING' && r.relocation_target) {
         infoCell = `<span class="reloc-info reloc-out"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg> ${escHtml(r.relocation_target)}</span>`;
       } else if (r.state === 'INITIALIZING' && r.relocation_source) {
@@ -3882,7 +3882,7 @@ function tableIndexShards(rows) {
         <td style="font-weight:700;color:var(--text-muted)">${r.shard ?? '-'}</td>
         <td>${shardTypeBadge(r.prirep)}</td>
         <td>${shardStateBadge(r.state)}</td>
-        <td>${r.node ? nodeCellByName(r.node) : '<span style="color:var(--text-dim)">—</span>'}</td>
+        <td>${r.node ? nodeCellByName(r.node) : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td style="font-size:12px;color:var(--text-muted)">${r.ip || '—'}</td>
         <td>${fmtNum(r.docs)}</td>
         <td>${r.store || '—'}</td>
@@ -4404,7 +4404,7 @@ function renderNodeDetail(d) {
       valRow('Build hash', id.build_hash, true),
       valRow('Roles', (id.roles || []).join(', '), true),
     ])}
-    ${sec('monitor', 'Sistema Operacional', [
+    ${sec('monitor', 'Sistema operacional', [
       valRow('SO', os.pretty_name || os.name),
       valRow('Versão do kernel', os.version, true),
       valRow('Arquitetura', os.arch, true),
@@ -4614,7 +4614,7 @@ function integrationEmptyState(key, hasUrls, extra) {
   </section>`;
 }
 
-// Card "Instâncias Saudáveis", igual nas duas páginas: proporção de instâncias
+// Card "Instâncias saudáveis", igual nas duas páginas: proporção de instâncias
 // disponíveis, com versões e inacessíveis no rodapé.
 function healthyInstancesCard(d, key, tip) {
   const instances = d.instances || [];
@@ -4633,7 +4633,7 @@ function healthyInstancesCard(d, key, tip) {
       }]
     : [];
 
-  return cardStat(null, 'Instâncias Saudáveis', 'circle-check',
+  return cardStat(null, 'Instâncias saudáveis', 'circle-check',
     `${healthy}/${instances.length}`, allOk ? 'todas disponíveis' : 'alguma degradada',
     statusColor, tip,
     [
@@ -4693,10 +4693,10 @@ function renderKibana(d = integrationData.kibana) {
   }
 
   page.innerHTML = `<div class="metrics-grid">
-    ${section('Visão Geral')}
+    ${section('Visão geral')}
     <div class="card-grid card-grid--3">${kibanaOverviewCards(d)}</div>
 
-    ${section('Utilização por Instância')}
+    ${section('Utilização por instância')}
     ${kibanaInstancesTable(d)}
 
     ${kibanaTaskManagerSection(d)}
@@ -4708,7 +4708,7 @@ function kibanaOverviewCards(d) {
   const tip = 'Instâncias cujo status geral é <strong>disponível</strong>. O status vem do ' +
     '<code>/api/status</code> quando a URL está cadastrada; caso contrário, do self-monitoring.<br><br>' +
     'O rodapé traz a <strong>versão</strong> das instâncias — quando aparece mais de uma, fica ' +
-    '<span style="color:var(--yellow)">amarela</span>: é sinal de upgrade em andamento ou incompleto.';
+    '<span style="color:var(--warning)">amarela</span>: é sinal de upgrade em andamento ou incompleto.';
 
   return [
     healthyInstancesCard(d, 'kibana', tip),
@@ -4787,7 +4787,7 @@ function kibanaApmCard(apm) {
     agentFooterStats(apm), 'help-kibana-apm');
 }
 
-// Tabela de utilização — mesmo layout do card "Utilização por Nó" dos Sinais
+// Tabela de utilização — mesmo layout do card "Utilização por nó" dos Sinais
 // Vitais, com as colunas possíveis para o Kibana.
 function kibanaInstancesTable(d) {
   const tip = 'Utilização por instância do Kibana. Cada célula mostra no tooltip a <strong>origem</strong> ' +
@@ -4814,7 +4814,7 @@ function kibanaInstancesTable(d) {
       <td class="num">${svcNumCell('kibana', inst.metrics.event_loop_delay, ' ms')}</td>
     </tr>`).join('');
 
-  return tableCard('gauge', 'Utilização por Instância', tip, 'help-kibana-utilization',
+  return tableCard('gauge', 'Utilização por instância', tip, 'help-kibana-utilization',
     `<th>Instância</th><th>Status</th><th>CPU</th><th>Disco</th><th>RAM</th>
      <th>Heap</th><th>ELU</th><th class="num">Delay</th>`,
     rows);
@@ -4856,7 +4856,7 @@ function kibanaTaskManagerSection(d) {
       <td>${tm.capacity_status
             ? `<span class="badge ${{ OK: 'badge-green', Warning: 'badge-yellow', Error: 'badge-red' }[tm.capacity_status] || 'badge-gray'}">${escHtml(tm.capacity_status)}</span>`
             : '<span class="kb-no-source">&mdash;</span>'}</td>
-      <td class="num" style="${tm.overdue > 0 ? 'color:var(--yellow);font-weight:700' : ''}">${tm.overdue != null ? fmtNum(tm.overdue) : '—'}</td>
+      <td class="num" style="${tm.overdue > 0 ? 'color:var(--warning);font-weight:700' : ''}">${tm.overdue != null ? fmtNum(tm.overdue) : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -4877,12 +4877,12 @@ function kibanaFleetSection(d) {
         <div class="kb-inst-sub">${escHtml(p.policy_id)}</div></td>
     <td>${escHtml(p.package_version || '-')}</td>
     <td class="num">${fmtNum(p.total || 0)}</td>
-    <td class="num" style="color:var(--green)">${fmtNum(p.healthy || 0)}</td>
-    <td class="num" style="${p.unhealthy > 0 ? 'color:var(--red);font-weight:700' : ''}">${fmtNum(p.unhealthy || 0)}</td>
-    <td class="num" style="${p.offline > 0 ? 'color:var(--yellow)' : ''}">${fmtNum(p.offline || 0)}</td>
+    <td class="num" style="color:var(--success)">${fmtNum(p.healthy || 0)}</td>
+    <td class="num" style="${p.unhealthy > 0 ? 'color:var(--danger);font-weight:700' : ''}">${fmtNum(p.unhealthy || 0)}</td>
+    <td class="num" style="${p.offline > 0 ? 'color:var(--warning)' : ''}">${fmtNum(p.offline || 0)}</td>
   </tr>`).join('');
 
-  return section('APM Server por Policy') +
+  return section('APM Server por policy') +
     tableCard('workflow', 'Policies com integração APM',
       'Cada <strong>agent policy</strong> que contém a integração <code>apm</code> e quantos agentes a executam. Útil para saber se o coletor de APM está de pé em todos os grupos esperados.',
       'help-kibana-apm',
@@ -4912,10 +4912,10 @@ function renderLogstash(d = integrationData.logstash) {
   }
 
   page.innerHTML = `<div class="metrics-grid">
-    ${section('Visão Geral')}
+    ${section('Visão geral')}
     <div class="card-grid card-grid--5">${logstashOverviewCards(d)}</div>
 
-    ${section('Utilização por Instância')}
+    ${section('Utilização por instância')}
     ${logstashInstancesTable(d)}
 
     ${logstashPipelinesSection(d)}
@@ -4929,7 +4929,7 @@ function logstashOverviewCards(d) {
     'falha de reload; em versões sem esse endpoint, do campo <code>status</code> do ' +
     '<code>/_node/stats</code>. Sem URL, do self-monitoring.<br><br>' +
     'O rodapé traz a <strong>versão</strong> das instâncias — mais de uma fica ' +
-    '<span style="color:var(--yellow)">amarela</span>: sinal de upgrade em andamento ou incompleto.';
+    '<span style="color:var(--warning)">amarela</span>: sinal de upgrade em andamento ou incompleto.';
 
   return [
     healthyInstancesCard(d, 'logstash', tip),
@@ -4955,11 +4955,11 @@ function logstashThroughputCard(d) {
     'fica na tabela <strong>Plugins mais lentos</strong>.';
 
   if (ev.per_sec == null) {
-    return cardStat(null, 'Vazão de Eventos', 'arrow-left-right', '&mdash;',
+    return cardStat(null, 'Vazão de eventos', 'arrow-left-right', '&mdash;',
       'sem uptime para calcular', 'muted', tip, [], 'help-logstash-throughput');
   }
 
-  return cardStat(null, 'Vazão de Eventos', 'arrow-left-right', fmtNum(ev.per_sec),
+  return cardStat(null, 'Vazão de eventos', 'arrow-left-right', fmtNum(ev.per_sec),
     'eventos/s (média desde o start)', 'blue', tip,
     [
       { label: 'Entrada', val: fmtNum(ev.in || 0) },
@@ -4985,7 +4985,7 @@ function logstashQueueCard(d) {
     'Sem nenhuma fila persistente o card fica neutro — não há o que medir, não é zero.';
 
   if (!q.persisted) {
-    return cardStat(null, 'Fila Persistente', 'layers', '&mdash;',
+    return cardStat(null, 'Fila persistente', 'layers', '&mdash;',
       q.memory ? 'todas as filas em memória' : 'sem pipeline com fila', 'muted', tip,
       [
         ...(q.memory ? [{ label: 'Em memória', val: fmtNum(q.memory) }] : []),
@@ -4996,7 +4996,7 @@ function logstashQueueCard(d) {
 
   const pct = q.max_pct;
   const color = pct == null ? 'blue' : pctColor(pct);
-  return cardStat(null, 'Fila Persistente', 'layers',
+  return cardStat(null, 'Fila persistente', 'layers',
     pct == null ? '&mdash;' : `${fmtPct(pct)}`, 'ocupação da fila mais cheia', color, tip,
     [
       { label: 'Persistentes', val: fmtNum(q.persisted) },
@@ -5020,12 +5020,12 @@ function logstashDlqCard(d) {
     'A DLQ é desativada por padrão; sem ela, um evento rejeitado só aparece no log do Logstash.';
 
   if (!dlq.enabled) {
-    return cardStat(null, 'Dead Letter Queue', 'inbox', '&mdash;',
+    return cardStat(null, 'Dead letter queue', 'inbox', '&mdash;',
       'sem eventos descartados', 'muted', tip, [], 'help-logstash-dlq');
   }
 
   const dropped = dlq.dropped || 0;
-  return cardStat(null, 'Dead Letter Queue', 'inbox', fmtNum(dropped),
+  return cardStat(null, 'Dead letter queue', 'inbox', fmtNum(dropped),
     'eventos descartados', dropped > 0 ? 'red' : 'green', tip,
     [
       { label: 'Tamanho', val: fmtBytes(dlq.bytes || 0) },
@@ -5045,7 +5045,7 @@ function logstashReloadCard(d) {
     'Causas típicas: erro de sintaxe no pipeline, plugin ausente, credencial inválida em um output. ' +
     'O motivo da última falha fica no tooltip da coluna <strong>Reloads</strong> da tabela de pipelines.';
 
-  return cardStat(null, 'Reloads com Falha', 'rotate-ccw', fmtNum(failures),
+  return cardStat(null, 'Reloads com falha', 'rotate-ccw', fmtNum(failures),
     failures > 0 ? 'configuração não aplicada' : 'nenhuma falha de recarga',
     failures > 0 ? 'red' : 'green', tip, [], 'help-logstash-reloads');
 }
@@ -5078,7 +5078,7 @@ function logstashInstancesTable(d) {
       <td class="num">${svcNumCell('logstash', inst.metrics.events_per_sec, '')}</td>
     </tr>`).join('');
 
-  return tableCard('gauge', 'Utilização por Instância', tip, 'help-logstash-utilization',
+  return tableCard('gauge', 'Utilização por instância', tip, 'help-logstash-utilization',
     `<th>Instância</th><th>Status</th><th>CPU</th><th>Heap</th><th>RAM</th>
      <th>Disco</th><th>FDs</th><th class="num">Eventos/s</th>`,
     rows);
@@ -5093,7 +5093,7 @@ function logstashFdCell(inst) {
 }
 
 // ─── Modal de Detalhe de Instância (Logstash) ────────────
-// Abre pelo nome na tabela "Utilização por Instância" e **não faz requisição**:
+// Abre pelo nome na tabela "Utilização por instância" e **não faz requisição**:
 // o bloco `detail` (JVM, SO, GC, processo, flow) já vem no
 // /api/logstash/dashboard da última atualização, coletado junto com o resto.
 // A tabela mostra o que é comparável entre instâncias; aqui fica o que só faz
@@ -5252,7 +5252,7 @@ function lsOsSection(os, cgroup) {
   const throttlePct = cg.throttled_pct;
   const throttleColor = throttlePct == null ? '' : (throttlePct >= 10 ? 'red' : throttlePct >= 1 ? 'yellow' : 'green');
 
-  return ndSection('monitor', 'Sistema Operacional', [
+  return ndSection('monitor', 'Sistema operacional', [
     ndValRow('SO', escHtml(soName)),
     ndValRow('Arquitetura', escHtml(os.arch), true),
     ndValRow('Processadores disponíveis', os.processors != null
@@ -5560,14 +5560,14 @@ function logstashDlqCell(p) {
   const title = [p.dlq_last_error ? `Último erro: ${p.dlq_last_error}` : '',
                  p.dlq_storage_policy ? `storage_policy: ${p.dlq_storage_policy}` : '',
                  p.dlq_expired ? `${p.dlq_expired} expirados (perdidos)` : ''].filter(Boolean).join(' · ');
-  return `<span title="${escHtml(title)}" style="${p.dlq_dropped > 0 ? 'color:var(--red);font-weight:700' : ''}">
+  return `<span title="${escHtml(title)}" style="${p.dlq_dropped > 0 ? 'color:var(--danger);font-weight:700' : ''}">
     ${fmtNum(p.dlq_dropped || 0)}</span>
     ${p.dlq_bytes ? `<div class="kb-inst-sub">${fmtBytes(p.dlq_bytes)}</div>` : ''}`;
 }
 
 function logstashReloadCell(p) {
   const failures = p.reload_failures || 0;
-  return `<span title="${escHtml(p.reload_last_error || '')}" style="${failures > 0 ? 'color:var(--red);font-weight:700' : ''}">
+  return `<span title="${escHtml(p.reload_last_error || '')}" style="${failures > 0 ? 'color:var(--danger);font-weight:700' : ''}">
     ${fmtNum(failures)}</span>
     ${p.reload_successes ? `<div class="kb-inst-sub">${fmtNum(p.reload_successes)} ok</div>` : ''}`;
 }
@@ -6037,9 +6037,9 @@ function clusterBudgetHtml(item) {
   if (!b || item.key !== MAX_SHARDS_KEY) return '';
   const usedText = fmtNum(b.open_shards);
   // Índices fechados não contam para o limite do ES; daí a divergência com o
-  // "Total de Shards" dos Sinais Vitais, que soma todos.
+  // "Total de shards" dos Sinais Vitais, que soma todos.
   const openTip = 'Só índices abertos contam para o limite. Por isso este número pode ' +
-    'divergir do "Total de Shards" dos Sinais Vitais, que inclui os fechados.';
+    'divergir do "Total de shards" dos Sinais Vitais, que inclui os fechados.';
   // "Dedicado a frozen" é o nome do conceito no código (isDedicatedFrozen), não
   // linguagem de tela: aqui vale dizer o que o leitor consegue conferir — nó que
   // só serve ao tier frozen. A ressalva do nó que acumula tiers fica na Ajuda.
