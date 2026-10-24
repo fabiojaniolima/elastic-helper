@@ -3091,16 +3091,28 @@ function sortNodesByRole(nodes) {
   });
 }
 
+// FindingCard do design system. `sev` segue a régua do Diagnóstico
+// (red/yellow/blue → crítico/atenção/informativo); `metric` vira o selo e `tag`
+// a ação. O único insight sem ação (licença) mostra o rótulo sem botão.
+const INSIGHT_TONE = { red: 'danger', yellow: 'warning', blue: 'info' };
+
 function insightCard(sev, ic, title, metric, desc, tag, onclick) {
-  const click = onclick ? ` onclick="${onclick}"` : '';
-  return `<div class="insight-card sev-${sev}">
-    <div class="insight-icon">${icon(ic, 16)}</div>
-    <div class="insight-body">
-      <div class="insight-head"><span class="insight-title">${title}</span>${metric ? `<span class="insight-metric">${metric}</span>` : ''}</div>
-      <div class="insight-desc">${desc}</div>
-      ${tag ? `<div class="insight-tag"${click}><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg>${tag}</div>` : ''}
+  const tone = INSIGHT_TONE[sev] || 'info';
+  const action = !tag ? ''
+    : onclick
+      ? `<button type="button" class="eh-btn eh-btn--secondary eh-btn--34 eh-finding__action insight-tag" onclick="${onclick}">${tag}${icon('arrow-right', 14)}</button>`
+      : `<span class="eh-finding__action insight-tag insight-tag--static">${tag}</span>`;
+  return `<article class="eh-finding insight-card sev-${sev}">
+    <span class="eh-tile eh-tile--${tone}" style="width:40px;height:40px">${icon(ic, 18)}</span>
+    <div class="eh-finding__body">
+      <div class="eh-finding__head">
+        <h3 class="eh-finding__title">${title}</h3>
+        ${metric ? `<span class="eh-badge eh-badge--soft eh-badge--${tone}">${metric}</span>` : ''}
+      </div>
+      <p class="eh-finding__text">${desc}</p>
+      ${action}
     </div>
-  </div>`;
+  </article>`;
 }
 
 // Detalhe local (sem backend) do insight "heap acima de 50% da RAM": lista só os
@@ -3159,7 +3171,7 @@ function renderInsights() {
   const d = dashboardData;
   if (!d) {
     el.innerHTML = `<div class="empty-state">
-      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
+      ${icon('info', 20)}
       <p>Sem dados ainda — abra os Sinais Vitais para carregar as métricas.</p>
     </div>`;
     return;
@@ -3480,20 +3492,21 @@ function renderInsights() {
     : 'Há problemas de disponibilidade que precisam de atenção.';
   const sumDesc = availPhrase + riskPhrase;
 
-  const summary = `<div class="insights-summary">
+  const sumTone = { green: 'success', yellow: 'warning', red: 'danger' }[status] || 'none';
+  const statusWord = status.charAt(0).toUpperCase() + status.slice(1);
+  const countCls = (n, tone) => n > 0 ? `is-${tone}` : 'is-zero';
+  const summary = `<section class="insights-summary is-${sumTone}" aria-label="Resumo do diagnóstico">
+    <div class="insights-summary-icon">${icon(sumIcon, 24, 'eh-icon--bold')}</div>
     <div class="insights-summary-main">
-      <div class="insights-summary-icon" style="background:var(--${sumColor}-bg);color:var(--${sumColor})">${icon(sumIcon, 26)}</div>
-      <div>
-        <div class="insights-summary-title">Cluster operando em ${status.toUpperCase()}</div>
-        <div class="insights-summary-desc">${sumDesc}</div>
-      </div>
+      <span class="insights-summary-title">Cluster operando em <span class="insights-summary-status">${statusWord}</span></span>
+      <p class="insights-summary-desc">${sumDesc}</p>
     </div>
     <div class="insights-summary-counts">
-      <div class="severity-count"><div class="severity-num text-red">${counts.red}</div><div class="severity-label">Crítico</div></div>
-      <div class="severity-count"><div class="severity-num text-yellow">${counts.yellow}</div><div class="severity-label">Atenção</div></div>
-      <div class="severity-count"><div class="severity-num text-blue">${counts.blue}</div><div class="severity-label">Info</div></div>
+      <div class="severity-count"><span class="severity-num ${countCls(counts.red, 'danger')}">${counts.red}</span><span class="severity-label">Crítico</span></div>
+      <div class="severity-count"><span class="severity-num ${countCls(counts.yellow, 'warning')}">${counts.yellow}</span><span class="severity-label">Atenção</span></div>
+      <div class="severity-count"><span class="severity-num ${countCls(counts.blue, 'info')}">${counts.blue}</span><span class="severity-label">Info</span></div>
     </div>
-  </div>`;
+  </section>`;
 
   // ─── Grade "O que merece atenção" ───
   // Ordena por severidade: críticos (red) primeiro, depois atenção (yellow) e por
@@ -3501,13 +3514,13 @@ function renderInsights() {
   const sevRank = { red: 0, yellow: 1, blue: 2 };
   const ordered = [...insights].sort((a, b) => (sevRank[a.sev] ?? 3) - (sevRank[b.sev] ?? 3));
   const gridBlock = insights.length
-    ? `<div class="insights-block">
-        <div class="grid-section"><span class="grid-section-label">O que merece atenção</span><span class="grid-section-line"></span></div>
+    ? `<section class="page-section insights-block">
+        ${section('O que merece atenção')}
         <div class="insights-grid">${ordered.map(i => i.html).join('')}</div>
-      </div>`
-    : `<div class="insights-block">
-        <div class="empty-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg><p>Nenhum ponto de atenção nos dados atuais.</p></div>
-      </div>`;
+      </section>`
+    : `<section class="page-section insights-block">
+        <div class="eh-panel"><div class="empty-state">${icon('circle-check', 20)}<p>Nenhum ponto de atenção nos dados atuais.</p></div></div>
+      </section>`;
 
   el.innerHTML = summary + gridBlock;
 }
