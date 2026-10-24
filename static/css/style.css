@@ -1346,7 +1346,11 @@ input[type="checkbox"] {
 .eh-stat.is-clickable:hover { border-color: var(--border-strong); }
 .eh-stat.is-clickable:focus-within { box-shadow: var(--focus-card); }
 .eh-stat__pairvalue.lvl-normal { color: var(--text-primary); }
-.eh-stat__breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Pares em 2 colunas quando cabem (como no design system); em cards estreitos,
+   ou com valores longos, caem para uma coluna em vez de se sobrepor. */
+.eh-stat__breakdown { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+.eh-stat__pair { min-width: 0; }
+.eh-stat__pairvalue { text-align: right; overflow-wrap: anywhere; }
 
 /* Capacidade de disco por tier: uma linha por tier, Meter lg */
 .tier-disk-list { display: flex; flex-direction: column; }
@@ -1752,54 +1756,29 @@ input[type="checkbox"] {
    duas páginas de integração e pela Configuração — o prefixo ficou por
    compatibilidade, como os ids `overview`/`capacity`/`insights`. */
 
+/* As páginas de integração montam cabeçalho de seção e painel como irmãos dentro
+   de .metrics-grid (gap de 30 px entre seções): o painel encosta no seu
+   cabeçalho com o gap de 14 px do SectionHeader. */
+.metrics-grid > .eh-sectionhead + * { margin-top: calc(var(--space-14) - var(--space-30)); }
+
 /* Métrica sem fonte disponível (ex.: CPU/disco sem Elastic Agent no host).
    Traço discreto em vez de zero — ausência de dado não é dado zerado. */
-.kb-no-source {
-  color: var(--text-dim);
-  cursor: help;
-  font-weight: 600;
-}
+.kb-no-source { font-family: var(--font-mono); color: var(--text-muted); cursor: help; }
+.kb-inst-name { font-family: var(--font-mono); font-size: var(--mono-strong-size); font-weight: var(--mono-strong-weight); color: var(--text-primary); display: inline-flex; align-items: center; gap: var(--space-8); flex-wrap: wrap; }
+.kb-inst-sub { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--text-muted); margin-top: var(--space-4); }
+.kb-inst-error { display: flex; align-items: center; gap: var(--space-4); font-size: var(--meta-size); color: var(--danger-text); margin-top: var(--space-4); cursor: help; }
+.kb-inst-note { font-size: var(--meta-size); color: var(--text-muted); margin-top: var(--space-4); cursor: help; }
+.kb-inst-unavailable { color: var(--text-muted); }
+.kb-inst-unavailable .eh-icon { display: inline-block; vertical-align: -2px; }
 
-.kb-inst-name {
-  font-weight: 600;
-  color: var(--text);
-}
+/* Aviso informativo (Callout do design system): Configuração e Cluster */
+.kb-warning { display: flex; align-items: flex-start; gap: var(--space-12); padding: var(--space-14) var(--space-18); background: var(--info-soft); border: 1px solid var(--info-border); border-radius: var(--radius-note); font-size: var(--body-sm-size); line-height: 1.55; color: var(--text-note); }
+.kb-warning strong { color: var(--text-primary); font-weight: 600; }
+.kb-warning > .eh-icon { color: var(--info); flex-shrink: 0; margin-top: 2px; }
 
-.kb-inst-sub {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 2px;
-}
-
-.kb-inst-error {
-  font-size: 11px;
-  color: var(--red);
-  margin-top: 3px;
-  cursor: help;
-}
-
-.kb-inst-note {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 3px;
-  cursor: help;
-  font-style: italic;
-}
-
-/* Aviso informativo no topo da Configuração (ex.: conexão não salva) */
-.kb-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  background: var(--blue-bg);
-  border: 1px solid var(--blue-dim);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  padding: 12px 14px;
-  font-size: 13px;
-  margin-bottom: 16px;
-}
-.kb-warning i { color: var(--blue); margin-top: 2px; }
+/* EmptyState com título e ação (páginas de integração sem instância) */
+.empty-state__title { font-size: var(--card-title-size); font-weight: var(--card-title-weight); color: var(--text-primary); }
+.empty-state__action { margin-top: var(--space-6); }
 
 /* ─── Página Configuração: um grupo por integração ───
    O cabeçalho do grupo leva o nome e o switch de ativação; as configurações

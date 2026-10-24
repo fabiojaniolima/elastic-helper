@@ -1870,9 +1870,9 @@ function tierDiskRow(tier, agg) {
   return `<div class="tier-disk-item">
     <span class="tier-disk-name">${tier}</span>
     <span class="eh-meter eh-meter--lg" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Uso de disco do tier ${tier}"><span class="eh-meter__fill is-${levelClass(color)}" style="width:${pct > 0 && pct < 1.5 ? 1.5 : pct}%"></span></span>
-    <span class="tier-disk-pct lvl-${levelClass(color)}">${pct}%</span>
+    <span class="tier-disk-pct lvl-${levelClass(color)}">${fmtPct(pct)}</span>
     <span></span>
-    <span class="tier-disk-bytes"><span class="eh-mono tier-disk-strong">${fmtBytes(used)}</span> usado · <span class="eh-mono">${fmtBytes(total)}</span> total · <span class="eh-mono">${fmtBytes(free)}</span> livre (${freePct}%)</span>
+    <span class="tier-disk-bytes"><span class="eh-mono tier-disk-strong">${fmtBytes(used)}</span> usado · <span class="eh-mono">${fmtBytes(total)}</span> total · <span class="eh-mono">${fmtBytes(free)}</span> livre (${fmtPct(freePct)})</span>
     <span></span>
   </div>`;
 }
@@ -2308,7 +2308,7 @@ function openShardsDetail() {
   const stats = [
     { label: 'Primários', val: fmtNum(h.active_primary_shards), color: null },
     { label: 'Réplicas', val: fmtNum((h.active_shards || 0) - (h.active_primary_shards || 0)), color: null },
-    { label: 'Ativos', val: `${pct}%`, color: pctColor },
+    { label: 'Ativos', val: `${fmtPct(pct)}`, color: pctColor },
     { label: 'Média por data node', val: fmtNum(avgShards), color: avgColor },
   ];
 
@@ -2450,7 +2450,7 @@ function renderRecovery(rows) {
         <div class="recovery-route">${route}</div>
         <div class="recovery-progress">
           <div class="recovery-track"><div class="recovery-fill" style="width:${pct}%;background:var(--${fillColor})"></div></div>
-          <span class="recovery-pct">${pct.toFixed(1)}%</span>
+          <span class="recovery-pct">${fmtPct(pct, 1)}</span>
           <span class="recovery-bytes">${fmtBytes(r.bytes_recovered)} / ${fmtBytes(r.bytes_total)}</span>
         </div>
         <div class="recovery-sub">
@@ -3149,7 +3149,7 @@ function openHeapRamDetail() {
     const color = pct >= 75 ? 'red' : 'yellow';
     return `<tr>
       <td>${nodeNameCell(n.name, n.roles, n.is_master)}</td>
-      <td><span class="text-${color}" style="font-weight:700">${pct}%</span></td>
+      <td><span class="text-${color}" style="font-weight:700">${fmtPct(pct)}</span></td>
       <td>${fmtBytes(n.heap_max)}</td>
       <td>${fmtBytes(n.ram_total)}</td>
     </tr>`;
@@ -3192,7 +3192,7 @@ function renderInsights() {
     const pct = total ? Math.round(noRep / total * 100) : 0;
     add('red', 'shield',
       `${fmtNum(noRep)} índice${plural(noRep)} sem réplica`,
-      total ? `≈ ${pct}% do total` : '',
+      total ? `≈ ${fmtPct(pct)} do total` : '',
       'Índices sem cópia — a perda de um único data node pode significar perda de dados.',
       'Listar índices sem réplica',
       `openDetail('indices_without_replicas','Índices sem Réplica','')`);
@@ -3225,7 +3225,7 @@ function renderInsights() {
     if (!hot || !hot.length) continue;
     hot.sort((a, b) => b.disk_used_percent - a.disk_used_percent);
     const max = hot[0].disk_used_percent;
-    const list = hot.map(n => `${n.name} (${n.disk_used_percent.toFixed(1)}%)`).join(', ');
+    const list = hot.map(n => `${n.name} (${fmtPct(n.disk_used_percent, 1)})`).join(', ');
     // Watermarks padrão do ES: low 85% (não aloca novos), high 90% (realoca para fora), flood 95% (read-only)
     let tail;
     if (max >= 95) tail = 'nível de flood-stage (≥ 95%) — índices podem entrar em modo read-only.';
@@ -3318,7 +3318,7 @@ function renderInsights() {
   const writeHot = nodes.filter(n => (n.write_pressure_pct || 0) >= 70);
   if (writeHot.length) {
     const critical = writeHot.some(n => (n.write_pressure_pct || 0) >= 90);
-    const list = writeHot.map(n => `${n.name} (${n.write_pressure_pct}%)`).join(', ');
+    const list = writeHot.map(n => `${n.name} (${fmtPct(n.write_pressure_pct)})`).join(', ');
     add(critical ? 'red' : 'yellow', 'sliders-horizontal',
       `${fmtNum(writeHot.length)} nó${plural(writeHot.length)} sob pressão de escrita`,
       'Indexing pressure alto',
@@ -3455,7 +3455,7 @@ function renderInsights() {
   const availabilityAdded = status !== 'green' || unassigned > 0 || cbTrips > 0;
   if (availabilityAdded) {
     const sev = (status === 'red' || unassigned > 0) ? 'red' : 'yellow';
-    const parts = [`${activePct}% dos shards ativos`, `${fmtNum(unassigned)} não alocado${plural(unassigned)}`];
+    const parts = [`${fmtPct(activePct)} dos shards ativos`, `${fmtNum(unassigned)} não alocado${plural(unassigned)}`];
     if (cbTrips > 0) parts.push(`${fmtNum(cbTrips)} disparo${plural(cbTrips)} de circuit breaker`);
     add(sev, 'heart-pulse',
       'Disponibilidade comprometida',
@@ -3540,7 +3540,7 @@ function diskByNodeContent() {
     return `<div class="disk-row">
       <div class="disk-label">${nodeNameCell(n.name, n.roles, n.is_master)}</div>
       <div class="disk-track"><div class="disk-fill" style="width:${disk}%;background:var(--${color})"></div></div>
-      <div class="disk-val text-${color}">${disk.toFixed(2)}%</div>
+      <div class="disk-val text-${color}">${fmtPct(disk, 2)}</div>
     </div>`;
   }).join('');
   return `<div class="disk-card">
@@ -3618,7 +3618,7 @@ function renderSnapshots(rows) {
         </div>
         <div class="recovery-progress">
           <div class="recovery-track"><div class="recovery-fill" style="width:${pct}%;background:var(--${fillColor})"></div></div>
-          <span class="recovery-pct">${pct.toFixed(1)}%</span>
+          <span class="recovery-pct">${fmtPct(pct, 1)}</span>
           <span class="recovery-bytes">${fmtBytes(r.bytes_processed)} / ${fmtBytes(r.bytes_total)}</span>
         </div>
         <div class="recovery-sub">
@@ -4171,7 +4171,7 @@ function ndPctRow(label, pct, extra = '', opts = {}) {
     <span class="nd-label">${label}</span>
     <div class="nd-bar-wrap">
       <div class="tier-disk-track nd-bar"><div class="tier-disk-fill" style="width:${Math.min(pct, 100)}%;background:var(--${color})"></div></div>
-      <span class="nd-pct text-${color}">${opts.text || `${pct}%`}</span>
+      <span class="nd-pct text-${color}">${opts.text || `${fmtPct(pct)}`}</span>
       ${extra ? `<span class="nd-extra">${extra}</span>` : ''}
     </div>
   </div>`;
@@ -4322,7 +4322,7 @@ function renderNodeDetail(d) {
   const heapOverHalf = heapPctRam != null && heapPctRam > 50;
   const heapOver32 = heapMax > 32 * GB;
   const heapRatioRow = heapPctRam != null
-    ? valRow('Heap / RAM física', `<span class="text-${heapOverHalf ? 'yellow' : 'green'}">${heapPctRam}%</span>`)
+    ? valRow('Heap / RAM física', `<span class="text-${heapOverHalf ? 'yellow' : 'green'}">${fmtPct(heapPctRam)}</span>`)
     : '';
   // Aviso de heap > 50% da RAM foi movido para o Diagnóstico (card de insight);
   // aqui fica só a linha informativa "Heap / RAM física" (colorida) e o aviso de
@@ -4480,7 +4480,7 @@ const HEALTHY_STATUS = ['green', 'available'];
 
 function serviceStatusBadge(status) {
   const [cls, label] = SERVICE_STATUS_BADGE[status] || ['badge-gray', status || 'desconhecido'];
-  return `<span class="badge ${cls}">${escHtml(label)}</span>`;
+  return `<span class="badge ${cls}"><span class="eh-badge__dot"></span>${escHtml(label)}</span>`;
 }
 
 // Célula percentual com a origem no tooltip nativo; traço quando não há fonte.
@@ -4495,8 +4495,8 @@ function svcMetricCell(key, metric, emptyHint) {
 function svcNumCell(key, metric, suffix, digits = 1) {
   if (!metric || metric.value == null) return '<span class="kb-no-source">&mdash;</span>';
   const src = SOURCE_LABELS[key][metric.source] || metric.source;
-  const val = Number(metric.value).toFixed(digits).replace(/\.0+$/, '');
-  return `<span title="Fonte: ${escHtml(src)}">${val}${suffix || ''}</span>`;
+  const val = Number(metric.value).toFixed(digits).replace(/\.0+$/, '').replace('.', ',');
+  return `<span class="eh-mono" title="Fonte: ${escHtml(src)}">${val}${suffix || ''}</span>`;
 }
 
 async function fetchIntegrationConfig(key) {
@@ -4559,18 +4559,20 @@ async function loadIntegrationPage(key, render) {
 // Empty-state comum: nenhuma instância encontrada por nenhuma fonte.
 function integrationEmptyState(key, hasUrls, extra) {
   const meta = INTEGRATIONS[key];
-  return `<div class="empty-state" style="padding:40px">
-    ${icon(meta.icon, 16)}
-    <p>Nenhuma instância ${meta.label} encontrada.</p>
-    <p style="font-size:13px;color:var(--text-dim);max-width:520px;margin:8px auto 0">
-      ${hasUrls
-        ? 'As URLs cadastradas não responderam e não há dados de self-monitoring recentes neste cluster.'
-        : extra}
-    </p>
-    <button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="showPage('config')">
-      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg> Abrir Configuração
-    </button>
-  </div>`;
+  return `<section class="eh-panel">
+    <div class="empty-state">
+      ${icon(meta.icon, 20)}
+      <span class="empty-state__title">Nenhuma instância ${meta.label} encontrada.</span>
+      <p>
+        ${hasUrls
+          ? 'As URLs cadastradas não responderam e não há dados de self-monitoring recentes neste cluster.'
+          : extra}
+      </p>
+      <button type="button" class="eh-btn eh-btn--secondary eh-btn--md empty-state__action" onclick="showPage('config')">
+        ${icon('sliders-horizontal', 16)} Abrir Configuração
+      </button>
+    </div>
+  </section>`;
 }
 
 // Card "Instâncias Saudáveis", igual nas duas páginas: proporção de instâncias
@@ -4610,7 +4612,7 @@ function instanceNameCell(inst, onclick) {
   const offline = inst.configured && !inst.reachable;
   const sub = [inst.version, inst.host].filter(Boolean).map(escHtml).join(' · ');
   const errorNote = offline
-    ? `<div class="kb-inst-error" title="${escHtml(inst.error || '')}"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg> inacessível</div>`
+    ? `<div class="kb-inst-error" title="${escHtml(inst.error || '')}">${icon('triangle-alert', 13)} inacessível</div>`
     : '';
   const noUrlNote = !inst.configured
     ? '<div class="kb-inst-note" title="Descoberta pelo self-monitoring. Cadastre a URL para ver o que só a API entrega.">só self-monitoring</div>'
@@ -4625,21 +4627,15 @@ function instanceNameCell(inst, onclick) {
 
 // Card de largura total com uma tabela — o formato das tabelas das duas páginas.
 function tableCard(ic, title, tip, topic, head, rows) {
-  return `<div class="metric-card metric-card-static card-full">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon">${icon(ic, 16)}</div>
-        <div class="card-title">${title}</div>
-      </div>
-      ${tip ? tooltip(tip, topic) : ''}
-    </div>
+  return `<section class="eh-panel">
+    ${panelHead(ic, title, tip ? tooltip(tip, topic) : '')}
     <div class="resource-table-wrap">
       <table class="data-table resource-table">
         <thead><tr>${head}</tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
-  </div>`;
+  </section>`;
 }
 
 // ═══════════════════ KIBANA ════════════════════════════════
@@ -4659,8 +4655,7 @@ function renderKibana(d = integrationData.kibana) {
 
   page.innerHTML = `<div class="metrics-grid">
     ${section('Visão Geral')}
-    <!-- auto-fit em vez das 4 colunas fixas: são 3 cards e o grid rígido deixaria buraco -->
-    <div class="section-signals-cards">${kibanaOverviewCards(d)}</div>
+    <div class="card-grid card-grid--3">${kibanaOverviewCards(d)}</div>
 
     ${section('Utilização por Instância')}
     ${kibanaInstancesTable(d)}
@@ -4777,12 +4772,12 @@ function kibanaInstancesTable(d) {
       <td>${svcMetricCell('kibana', inst.metrics.ram)}</td>
       <td>${svcMetricCell('kibana', inst.metrics.heap)}</td>
       <td>${svcMetricCell('kibana', inst.metrics.elu)}</td>
-      <td style="text-align:right">${svcNumCell('kibana', inst.metrics.event_loop_delay, ' ms')}</td>
+      <td class="num">${svcNumCell('kibana', inst.metrics.event_loop_delay, ' ms')}</td>
     </tr>`).join('');
 
   return tableCard('gauge', 'Utilização por Instância', tip, 'help-kibana-utilization',
     `<th>Instância</th><th>Status</th><th>CPU</th><th>Disco</th><th>RAM</th>
-     <th>Heap</th><th>ELU</th><th style="text-align:right">Delay</th>`,
+     <th>Heap</th><th>ELU</th><th class="num">Delay</th>`,
     rows);
 }
 
@@ -4807,8 +4802,8 @@ function kibanaTaskManagerSection(d) {
     if (!tm.available) {
       return `<tr>
         <td><div class="kb-inst-name">${escHtml(inst.name || inst.url)}</div></td>
-        <td colspan="5" style="color:var(--text-dim)">
-          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg> indisponível${tm.error ? ` — ${escHtml(tm.error)}` : ''}
+        <td colspan="5" class="kb-inst-unavailable">
+          ${icon('info', 14)} indisponível${tm.error ? ` — ${escHtml(tm.error)}` : ''}
         </td>
       </tr>`;
     }
@@ -4822,14 +4817,14 @@ function kibanaTaskManagerSection(d) {
       <td>${tm.capacity_status
             ? `<span class="badge ${{ OK: 'badge-green', Warning: 'badge-yellow', Error: 'badge-red' }[tm.capacity_status] || 'badge-gray'}">${escHtml(tm.capacity_status)}</span>`
             : '<span class="kb-no-source">&mdash;</span>'}</td>
-      <td style="text-align:right;${tm.overdue > 0 ? 'color:var(--yellow);font-weight:700' : ''}">${tm.overdue != null ? fmtNum(tm.overdue) : '—'}</td>
+      <td class="num" style="${tm.overdue > 0 ? 'color:var(--yellow);font-weight:700' : ''}">${tm.overdue != null ? fmtNum(tm.overdue) : '—'}</td>
     </tr>`;
   }).join('');
 
   return section('Task Manager') +
     tableCard('list', 'Alerting, Actions e Reporting', tip, 'help-kibana-task-manager',
       `<th>Instância</th><th>Status</th><th>Load</th><th>Drift</th>
-       <th>Capacidade</th><th style="text-align:right">Atrasadas</th>`,
+       <th>Capacidade</th><th class="num">Atrasadas</th>`,
       rows);
 }
 
@@ -4842,10 +4837,10 @@ function kibanaFleetSection(d) {
     <td><div class="kb-inst-name">${escHtml(p.name || '(sem nome)')}</div>
         <div class="kb-inst-sub">${escHtml(p.policy_id)}</div></td>
     <td>${escHtml(p.package_version || '-')}</td>
-    <td style="text-align:right">${fmtNum(p.total || 0)}</td>
-    <td style="text-align:right;color:var(--green)">${fmtNum(p.healthy || 0)}</td>
-    <td style="text-align:right;${p.unhealthy > 0 ? 'color:var(--red);font-weight:700' : ''}">${fmtNum(p.unhealthy || 0)}</td>
-    <td style="text-align:right;${p.offline > 0 ? 'color:var(--yellow)' : ''}">${fmtNum(p.offline || 0)}</td>
+    <td class="num">${fmtNum(p.total || 0)}</td>
+    <td class="num" style="color:var(--green)">${fmtNum(p.healthy || 0)}</td>
+    <td class="num" style="${p.unhealthy > 0 ? 'color:var(--red);font-weight:700' : ''}">${fmtNum(p.unhealthy || 0)}</td>
+    <td class="num" style="${p.offline > 0 ? 'color:var(--yellow)' : ''}">${fmtNum(p.offline || 0)}</td>
   </tr>`).join('');
 
   return section('APM Server por Policy') +
@@ -4853,8 +4848,8 @@ function kibanaFleetSection(d) {
       'Cada <strong>agent policy</strong> que contém a integração <code>apm</code> e quantos agentes a executam. Útil para saber se o coletor de APM está de pé em todos os grupos esperados.',
       'help-kibana-apm',
       `<th>Policy</th><th>Versão do pacote</th>
-       <th style="text-align:right">Agentes</th><th style="text-align:right">Healthy</th>
-       <th style="text-align:right">Unhealthy</th><th style="text-align:right">Offline</th>`,
+       <th class="num">Agentes</th><th class="num">Healthy</th>
+       <th class="num">Unhealthy</th><th class="num">Offline</th>`,
       rows);
 }
 
@@ -4879,7 +4874,7 @@ function renderLogstash(d = integrationData.logstash) {
 
   page.innerHTML = `<div class="metrics-grid">
     ${section('Visão Geral')}
-    <div class="section-signals-cards">${logstashOverviewCards(d)}</div>
+    <div class="card-grid card-grid--5">${logstashOverviewCards(d)}</div>
 
     ${section('Utilização por Instância')}
     ${logstashInstancesTable(d)}
@@ -4963,7 +4958,7 @@ function logstashQueueCard(d) {
   const pct = q.max_pct;
   const color = pct == null ? 'blue' : pctColor(pct);
   return cardStat(null, 'Fila Persistente', 'layers',
-    pct == null ? '&mdash;' : `${pct}%`, 'ocupação da fila mais cheia', color, tip,
+    pct == null ? '&mdash;' : `${fmtPct(pct)}`, 'ocupação da fila mais cheia', color, tip,
     [
       { label: 'Persistentes', val: fmtNum(q.persisted) },
       { label: 'Em memória', val: fmtNum(q.memory || 0) },
@@ -5041,12 +5036,12 @@ function logstashInstancesTable(d) {
       <td>${svcMetricCell('logstash', inst.metrics.ram, LS_NO_AGENT_HINT)}</td>
       <td>${svcMetricCell('logstash', inst.metrics.disk, LS_NO_AGENT_HINT)}</td>
       <td>${logstashFdCell(inst)}</td>
-      <td style="text-align:right">${svcNumCell('logstash', inst.metrics.events_per_sec, '')}</td>
+      <td class="num">${svcNumCell('logstash', inst.metrics.events_per_sec, '')}</td>
     </tr>`).join('');
 
   return tableCard('gauge', 'Utilização por Instância', tip, 'help-logstash-utilization',
     `<th>Instância</th><th>Status</th><th>CPU</th><th>Heap</th><th>RAM</th>
-     <th>Disco</th><th>FDs</th><th style="text-align:right">Eventos/s</th>`,
+     <th>Disco</th><th>FDs</th><th class="num">Eventos/s</th>`,
     rows);
 }
 
@@ -5231,7 +5226,7 @@ function lsOsSection(os, cgroup) {
       `${fmtNum(os.processors)} que o SO informa — <code>pipeline.workers</code> segue a contagem do SO ` +
       'e fica superdimensionado se não for fixado à mão.') : '',
     throttlePct != null
-      ? ndValRow('Throttling de CPU', `<span class="text-${throttleColor}">${throttlePct}%</span> ` +
+      ? ndValRow('Throttling de CPU', `<span class="text-${throttleColor}">${fmtPct(throttlePct)}</span> ` +
         `<span class="nd-dim">dos períodos · ${fmtNum(cg.throttled_times)} vezes · ` +
         `${fmtDuration(cg.throttled_ms)} parado</span>`)
       : '',
@@ -5433,7 +5428,7 @@ function lsPipelinesSummarySection(inst) {
   if (!pipes.length) return '';
   const rows = pipes.map(p => {
     const queue = p.queue_type === 'persisted'
-      ? `fila persistente${p.queue_pct != null ? ` ${p.queue_pct}%` : ''}`
+      ? `fila persistente${p.queue_pct != null ? ` ${fmtPct(p.queue_pct)}` : ''}`
       : 'fila em memória';
     const dlq = p.dlq_dropped ? ` · <span class="text-red">DLQ ${fmtNum(p.dlq_dropped)}</span>` : '';
     return ndValRow(
@@ -5450,13 +5445,14 @@ function logstashPipelinesSection(d) {
   const pipes = d.pipelines || [];
   if (!pipes.length) {
     return section('Pipelines') +
-      `<div class="metric-card metric-card-static card-full">
+      `<section class="eh-panel">
         <div class="cfg-empty">
-          Detalhamento por pipeline (eventos, fila, DLQ e reloads) vem da <strong>API de
+          ${icon('info', 20)}
+          <p>Detalhamento por pipeline (eventos, fila, DLQ e reloads) vem da <strong>API de
           monitoramento</strong> de cada instância. Cadastre a URL na
-          <strong>Configuração</strong> para vê-lo — o self-monitoring só traz os totais do nó.
+          <strong>Configuração</strong> para vê-lo — o self-monitoring só traz os totais do nó.</p>
         </div>
-      </div>`;
+      </section>`;
   }
 
   const tip = 'Um pipeline por linha, por instância. Os contadores são <strong>acumulados desde o ' +
@@ -5478,20 +5474,20 @@ function logstashPipelinesSection(d) {
     </td>
     <td>${p.workers != null ? fmtNum(p.workers) : '<span class="kb-no-source">&mdash;</span>'}
         ${p.batch_size != null ? `<div class="kb-inst-sub">batch ${fmtNum(p.batch_size)}</div>` : ''}</td>
-    <td style="text-align:right">${fmtNum(p.events_in)}</td>
-    <td style="text-align:right">${fmtNum(p.events_out)}</td>
-    <td style="text-align:right">${p.avg_event_ms != null ? fmtMs(p.avg_event_ms) : '<span class="kb-no-source">&mdash;</span>'}</td>
+    <td class="num">${fmtNum(p.events_in)}</td>
+    <td class="num">${fmtNum(p.events_out)}</td>
+    <td class="num">${p.avg_event_ms != null ? fmtMs(p.avg_event_ms) : '<span class="kb-no-source">&mdash;</span>'}</td>
     <td>${logstashQueueCell(p)}</td>
-    <td style="text-align:right">${logstashDlqCell(p)}</td>
-    <td style="text-align:right">${logstashReloadCell(p)}</td>
+    <td class="num">${logstashDlqCell(p)}</td>
+    <td class="num">${logstashReloadCell(p)}</td>
   </tr>`).join('');
 
   return section('Pipelines') +
     tableCard('workflow', 'Pipelines, filas e DLQ', tip, 'help-logstash-pipelines',
-      `<th>Pipeline</th><th>Workers</th><th style="text-align:right">Entrada</th>
-       <th style="text-align:right">Saída</th><th style="text-align:right">ms/evento</th>
-       <th>Fila</th><th style="text-align:right">DLQ</th>
-       <th style="text-align:right">Reloads</th>`,
+      `<th>Pipeline</th><th>Workers</th><th class="num">Entrada</th>
+       <th class="num">Saída</th><th class="num">ms/evento</th>
+       <th>Fila</th><th class="num">DLQ</th>
+       <th class="num">Reloads</th>`,
       rows);
 }
 
@@ -5559,17 +5555,17 @@ function logstashPluginsSection(d) {
     <td><span class="badge ${p.type === 'filter' ? 'badge-blue' : 'badge-gray'}">${escHtml(p.type)}</span></td>
     <td><div class="kb-inst-name">${escHtml(p.pipeline)}</div>
         <div class="kb-inst-sub">${escHtml(p.instance)}</div></td>
-    <td style="text-align:right">${fmtNum(p.events)}</td>
-    <td style="text-align:right">${p.avg_event_ms != null ? fmtMs(p.avg_event_ms) : '-'}</td>
-    <td style="text-align:right">${fmtDuration(p.duration_ms)}</td>
-    <td style="text-align:right">${p.share_pct != null ? `${p.share_pct}%` : '-'}</td>
+    <td class="num">${fmtNum(p.events)}</td>
+    <td class="num">${p.avg_event_ms != null ? fmtMs(p.avg_event_ms) : '-'}</td>
+    <td class="num">${fmtDuration(p.duration_ms)}</td>
+    <td class="num">${p.share_pct != null ? fmtPct(p.share_pct) : '-'}</td>
   </tr>`).join('');
 
   return section('Plugins mais lentos') +
     tableCard('clock', 'Onde o tempo do pipeline é gasto', tip, 'help-logstash-plugins',
       `<th>Plugin</th><th>Tipo</th><th>Pipeline</th>
-       <th style="text-align:right">Eventos</th><th style="text-align:right">ms/evento</th>
-       <th style="text-align:right">Tempo total</th><th style="text-align:right">% do pipeline</th>`,
+       <th class="num">Eventos</th><th class="num">ms/evento</th>
+       <th class="num">Tempo total</th><th class="num">% do pipeline</th>`,
       rows);
 }
 
@@ -5989,7 +5985,7 @@ function clusterBudgetHtml(item) {
   return `<div class="cluster-tunable-budget">
       <div class="ctb-line">
         <span title="${escHtml(openTip)}">Uso atual: <strong>${usedText}</strong> de <strong>${fmtNum(allowed)}</strong> shards abertos</span>
-        <strong class="ctb-pct text-${color}">${pct}%</strong>
+        <strong class="ctb-pct text-${color}">${fmtPct(pct)}</strong>
       </div>
       <div class="progress-bar"><div class="progress-fill progress-${color}" style="width:${Math.min(pct, 100)}%"></div></div>
       <p class="ctb-note">${fmtNum(allowed)} = ${fmtNum(item.value)} × ${fmtNum(b.data_nodes)} nós de dados.${frozenNote}</p>
@@ -6008,7 +6004,7 @@ function clusterOvershardingHtml(item) {
   if (share < OVERSHARD_WARN_SHARE_PCT) return '';
   return `<div class="cluster-tunable-warn">
       <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
-      <span><strong>${share}%</strong> dos shards abertos (${fmtNum(b.oversharded_shards)}) estão em
+      <span><strong>${fmtPct(share)}</strong> dos shards abertos (${fmtNum(b.oversharded_shards)}) estão em
         ${fmtNum(b.oversharded_indices)} índice(s) com oversharding — vários shards primários com média abaixo de 1 GB.
         Reduzi-los libera espaço no teto; subir o limite adia o problema. O <strong>Inventário</strong> lista quais são.</span>
     </div>`;
