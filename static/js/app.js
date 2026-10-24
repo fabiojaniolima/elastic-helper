@@ -329,13 +329,15 @@ function renderConnList(conns) {
   wrap.style.display = 'flex';
   card.classList.add('has-saved');
   list.innerHTML = conns.map(c => `
-    <div class="conn-item" onclick="selectConnection(${c.id})">
+    <div class="conn-item" role="button" tabindex="0" onclick="selectConnection(${c.id})"
+      onkeydown="if(event.key==='Enter')selectConnection(${c.id})">
+      <span class="eh-live eh-live--off" style="width:8px;height:8px" aria-hidden="true"></span>
       <div class="conn-item-info">
         <span class="conn-item-alias">${escHtml(c.alias)}</span>
       </div>
-      <button class="conn-item-gear" title="Configurar"
+      <button type="button" class="conn-item-gear" title="Configurar" aria-label="Configurar ${escHtml(c.alias)}"
         onclick="event.stopPropagation(); editConnection(${c.id})">
-        <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>
+        ${icon('sliders-horizontal', 16)}
       </button>
     </div>
   `).join('');
@@ -789,7 +791,7 @@ const HELP_CONTENT = [
         summary: 'Gráfico de barras horizontais com a capacidade de disco por <strong>tier de dados</strong> (HOT / WARM / COLD) — uma barra por tier, somando todos os data nodes daquele tier. O <strong>trilho cinza</strong> é a capacidade total do tier e o <strong>preenchimento colorido</strong> é o uso; o <strong>% de uso</strong> fica à direita e os bytes (usado · total · livre) logo abaixo da barra. Só conta nós com role de tier (<code>data_hot/warm/cold</code>).',
         data: [
           { label: 'Barra (trilho cinza)', desc: 'Capacidade total de disco do tier — a soma de todos os data nodes daquela camada.' },
-          { label: 'Preenchimento colorido', desc: 'Espaço em uso. A cor segue o uso: verde < 70%, amarelo ≥ 70%, vermelho ≥ 85%.' },
+          { label: 'Preenchimento colorido', desc: 'Espaço em uso. A cor segue o uso: cinza < 70%, amarelo ≥ 70%, vermelho ≥ 85%.' },
           { label: '% à direita', desc: 'Percentual de uso da barra (usado ÷ total).' },
           { label: 'Usado · Total · Livre (abaixo)', desc: 'Os valores absolutos, centralizados sob a barra, com o <strong>percentual livre</strong> entre parênteses. Livre = total − usado. Watermarks padrão do ES: low 85% / high 90% / flood 95%.' },
           { label: 'Por que FROZEN não aparece', desc: 'O disco de um nó frozen não é capacidade de armazenamento: é o <strong>cache dos searchable snapshots</strong> (<code>xpack.searchable.snapshot.shared_cache.size</code>), pré-alocado num tamanho fixo e mantido cheio pelo Elasticsearch. Ele opera perto de 100% mesmo com o repositório inteiro à disposição, então somá-lo aos demais tiers criaria uma barra permanentemente vermelha sem significar falta de espaço. Os dados do tier frozen vivem no repositório de snapshots. Pelo mesmo motivo, o disco desses nós aparece como <strong>—</strong> em toda visão por nó: "Utilização por Nó", modal "Nós do Cluster", caixinha da Topologia, modal de detalhe do nó e os alertas de disco do Diagnóstico.' },
@@ -804,7 +806,7 @@ const HELP_CONTENT = [
           { label: 'Faixa OUTROS', desc: 'Nós sem role de tier de dados: coordinating puro, ingest-only, ML-only ou com apenas <code>data_content</code>. Aparecem ao final, quando existem.' },
           { label: '★ Master eleito', desc: 'O nó master eleito recebe uma estrela (★) no canto superior direito do seu card. Quando é master dedicado, aparece na faixa MASTER; quando também é data node, aparece na sua faixa de tier com a estrela.' },
           { label: 'IP do nó', desc: 'Endereço IP do nó, conforme reportado pelo <code>_cat/nodes</code>. Útil para correlacionar com logs, monitoramento e alertas de infra.' },
-          { label: 'Barra de disco (rodapé do card)', desc: 'Uso de disco do nó em percentual. Cor verde < 70%, amarelo ≥ 70%, vermelho ≥ 85% — os mesmos limiares das demais telas.' },
+          { label: 'Barra de disco (rodapé do card)', desc: 'Uso de disco do nó em percentual. Cor cinza < 70%, amarelo ≥ 70%, vermelho ≥ 85% — os mesmos limiares das demais telas.' },
           { label: 'Clique no card de nó', desc: 'Abre um <strong>modal de detalhe</strong> com informações da instância carregadas sob demanda (só para o nó clicado, sem impacto no dashboard): sistema operacional e versão do kernel, arquitetura, número de vCPUs, CPU ao vivo, load average, RAM (total / usada / livre), swap, heap JVM (usada / máx.), versão e uptime da JVM, uso de disco por mount e file descriptors do processo.' },
         ],
       },
@@ -812,8 +814,8 @@ const HELP_CONTENT = [
         id: 'help-snapshot-running', q: 'Snapshot em Execução',
         summary: 'Snapshots em <strong>criação</strong> neste momento — visão ao vivo de qual backup está sendo gerado, em qual repositório, há quanto tempo e o progresso total (bytes e shards). Diferente do <strong>Backup (SLM)</strong>, que mostra o histórico das políticas, este card reflete o que está acontecendo <em>agora</em>. O conteúdo do modal é buscado ao vivo a cada abertura — sem cache. Clique para abrir o painel com barra de progresso por snapshot.',
         data: [
-          { label: 'Azul (N em andamento)', desc: 'Há N snapshots sendo criados agora. Clique para ver o progresso de cada um.' },
-          { label: 'Verde (nenhum)', desc: 'Nenhum snapshot em criação no momento. É o estado normal fora das janelas de backup.' },
+          { label: 'N em andamento', desc: 'Há N snapshots sendo criados agora. Clique para ver o progresso de cada um.' },
+          { label: '0 (nenhum)', desc: 'Nenhum snapshot em criação no momento. É o estado normal fora das janelas de backup.' },
           { label: '— (indisponível)', desc: 'A API <code>_snapshot/_status</code> não respondeu (licença insuficiente ou falta de permissão). O card não consegue avaliar e não emite alarme.' },
           { label: 'Estado do snapshot', desc: '<strong>Iniciado</strong>: aceito, aguardando início da transferência. <strong>Em progresso</strong>: copiando dados dos shards para o repositório (estado esperado durante a maior parte da execução). <strong>Concluído</strong>: todos os shards copiados. <strong>Falhou</strong>: erro durante a criação — verifique logs do nó master e estado do repositório. <strong>Abortado</strong>: cancelado via API antes de concluir. <strong>Ausente</strong>: snapshot não encontrado no repositório (pode ter sido excluído externamente). <strong>Incompatível</strong>: criado em versão incompatível com a atual.' },
           { label: 'Barra de progresso', desc: 'Calculada por <strong>bytes processados / bytes totais</strong>. Nos primeiros instantes (antes de o ES calcular o total), o fallback é <strong>shards concluídos / shards totais</strong>.' },
@@ -846,7 +848,7 @@ const HELP_CONTENT = [
         id: 'help-pending-tasks', q: 'Tarefas Pendentes',
         summary: 'Tarefas de atualização do <strong>cluster state</strong> (criação de índices, alterações de mapping, alocação de shards) enfileiradas aguardando o nó <strong>master</strong>. Valores persistentemente acima de zero — e principalmente uma espera máxima alta — indicam um master sobrecarregado, causa comum de lentidão generalizada. Clique para ver a fila (<code>_cluster/pending_tasks</code>).',
         data: [
-          { label: 'Nº na fila (pílula)', desc: 'Quantidade de tarefas aguardando o master agora. Verde = 0 (sem fila); amarelo = há fila; vermelho = fila com espera alta (≥ 200ms).' },
+          { label: 'Nº na fila (pílula)', desc: 'Quantidade de tarefas aguardando o master agora. Neutro = 0 (sem fila, com ✓); amarelo = há fila; vermelho = fila com espera alta (≥ 200ms).' },
           { label: 'Espera máx na fila', desc: 'Maior tempo que uma tarefa está aguardando. É o sinal mais importante — uma espera crescente revela um master pressionado.' },
         ],
       },
@@ -854,14 +856,14 @@ const HELP_CONTENT = [
         id: 'help-ilm-errors', q: 'ILM com Falha',
         summary: 'Índices cuja execução da política de ILM (Index Lifecycle Management) <strong>falhou</strong> e está parada num passo de <strong>ERRO</strong> (<code>_ilm/explain?only_errors=true</code>). Nesse estado o índice não avança pelas fases (hot → warm → cold → delete): não é encolhido, realocado nem excluído. Causas comuns: falta de disco, ausência de nós com o atributo de alocação exigido, ou erros de permissão. Costuma exigir corrigir a causa e rodar <code>_ilm/retry</code>. Clique para ver os índices e o motivo do erro.',
         data: [
-          { label: 'Nº de índices em erro', desc: 'Quantos índices estão parados num passo de ERRO. Verde = 0; vermelho = há índices travados que exigem investigação.' },
+          { label: 'Nº de índices em erro', desc: 'Quantos índices estão parados num passo de ERRO. Neutro = 0 (com ✓); vermelho = há índices travados que exigem investigação.' },
         ],
       },
       {
         id: 'help-circuit-breakers', q: 'Circuit Breakers',
         summary: 'Os circuit breakers abortam requisições para proteger a JVM de estouro de memória; o contador <code>tripped</code> soma quantas já foram derrubadas — cada disparo é uma query ou indexação rejeitada. O breaker <strong>parent</strong> é o mais crítico: agrega o uso de todos os demais e, ao atingir o limite (~95% do heap), passa a rejeitar tudo. <strong>Atenção:</strong> o contador é <strong>acumulado desde o boot</strong> — não reflete o instante atual; para o estado <em>agora</em>, use <strong>Parent CB % (Parent Circuit Breaker)</strong> e <strong>Fila TP (Fila de Thread Pool)</strong> na tabela Utilização por Nó. Clique para ver o uso por nó.',
         data: [
-          { label: 'Total de disparos (tripped)', desc: 'Soma de disparos de todos os breakers desde o boot do nó. Verde = 0; vermelho = houve disparos (pressão de memória severa em algum momento).' },
+          { label: 'Total de disparos (tripped)', desc: 'Soma de disparos de todos os breakers desde o boot do nó. Neutro = 0 (com ✓); vermelho = houve disparos (pressão de memória severa em algum momento).' },
           { label: 'Parent', desc: 'Nº de disparos do breaker parent (o agregador). Disparos aqui são os mais graves — indicam que o nó esgotou a proteção global de memória.' },
         ],
       },
@@ -869,7 +871,7 @@ const HELP_CONTENT = [
         id: 'help-slm-policies', q: 'Backup (SLM)',
         summary: 'Estado das políticas de <strong>snapshot (SLM — Snapshot Lifecycle Management)</strong>, os backups automáticos do cluster. Sem backups em dia, uma perda de dados pode ser irreversível. Clique para ver cada política: repositório, agendamento, último sucesso/falha e próxima execução.',
         data: [
-          { label: 'Estado (pílula)', desc: '<span style="color:var(--green)">Verde</span> = backups em dia. <span style="color:var(--yellow)">Amarelo</span> = nenhuma política configurada (sem backup automático). <span style="color:var(--red)">Vermelho</span> = a execução mais recente de alguma política falhou — os backups podem estar desatualizados.' },
+          { label: 'Estado (pílula)', desc: '<strong>Neutro, com ✓</strong> = backups em dia. <span style="color:var(--yellow)">Amarelo</span> = nenhuma política configurada (sem backup automático). <span style="color:var(--red)">Vermelho</span> = a execução mais recente de alguma política falhou — os backups podem estar desatualizados.' },
           { label: '— (indisponível)', desc: 'A API de SLM não respondeu (licença insuficiente ou falta de permissão). O card não consegue avaliar o backup e não emite alarme.' },
         ],
       },
@@ -877,7 +879,7 @@ const HELP_CONTENT = [
         id: 'help-flood-stage', q: 'Flood-stage',
         summary: 'Índices com <strong>bloqueio de escrita aplicado automaticamente</strong> pelo Elasticsearch quando o disco de um nó passou de <strong>95%</strong> (flood-stage watermark). É um <strong>incidente de disponibilidade ao vivo</strong>: enquanto durar, os índices afetados não aceitam escrita. O bloqueio <strong>persiste mesmo após liberar disco</strong> — remova com <code>"index.blocks.read_only_allow_delete": null</code> depois de resolver o espaço. Clique para listar os índices bloqueados.',
         data: [
-          { label: 'Nº em flood-stage (pílula)', desc: '<span style="color:var(--green)">Verde</span> = 0 (nenhum índice bloqueado por disco). <span style="color:var(--red)">Vermelho</span> = há índices com escrita bloqueada — libere disco e remova o bloqueio.' },
+          { label: 'Nº em flood-stage (pílula)', desc: '<strong>Neutro, com ✓</strong> = 0 (nenhum índice bloqueado por disco). <span style="color:var(--red)">Vermelho</span> = há índices com escrita bloqueada — libere disco e remova o bloqueio.' },
           { label: 'Read-only manual (Diagnóstico)', desc: 'Bloqueios <code>read_only</code>/<code>write</code> definidos manualmente fora do ILM <strong>não</strong> entram aqui — são higiene, não incidente, e aparecem como apontamento amarelo na página Diagnóstico. Read-only definido pelo próprio ILM é esperado.' },
         ],
       },
@@ -911,28 +913,28 @@ const HELP_CONTENT = [
         id: 'help-without-replicas', q: 'Sem Réplica',
         summary: 'Índices configurados com <code>number_of_replicas = 0</code>. Sem réplica, o shard primário é um <strong>ponto único de falha</strong>: perder o nó que o hospeda significa perda de dados permanente. Aceitável para dados descartáveis ou reconstruíveis, mas perigoso em produção. Clique para ver a lista.',
         data: [
-          { label: 'Nº de índices', desc: 'Quantos índices estão sem réplica. Verde = 0; amarelo = há índices sem redundância — avalie quais são críticos.' },
+          { label: 'Nº de índices', desc: 'Quantos índices estão sem réplica. Neutro = 0; amarelo = há índices sem redundância — avalie quais são críticos.' },
         ],
       },
       {
         id: 'help-large-shards', q: 'Shards Primários > 50 GB',
         summary: 'Índices que têm <strong>algum shard primário individual</strong> acima de 50 GB (não a soma do índice). Shards primários grandes causam recuperação lenta, realocação demorada e queda de desempenho. A recomendação da Elastic é manter shards entre 10 e 50 GB — considere reindexar com mais shards ou ajustar o rollover da política de ILM. Clique para ver os índices e o tamanho do maior shard.',
         data: [
-          { label: 'Nº de índices', desc: 'Quantos índices têm ao menos um shard primário acima de 50 GB. Verde = 0; amarelo = há shards grandes demais.' },
+          { label: 'Nº de índices', desc: 'Quantos índices têm ao menos um shard primário acima de 50 GB. Neutro = 0; amarelo = há shards grandes demais.' },
         ],
       },
       {
         id: 'help-without-ilm', q: 'Sem Política de ILM',
         summary: 'Índices sem <code>index.lifecycle.name</code>, ou seja, sem Index Lifecycle Management. Sem ILM, o índice cresce indefinidamente e exige gestão manual de rollover, migração entre tiers e expurgo. O ILM automatiza essas transições (hot → warm → cold → delete), otimizando recursos. Clique para a lista.',
         data: [
-          { label: 'Nº de índices', desc: 'Quantos índices não têm política de ILM atribuída. Verde = 0; amarelo = há índices sem ciclo de vida automatizado.' },
+          { label: 'Nº de índices', desc: 'Quantos índices não têm política de ILM atribuída. Neutro = 0; amarelo = há índices sem ciclo de vida automatizado.' },
         ],
       },
       {
         id: 'help-ilm-without-delete', q: 'ILM sem Fase DELETE',
         summary: 'Políticas de ILM sem a fase <strong>delete</strong>. Elas movem dados entre tiers mas nunca os removem — a retenção fica infinita e o disco só cresce. Pode ser intencional (dados que devem ser mantidos para sempre), mas costuma ser um esquecimento. Clique para ver as políticas e suas fases.',
         data: [
-          { label: 'Nº de políticas', desc: 'Quantas políticas de ILM não têm fase delete. Verde = 0; amarelo = há políticas sem expurgo automático.' },
+          { label: 'Nº de políticas', desc: 'Quantas políticas de ILM não têm fase delete. Neutro = 0; amarelo = há políticas sem expurgo automático.' },
         ],
       },
     ],
@@ -1218,7 +1220,7 @@ const HELP_CONTENT = [
         id: 'help-cluster-max-shards', q: 'Limite de shards por nó',
         summary: '<code>cluster.max_shards_per_node</code> é o teto de <strong>shards abertos por nó de dados</strong>. Multiplicado pelo número de nós de dados, dá o teto do cluster inteiro. Diferente dos demais ajustes desta página, ele não afeta a recuperação: ao ser atingido, a <strong>criação de índices falha</strong> — com o erro <code>this action would add [N] total shards, but this cluster currently has [X]/[Y] maximum shards open</code>. Quem sente primeiro costuma ser o rollover do ILM ou o índice do dia seguinte, e o sintoma chega como "parou de indexar", sem nada vermelho na saúde do cluster.',
         data: [
-          { label: 'Uso atual', desc: 'A barra mostra quantos shards abertos o cluster já tem sobre o teto em vigor (limite × nós de dados), com as mesmas faixas de cor do resto da aplicação: verde abaixo de 65%, amarelo até 80%, vermelho a partir daí. <strong>Só índices abertos contam</strong> — por isso o número pode divergir do "Total de Shards" dos Sinais Vitais, que inclui os fechados.' },
+          { label: 'Uso atual', desc: 'A barra mostra quantos shards abertos o cluster já tem sobre o teto em vigor (limite × nós de dados), com as mesmas faixas de cor do resto da aplicação: cinza abaixo de 65%, amarelo até 80%, vermelho a partir daí. <strong>Só índices abertos contam</strong> — por isso o número pode divergir do "Total de Shards" dos Sinais Vitais, que inclui os fechados.' },
           { label: 'Nós frozen', desc: 'Nós que servem <strong>apenas</strong> ao tier frozen não entram no cálculo: esse tier tem um teto separado, <code>cluster.max_shards_per_node.frozen</code>, que esta tela não altera. Um nó que acumule o frozen com outro tier de dados (ex.: <code>data_frozen</code> + <code>data_warm</code>) conta normalmente. Havendo nós de fora, a nota abaixo da barra informa quantos são.' },
           { label: 'Quando aumentar', desc: 'Raramente é a correção certa. O teto existe para conter a proliferação de shards, e cada shard custa heap e metadados no master — atingir o limite quase sempre significa <strong>shards demais, pequenos demais</strong>. Reduzir shards (menos primários, ILM com rollover por tamanho, <code>_shrink</code>) resolve; subir o teto adia. Aumentar é defensável como medida temporária para destravar a ingestão enquanto a causa é tratada, ou quando o cluster cresceu em nós e o valor foi fixado há muito tempo.' },
           { label: 'Aviso de oversharding', desc: 'Aparece só quando <strong>as duas</strong> condições valem: o uso do teto está em <strong>65%</strong> ou mais (o mesmo ponto em que a barra fica amarela) <strong>e</strong> ao menos <strong>20% dos shards abertos</strong> estão em índices com oversharding. O percentual é de <strong>shards</strong>, não de índices, porque é ele que diz quanto do teto se recuperaria ao corrigi-los — dez índices oversharded de 100 shards pesam mais que trezentos de dois. Fora desse recorte o aviso não aparece: com o teto folgado ninguém vai aumentá-lo, e com pouco oversharding corrigi-lo não aproximaria o cluster do limite. O <strong>Inventário</strong> lista os índices em qualquer caso.' },
@@ -1867,7 +1869,7 @@ function tierDiskAgg(nodes) {
 // Gráfico de barras horizontais: uma linha por tier. O trilho cinza é a
 // capacidade total do tier; o preenchimento colorido é o uso, com o % à direita.
 // Os bytes (usado · total · livre) ficam centralizados abaixo de cada barra.
-// Cor por uso: verde <70%, amarelo ≥70%, vermelho ≥85%.
+// Cor por uso: normal (cinza) <70%, amarelo ≥70%, vermelho ≥85%.
 function tierDiskRow(tier, agg) {
   const total = agg.total || 0;
   const used = agg.used || 0;
@@ -2301,6 +2303,7 @@ function openShardsDetail() {
 
   clusterHealthFilters.clear();
   detailNavStack.length = 0;
+  setDetailChrome('shards');
   document.getElementById('detailTitle').textContent = 'Total de Shards';
   document.getElementById('detailTitleTip').innerHTML = '';
   document.getElementById('detailSubtitle').textContent = '';
@@ -2322,14 +2325,15 @@ function openShardsDetail() {
 
   const unassignedLabel = `${fmtNum(unassigned)} shard${unassigned === 1 ? '' : 's'} não alocado${unassigned === 1 ? '' : 's'} aguardando alocação`;
   const delayedNote = delayed > 0 ? ` · ${fmtNum(delayed)} com atraso por timeout` : '';
+  // Callout com título e ação (design system)
   const noticeHtml = unassigned > 0 ? `
-    <div class="shards-notice">
-      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
-      <div class="shards-notice-text">
-        <span class="shards-notice-main">${unassignedLabel}</span>
-        <span class="shards-notice-sub">Pode incluir restaurações de snapshot e réplicas pendentes. Consulte o diagnóstico para ver o motivo de cada shard.${delayedNote}</span>
+    <div class="eh-callout eh-callout--titled shards-notice" role="note">
+      <span class="eh-callout__icon">${icon('info', 18)}</span>
+      <div class="eh-callout__body">
+        <span class="eh-callout__title">${unassignedLabel}</span>
+        <span class="eh-callout__text">Pode incluir restaurações de snapshot e réplicas pendentes. Consulte o diagnóstico para ver o motivo de cada shard.${delayedNote}</span>
       </div>
-      <button class="btn btn-ghost shards-notice-btn" onclick="openDetail('allocation_explain','Diagnóstico de Alocação','Por que cada shard não aloca')"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg> Ver diagnóstico</button>
+      <button type="button" class="eh-btn eh-btn--secondary eh-btn--md" onclick="openDetail('allocation_explain','Diagnóstico de Alocação','Por que cada shard não aloca')">Ver diagnóstico ${icon('arrow-right', 14)}</button>
     </div>` : '';
 
   document.getElementById('detailBody').innerHTML = `
@@ -2337,20 +2341,21 @@ function openShardsDetail() {
       <div class="shards-stats">
         ${stats.map(s => `
           <div class="shards-stat">
-            <div class="shards-stat-val" ${s.color ? `style="color:var(--${s.color})"` : ''}>${s.val}</div>
             <div class="shards-stat-label">${s.label}</div>
+            <div class="shards-stat-val${s.color ? ' lvl-' + levelClass(s.color) : ''}">${s.val}</div>
           </div>`).join('')}
       </div>
       ${noticeHtml}
-      <div class="shards-recovery">
+      <section class="shards-recovery" aria-labelledby="h-recovery">
         <div class="shards-recovery-head">
-          <h3><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-left-right"/></svg> Realocação e Recuperação de Shards</h3>
-          <span id="recoveryCount" class="shards-recovery-count"></span>
+          <span class="eh-accent-icon">${icon('arrow-left-right', 16)}</span>
+          <h3 id="h-recovery">Realocação e Recuperação de Shards</h3>
+          <span id="recoveryCount" class="eh-badge eh-badge--soft shards-recovery-count"></span>
         </div>
         <div id="recoveryBody">
-          <div class="loading-state section-loading"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando...</span></div>
+          <div class="loading-state section-loading">${icon('refresh-cw', 16, 'spin')}<span>Carregando...</span></div>
         </div>
-      </div>
+      </section>
     </div>`;
 
   loadRecovery();
@@ -2424,8 +2429,8 @@ function renderRecovery(rows) {
 
   if (!rows || rows.length === 0) {
     if (countEl) countEl.textContent = '';
-    body.innerHTML = `<div class="empty-state" style="padding:28px 16px">
-      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg>
+    body.innerHTML = `<div class="empty-state recovery-empty">
+      ${icon('circle-check', 20)}
       <p>Nenhuma realocação ou recuperação de shards em andamento.</p></div>`;
     return;
   }
@@ -2434,7 +2439,7 @@ function renderRecovery(rows) {
 
   body.innerHTML = `<div class="recovery-list">${rows.map(r => {
     const pct = Math.min(100, Math.max(0, r.bytes_percent || 0));
-    const fillColor = pct >= 100 ? 'green' : 'blue';
+    const fillTone = pct >= 100 ? 'success' : 'accent';
     const meta = RECOVERY_TYPES[r.type] || { label: r.type || 'Recuperação' };
     const typeDesc = typeof meta.desc === 'function' ? meta.desc(r.primary) : meta.desc;
     const stageDesc = RECOVERY_STAGES[r.stage];
@@ -2445,7 +2450,7 @@ function renderRecovery(rows) {
     const stagePart = `Stage: ${r.stage}${stageDesc ? ` — ${stageDesc}` : ''}`;
     const opTitle = `${typePart}\n\n${stagePart}`;
     const route = r.source_node && r.target_node
-      ? `${nodeCellByName(r.source_node)}<svg class="eh-icon rarrow" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg>${nodeCellByName(r.target_node)}`
+      ? `${nodeCellByName(r.source_node)}${icon('arrow-right', 14, 'rarrow')}${nodeCellByName(r.target_node)}`
       : nodeCellByName(r.target_node || r.source_node);
     return `
       <div class="recovery-item">
@@ -2453,11 +2458,11 @@ function renderRecovery(rows) {
           <span class="recovery-index">${r.index}</span>
           <span class="recovery-shard">shard ${r.shard} · ${r.primary ? 'Primário' : 'Réplica'}</span>
           <span class="recovery-op" title="${escHtml(opTitle)}">${meta.label} / ${r.stage}</span>
-          <span class="recovery-time"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-clock"/></svg> ${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
+          <span class="recovery-time">${icon('clock', 14)}${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
         </div>
         <div class="recovery-route">${route}</div>
         <div class="recovery-progress">
-          <div class="recovery-track"><div class="recovery-fill" style="width:${pct}%;background:var(--${fillColor})"></div></div>
+          <span class="eh-meter eh-meter--md recovery-track"><span class="eh-meter__fill recovery-fill is-${fillTone}" style="width:${pct > 0 && pct < 1.5 ? 1.5 : pct}%"></span></span>
           <span class="recovery-pct">${fmtPct(pct, 1)}</span>
           <span class="recovery-bytes">${fmtBytes(r.bytes_recovered)} / ${fmtBytes(r.bytes_total)}</span>
         </div>
@@ -2479,8 +2484,32 @@ A lista mostra <strong>um breaker por linha</strong> (nó × breaker) e exibe ap
 Nós cujos breakers estão todos abaixo desses limiares são <strong>omitidos</strong> — o inventário completo de nós fica no card <em>Utilização por Nó</em>.`,
 };
 
+// Ícone do cabeçalho do Dialog por métrica (o mesmo do card que o abre) e as
+// listas cujo rodapé mostra a legenda das cores de utilização.
+const DETAIL_ICONS = {
+  cluster_health: 'heart-pulse', all_indices: 'layers', indices_without_replicas: 'shield',
+  unassignable_replicas: 'layers', oversharded_indices: 'layout-grid', large_primary_shards: 'hard-drive',
+  indices_without_ilm: 'history', ilm_without_delete: 'trash-2', ilm_errors: 'circle-alert', nodes: 'server',
+  circuit_breakers: 'zap', pending_tasks: 'list', index_shards: 'layers', read_only_indices: 'waves',
+  cluster_settings: 'sliders-horizontal', deprecations: 'clipboard-check', allocation_explain: 'layers',
+  slm_policies: 'database', shards: 'layers', heap_ram: 'memory-stick',
+};
+const DETAIL_LEGEND = new Set(['nodes', 'circuit_breakers', 'heap_ram']);
+
+function setDetailChrome(metric) {
+  const tileEl = document.getElementById('detailIcon');
+  const ic = DETAIL_ICONS[metric];
+  if (tileEl) {
+    tileEl.hidden = !ic;
+    if (ic) tileEl.querySelector('use').setAttribute('href', '#i-' + ic);
+  }
+  const foot = document.getElementById('detailFoot');
+  if (foot) foot.hidden = !DETAIL_LEGEND.has(metric);
+}
+
 async function openDetail(metric, title, subtitle) {
   clusterHealthFilters.clear();
+  setDetailChrome(metric);
   document.getElementById('detailTitle').textContent = title;
   document.getElementById('detailTitleTip').innerHTML =
     DETAIL_TITLE_TIPS[metric] ? tooltip(DETAIL_TITLE_TIPS[metric]) : '';
@@ -2675,7 +2704,7 @@ function tableClusterHealth(rows) {
       <th data-col="initializing_shards" data-type="num">Inicializando <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${visible.map(r => `<tr>
-      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td class="mono"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td>${healthBadge(r.status)}</td>
       <td>${fmtNum(r.active_primary_shards)}</td>
       <td style="color:${r.number_of_replicas === 0 ? 'var(--yellow)' : 'var(--text)'}">${fmtNum(r.number_of_replicas)}</td>
@@ -2708,7 +2737,7 @@ function tableIndices(rows) {
       <th data-col="docs.count" data-type="num">Documentos <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
-      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td class="mono"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td>${healthBadge(r.health)}</td>
       <td>${r.pri || '-'}</td>
       <td><span style="color:${r.rep === '0' ? 'var(--yellow)' : 'var(--text)'}">${r.rep || '-'}</span></td>
@@ -2729,7 +2758,7 @@ function tableOversharded(rows) {
       <th data-col="docs" data-type="num">Documentos <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
-      <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.index)}</td>
+      <td class="mono">${escHtml(r.index)}</td>
       <td>${fmtNum(r.pri)}</td>
       <td>${fmtNum(r.rep)}</td>
       <td>${fmtBytes(r.pri_store_bytes)}</td>
@@ -2749,7 +2778,7 @@ function tableLargeShards(rows) {
       <th data-col="total_size_bytes" data-type="num">Tamanho Médio/Shard <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
-      <td style="font-family:var(--font-mono);font-size:12px">${r.index}</td>
+      <td class="mono">${r.index}</td>
       <td>${r.shard_count}</td>
       <td style="color:var(--red);font-weight:600">${fmtBytes(r.max_shard_bytes)}</td>
       <td>${fmtBytes(r.total_size_bytes)}</td>
@@ -2767,7 +2796,7 @@ function tableIlm(rows) {
       <th data-col="modified_date">Última Modificação <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
-      <td style="font-family:var(--font-mono);font-size:12px">${r.name}</td>
+      <td class="mono">${r.name}</td>
       <td style="font-weight:600">${fmtNum(r.index_count ?? 0)}</td>
       <td>${(r.phases || []).map(p => `<span class="badge badge-blue" style="margin-right:4px">${p}</span>`).join('')}</td>
       <td style="color:var(--text-muted);font-size:12px">${r.modified_date || '-'}</td>
@@ -2788,13 +2817,13 @@ function tableIlmErrors(rows) {
       <th></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr class="task-row" onclick="showIlmErrorJson(this.dataset.index)" data-index="${escHtml(r.index)}">
-      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
-      <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.policy)}</td>
+      <td class="mono"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td class="mono">${escHtml(r.policy)}</td>
       <td><span class="badge badge-blue">${escHtml(r.phase)}</span></td>
-      <td style="font-family:var(--font-mono);font-size:12px;color:var(--red)">${escHtml(r.failed_step)}</td>
+      <td class="mono" style="color:var(--red)">${escHtml(r.failed_step)}</td>
       <td style="text-align:center;color:var(--text-muted)">${r.failed_step_retry_count ?? '-'}</td>
       <td><span class="badge badge-red">${escHtml(r.error_type)}</span></td>
-      <td style="color:var(--text-muted);font-size:12px;max-width:480px;white-space:normal">${escHtml(r.error_reason)}</td>
+      <td class="prose" style="color:var(--text-muted);font-size:12px;max-width:480px;white-space:normal">${escHtml(r.error_reason)}</td>
       <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-code"/></svg></td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -2816,7 +2845,7 @@ function tableReadOnly(rows) {
       const [catCls, catLabel] = READ_ONLY_CAT[r.category] || ['badge-gray', r.category || '-'];
       const blockCls = r.category === 'flood' ? 'badge-red' : 'badge-yellow';
       return `<tr>
-      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td class="mono"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td><span class="badge ${catCls}">${catLabel}</span></td>
       <td>${(r.blocks || '').split(', ').filter(Boolean).map(b => `<span class="badge ${blockCls}" style="margin-right:4px">${escHtml(b)}</span>`).join('')}</td>
       <td>${healthBadge(r.health)}</td>
@@ -2842,9 +2871,9 @@ function tableClusterSettings(rows) {
     <tbody>${rows.map(r => `<tr>
       <td><span class="badge ${SEVERITY_BADGE[r.severity] || 'badge-gray'}">${r.severity === 'red' ? 'Crítico' : r.severity === 'yellow' ? 'Atenção' : 'Info'}</span></td>
       <td><span class="badge ${SCOPE_BADGE[r.scope] || 'badge-gray'}">${escHtml(r.scope)}</span></td>
-      <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.key)}</td>
-      <td style="font-family:var(--font-mono);font-size:12px;font-weight:600">${escHtml(r.value)}</td>
-      <td style="color:var(--text-muted);font-size:12px;max-width:520px;white-space:normal">${escHtml(r.message)}</td>
+      <td class="mono">${escHtml(r.key)}</td>
+      <td class="mono" style="font-weight:600">${escHtml(r.value)}</td>
+      <td class="prose" style="color:var(--text-muted);font-size:12px;max-width:520px;white-space:normal">${escHtml(r.message)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -2865,8 +2894,8 @@ function tableDeprecations(rows) {
       return `<tr>
       <td><span class="badge ${DEP_LEVEL_BADGE[r.level] || 'badge-gray'}">${r.level === 'critical' ? 'Crítico' : 'Aviso'}</span></td>
       <td><span class="badge badge-blue">${escHtml(r.category_label)}</span></td>
-      <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.resource)}</td>
-      <td style="max-width:560px;white-space:normal"><div>${escHtml(r.message)}</div>${details}${url}</td>
+      <td class="mono">${escHtml(r.resource)}</td>
+      <td class="prose" style="max-width:560px;white-space:normal"><div>${escHtml(r.message)}</div>${details}${url}</td>
     </tr>`;
     }).join('')}</tbody>
   </table>`;
@@ -2885,16 +2914,16 @@ function tableAllocationExplain(rows) {
     </tr></thead>
     <tbody>${rows.map(r => {
       const deciders = (r.decider_messages || []).length
-        ? `<ul style="margin:6px 0 0;padding-left:16px;color:var(--text-dim);font-size:11px">${r.decider_messages.map(m => `<li>${escHtml(m)}</li>`).join('')}</ul>`
+        ? `<ul class="decider-list" lang="en">${r.decider_messages.map(m => `<li>${escHtml(m)}</li>`).join('')}</ul>`
         : '';
       const canColor = r.can_allocate === 'yes' ? 'green' : (r.can_allocate === 'no' ? 'red' : 'yellow');
       return `<tr class="task-row" data-idx="${escHtml(r.index)}" data-shard="${escHtml(r.shard)}" data-pri="${escHtml(r.primary)}" onclick="showAllocationJson(this.dataset.idx, this.dataset.shard, this.dataset.pri)">
-      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td class="mono"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td style="font-weight:700;color:var(--text-muted)">${r.shard ?? '-'}</td>
       <td>${shardTypeBadge(r.primary ? 'p' : 'r')}</td>
       <td><span class="badge badge-gray">${escHtml(r.reason)}</span></td>
       <td><span class="badge badge-${canColor}">${escHtml(r.can_allocate)}</span></td>
-      <td style="max-width:560px;white-space:normal;font-size:12px"><div>${escHtml(r.explanation)}</div>${deciders}</td>
+      <td class="prose" style="max-width:560px;white-space:normal"><div>${escHtml(r.explanation)}</div>${deciders}</td>
       <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-code"/></svg></td>
     </tr>`;
     }).join('')}</tbody>
@@ -2939,9 +2968,9 @@ function tableSlmPolicies(rows) {
         ? ` title="${escHtml(r.last_failure_reason)}"` : '';
       const snaps = `<span style="color:var(--green)">${fmtNum(r.snapshots_taken)}</span>${r.snapshots_failed > 0 ? ` / <span style="color:var(--red)">${fmtNum(r.snapshots_failed)}</span>` : ''}`;
       return `<tr class="task-row" data-name="${escHtml(r.name)}" onclick="showSlmJson(this.dataset.name)">
-        <td style="font-family:var(--font-mono);font-size:12px;font-weight:600">${escHtml(r.name)}${r.in_progress ? ' <span class="badge badge-blue" style="font-size:10px">em execução</span>' : ''}</td>
+        <td class="mono" style="font-weight:600">${escHtml(r.name)}${r.in_progress ? ' <span class="badge badge-blue" style="font-size:10px">em execução</span>' : ''}</td>
         <td>${slmStateBadge(r.state)}</td>
-        <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.repository)}</td>
+        <td class="mono">${escHtml(r.repository)}</td>
         <td style="font-size:12px"${successTitle}>${success}</td>
         <td style="font-size:12px"${failureTitle}>${failure}</td>
         <td style="font-size:12px;color:var(--text-muted)">${r.next_execution_millis ? fmtMillisDate(r.next_execution_millis) : '—'}</td>
@@ -3547,13 +3576,13 @@ function diskByNodeContent() {
     // Mesma célula nome + roles principais dos Sinais Vitais (Utilização por Nó).
     return `<div class="disk-row">
       <div class="disk-label">${nodeNameCell(n.name, n.roles, n.is_master)}</div>
-      <div class="disk-track"><div class="disk-fill" style="width:${disk}%;background:var(--${color})"></div></div>
-      <div class="disk-val text-${color}">${fmtPct(disk, 2)}</div>
+      <span class="eh-meter eh-meter--md disk-track"><span class="eh-meter__fill is-${levelClass(color)}" style="width:${Math.min(disk, 100)}%"></span></span>
+      <div class="disk-val lvl-${levelClass(color)}">${fmtPct(disk, 2)}</div>
     </div>`;
   }).join('');
   return `<div class="disk-card">
     ${rows}
-    <div class="disk-note"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>Alerta de disco: <strong class="text-yellow">≥ 70%</strong> (atenção) · <strong class="text-red">≥ 85%</strong> (crítico). Watermarks padrão do ES: low 85% / high 90%.</div>
+    <div class="eh-dialog__foot disk-note"><span class="eh-dialog__hint">${icon('info', 14)}<span>Alerta de disco: <strong class="text-yellow">≥ 70%</strong> (atenção) · <strong class="text-red">≥ 85%</strong> (crítico). Watermarks padrão do ES: low 85% / high 90%.</span></span></div>
   </div>`;
 }
 
@@ -3602,19 +3631,19 @@ function renderSnapshots(rows) {
   if (!body) return;
 
   if (!rows || rows.length === 0) {
-    body.innerHTML = `<div class="empty-state" style="padding:28px 16px">
-      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg>
+    body.innerHTML = `<div class="empty-state recovery-empty">
+      ${icon('circle-check', 20)}
       <p>Nenhum snapshot em execução no momento.</p></div>`;
     return;
   }
 
   body.innerHTML = `<div class="recovery-list">${rows.map(r => {
     const pct = Math.min(100, Math.max(0, r.percent || 0));
-    const fillColor = pct >= 100 ? 'green' : 'blue';
+    const fillTone = pct >= 100 ? 'success' : 'accent';
     const stateMeta = SNAPSHOT_STATES[r.state] || { label: r.state || 'Em andamento', desc: '' };
     const stateTitle = `Estado: ${r.state}${stateMeta.desc ? ` — ${stateMeta.desc}` : ''}`;
     const failedNote = r.shards_failed > 0
-      ? ` · <span style="color:var(--red)">${fmtNum(r.shards_failed)} falharam</span>`
+      ? ` · <span class="lvl-danger">${fmtNum(r.shards_failed)} falharam</span>`
       : '';
     return `
       <div class="recovery-item">
@@ -3622,10 +3651,10 @@ function renderSnapshots(rows) {
           <span class="recovery-index">${escHtml(r.snapshot)}</span>
           <span class="recovery-shard">repo: ${escHtml(r.repository)}</span>
           <span class="recovery-op" title="${escHtml(stateTitle)}">${stateMeta.label}</span>
-          <span class="recovery-time"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-clock"/></svg> ${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
+          <span class="recovery-time">${icon('clock', 14)}${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
         </div>
         <div class="recovery-progress">
-          <div class="recovery-track"><div class="recovery-fill" style="width:${pct}%;background:var(--${fillColor})"></div></div>
+          <span class="eh-meter eh-meter--md recovery-track"><span class="eh-meter__fill recovery-fill is-${fillTone}" style="width:${pct > 0 && pct < 1.5 ? 1.5 : pct}%"></span></span>
           <span class="recovery-pct">${fmtPct(pct, 1)}</span>
           <span class="recovery-bytes">${fmtBytes(r.bytes_processed)} / ${fmtBytes(r.bytes_total)}</span>
         </div>
@@ -3642,7 +3671,7 @@ function tableNodes(rows) {
 <span style="color:var(--text-dim)">O load average do Linux <strong>não mede só CPU</strong>: ele conta processos rodando ou aguardando a CPU <strong>e também processos bloqueados em I/O</strong> (ex.: espera de disco). Um load alto pode indicar gargalo de disco/merge/flush no Elasticsearch mesmo com a CPU tranquila — por isso é um indicador de demanda geral do nó, não um substituto do CPU%.</span><br><br>
 A cor reflete a proporção entre o load e o número de processadores disponíveis no nó (<code style="color:var(--blue);background:var(--surface-hover);padding:1px 4px;border-radius:3px">os.available_processors</code>):<br><br>
 <code style="color:var(--text-muted);font-size:11px">utilização = load / os.available_processors</code><br><br>
-<span style="color:var(--green)">●</span>&nbsp;<strong style="color:var(--green)">Verde</strong>&nbsp;&nbsp;&nbsp;— utilização &lt; 70%&nbsp;&nbsp;<span style="color:var(--text-dim)">(carga saudável)</span><br>
+<span style="color:var(--data-neutral)">●</span>&nbsp;<strong>Normal</strong>&nbsp;&nbsp;&nbsp;— utilização &lt; 70%&nbsp;&nbsp;<span style="color:var(--text-dim)">(carga saudável)</span><br>
 <span style="color:var(--yellow)">●</span>&nbsp;<strong style="color:var(--yellow)">Amarelo</strong>&nbsp;— utilização &gt;= 70% e &lt; 90%&nbsp;&nbsp;<span style="color:var(--text-dim)">(atenção)</span><br>
 <span style="color:var(--red)">●</span>&nbsp;<strong style="color:var(--red)">Vermelho</strong>&nbsp;— utilização &gt;= 90%&nbsp;&nbsp;<span style="color:var(--text-dim)">(risco de sobrecarga)</span><br><br>
 <span style="color:var(--text-dim)">Ex.: nó com 8 processadores e load 1m = 6.4 → 80% → amarelo.<br>Regra aplicada igualmente para 1m, 5m e 15m.</span><br><br>
@@ -3657,7 +3686,7 @@ A cor reflete a proporção entre o load e o número de processadores disponíve
       <th data-col="write_pressure_pct" data-type="num">Pressão Escrita% <span class="sort-icon">↕</span></th>
       <th data-col="gc_overhead" data-type="num">GC Overhead% <span class="sort-icon">↕</span></th>
       <th data-col="available_processors" data-type="num">Processadores <span class="sort-icon">↕</span></th>
-      <th data-col="load_sum" data-type="num" data-sum-cols="load_1m,load_5m,load_15m"><div style="display:flex;align-items:center;gap:5px">Load 1m/5m/15m <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()" style="font-weight:400;text-transform:none;letter-spacing:0"><div class="tooltip-btn">?</div><div class="tooltip-box" style="right:-8px;width:360px">${loadTip}</div></div></div></th>
+      <th data-col="load_sum" data-type="num" data-sum-cols="load_1m,load_5m,load_15m"><div class="th-help">Load 1m/5m/15m <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()"><button type="button" class="eh-iconbtn eh-iconbtn--xs eh-iconbtn--ghost eh-iconbtn--20 tooltip-btn" aria-label="Mais informações">${icon('circle-help', 13)}</button><div class="tooltip-box" style="right:-8px;width:360px">${loadTip}</div></div></div></th>
       <th data-col="disk.used_percent" data-type="num">Disco <span class="sort-icon">↕</span></th>
       <th data-col="tp_queue" data-type="num" style="text-align:right">Fila TP <span class="sort-icon">↕</span></th>
       <th data-col="rejections" data-type="num" style="text-align:right">Rejeições Thread Pool <span class="sort-icon">↕</span></th>
@@ -3665,23 +3694,23 @@ A cor reflete a proporção entre o load e o número de processadores disponíve
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
       <td>${nodeNameCell(r.name, r.roles, r.master === '*')}</td>
-      <td><span style="font-weight:600;color:var(--blue)">${fmtNum(r.shards_primary)}</span><span style="color:var(--text-muted)"> / ${fmtNum(r.shards_replica)}</span></td>
+      <td>${fmtNum(r.shards_primary)}<span class="lvl-none"> / ${fmtNum(r.shards_replica)}</span></td>
       <td>${pctBar(r.cpu)}</td>
       <td>${pctBar(r['heap.percent'])}</td>
       <td>${pctBar(r.mem_pressure)}</td>
       <td>${pctBar(r.write_pressure_pct || 0)}</td>
       <td>${gcOverheadBar(r.gc_overhead)}</td>
-      <td style="text-align:center;color:var(--text-muted);font-variant-numeric:tabular-nums">${r.available_processors || '-'}</td>
+      <td class="lvl-secondary" style="text-align:center">${r.available_processors || '-'}</td>
       <td>${loadBadge(r.load_1m, r.available_processors)} / ${loadBadge(r.load_5m, r.available_processors)} / ${loadBadge(r.load_15m, r.available_processors)}</td>
       <td>${isDedicatedFrozen(r.roles)
         ? frozenDiskMark()
-        : `<div style="display:flex;align-items:center;gap:10px">
-        <div style="flex:1;min-width:90px">${pctBar(r['disk.used_percent'])}</div>
-        <span style="flex-shrink:0;width:120px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap">${r['disk.used'] || '-'} / ${r['disk.total'] || '-'}</span>
+        : `<div class="disk-cell">
+        <div class="disk-cell__bar">${pctBar(r['disk.used_percent'])}</div>
+        <span class="disk-cell__bytes">${r['disk.used'] || '-'} / ${r['disk.total'] || '-'}</span>
       </div>`}</td>
-      <td style="text-align:right;color:${(r.tp_queue||0)>0?'var(--yellow)':'var(--text-muted)'};font-weight:${(r.tp_queue||0)>0?'700':'400'}">${fmtNum(r.tp_queue??0)}</td>
-      <td style="text-align:right;color:${(r.rejections||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.rejections||0)>0?'700':'400'}">${fmtNum(r.rejections??0)}</td>
-      <td style="text-align:right;color:${(r.indexing_rejections||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.indexing_rejections||0)>0?'700':'400'}">${fmtNum(r.indexing_rejections??0)}</td>
+      <td class="num">${tpQueueCell(r.tp_queue ?? 0)}</td>
+      <td class="num ${(r.rejections || 0) > 0 ? 'lvl-danger' : 'lvl-none'}">${fmtNum(r.rejections ?? 0)}</td>
+      <td class="num ${(r.indexing_rejections || 0) > 0 ? 'lvl-danger' : 'lvl-none'}">${fmtNum(r.indexing_rejections ?? 0)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -3696,7 +3725,7 @@ Cada vez que o breaker <strong>aborta uma requisição</strong> para proteger a 
   const usageTip = `<strong style="color:var(--text);display:block;margin-bottom:6px">Como o % do Limite é calculado</strong>
 A cor reflete a proporção entre o uso estimado do breaker e o limite configurado para ele:<br><br>
 <code style="color:var(--text-muted);font-size:11px">% do limite = uso_estimado / limite</code><br><br>
-<span style="color:var(--green)">●</span>&nbsp;<strong style="color:var(--green)">Verde</strong>&nbsp;&nbsp;&nbsp;— &lt; 65%&nbsp;&nbsp;<span style="color:var(--text-dim)">(folga)</span><br>
+<span style="color:var(--data-neutral)">●</span>&nbsp;<strong>Normal</strong>&nbsp;&nbsp;&nbsp;— &lt; 65%&nbsp;&nbsp;<span style="color:var(--text-dim)">(folga)</span><br>
 <span style="color:var(--yellow)">●</span>&nbsp;<strong style="color:var(--yellow)">Amarelo</strong>&nbsp;— &gt;= 65% e &lt; 80%&nbsp;&nbsp;<span style="color:var(--text-dim)">(atenção)</span><br>
 <span style="color:var(--red)">●</span>&nbsp;<strong style="color:var(--red)">Vermelho</strong>&nbsp;— &gt;= 80%&nbsp;&nbsp;<span style="color:var(--text-dim)">(próximo de disparar)</span><br><br>
 <span style="color:var(--text-dim)">É o indicador <em>antecipado</em>: ao chegar a 100% o breaker começa a derrubar requisições (sobem os disparos).</span>`;
@@ -3705,17 +3734,19 @@ A cor reflete a proporção entre o uso estimado do breaker e o limite configura
     <thead><tr>
       <th data-col="node">Nó <span class="sort-icon">↕</span></th>
       <th data-col="breaker">Breaker <span class="sort-icon">↕</span></th>
-      <th data-col="tripped" data-type="num"><div style="display:flex;align-items:center;gap:5px">Disparos <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()" style="font-weight:400;text-transform:none;letter-spacing:0"><div class="tooltip-btn">?</div><div class="tooltip-box" style="right:-8px;width:340px">${trippedTip}</div></div></div></th>
+      <th data-col="tripped" data-type="num"><div class="th-help">Disparos <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()"><button type="button" class="eh-iconbtn eh-iconbtn--xs eh-iconbtn--ghost eh-iconbtn--20 tooltip-btn" aria-label="Mais informações">${icon('circle-help', 13)}</button><div class="tooltip-box" style="right:-8px;width:340px">${trippedTip}</div></div></div></th>
       <th data-col="estimated_size_in_bytes" data-type="num">Uso Estimado <span class="sort-icon">↕</span></th>
       <th data-col="limit_size_in_bytes" data-type="num">Limite <span class="sort-icon">↕</span></th>
-      <th data-col="usage_pct" data-type="num"><div style="display:flex;align-items:center;gap:5px">% do Limite <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()" style="font-weight:400;text-transform:none;letter-spacing:0"><div class="tooltip-btn">?</div><div class="tooltip-box" style="right:0;width:340px">${usageTip}</div></div></div></th>
+      <th data-col="usage_pct" data-type="num"><div class="th-help">% do Limite <span class="sort-icon">↕</span><div class="tooltip-wrap" onclick="event.stopPropagation()"><button type="button" class="eh-iconbtn eh-iconbtn--xs eh-iconbtn--ghost eh-iconbtn--20 tooltip-btn" aria-label="Mais informações">${icon('circle-help', 13)}</button><div class="tooltip-box" style="right:0;width:340px">${usageTip}</div></div></div></th>
     </tr></thead>
-    <tbody>${rows.map(r => `<tr>
+    <tbody>${rows.map(r => `<tr${(r.tripped || 0) > 0 ? ' class="is-danger-row"' : ''}>
       <td>${nodeCellByName(r.node)}</td>
-      <td><span class="badge badge-gray">${escHtml(r.breaker || '-')}</span></td>
-      <td style="color:${(r.tripped||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.tripped||0)>0?'700':'400'}">${fmtNum(r.tripped)}</td>
+      <td><span class="mono-chip">${escHtml(r.breaker || '-')}</span></td>
+      <td>${(r.tripped || 0) > 0
+        ? `<span class="trip-count">${icon('zap', 13, 'eh-icon--bold')}${fmtNum(r.tripped)}</span>`
+        : `<span class="lvl-none">${fmtNum(r.tripped)}</span>`}</td>
       <td>${fmtBytes(r.estimated_size_in_bytes)}</td>
-      <td style="color:var(--text-muted)">${fmtBytes(r.limit_size_in_bytes)}</td>
+      <td class="lvl-secondary">${fmtBytes(r.limit_size_in_bytes)}</td>
       <td>${pctBar(r.usage_pct)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -3741,7 +3772,7 @@ function tablePendingTasks(rows) {
       return `<tr>
       <td style="font-weight:700;color:var(--text-muted)">${r.insert_order ?? '-'}</td>
       <td><span class="badge badge-${pc}">${escHtml(r.priority || '-')}</span></td>
-      <td style="font-family:var(--font-mono);font-size:12px;max-width:520px;white-space:normal">${escHtml(r.source || '-')}</td>
+      <td class="mono" style="max-width:520px;white-space:normal">${escHtml(r.source || '-')}</td>
       <td>${r.executing ? '<span class="badge badge-green">sim</span>' : '<span class="badge badge-gray">não</span>'}</td>
       <td style="text-align:right;color:${wait >= 200 ? 'var(--red)' : wait > 0 ? 'var(--yellow)' : 'var(--text-muted)'};font-weight:${wait > 0 ? '700' : '400'}">${fmtDuration(wait)}</td>
     </tr>`;
@@ -4178,8 +4209,8 @@ function ndPctRow(label, pct, extra = '', opts = {}) {
   return `<div class="nd-row${opts.fixedBar ? ' nd-row--fixbar' : ''}">
     <span class="nd-label">${label}</span>
     <div class="nd-bar-wrap">
-      <div class="tier-disk-track nd-bar"><div class="tier-disk-fill" style="width:${Math.min(pct, 100)}%;background:var(--${color})"></div></div>
-      <span class="nd-pct text-${color}">${opts.text || `${fmtPct(pct)}`}</span>
+      <span class="eh-meter nd-bar"><span class="eh-meter__fill is-${levelClass(color)}" style="width:${pct > 0 && pct < 1.5 ? 1.5 : Math.min(pct, 100)}%"></span></span>
+      <span class="nd-pct lvl-${levelClass(color)}">${opts.text || fmtPct(pct)}</span>
       ${extra ? `<span class="nd-extra">${extra}</span>` : ''}
     </div>
   </div>`;
@@ -4197,8 +4228,8 @@ function ndValRow(label, value, dim = false) {
 
 // Nota de alerta (linha sem coluna de rótulo), amarela por padrão.
 function ndWarnRow(text, color = 'yellow') {
-  return `<div class="nd-row"><span class="nd-value text-${color}" style="font-size:12px">
-    <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>${text}</span></div>`;
+  return `<div class="nd-row nd-row--warn"><span class="nd-warn lvl-${levelClass(color)}">
+    ${icon('triangle-alert', 14)}<span>${text}</span></span></div>`;
 }
 
 // Seção com título; devolve '' quando nenhuma linha sobreviveu, para a modal
@@ -4206,10 +4237,10 @@ function ndWarnRow(text, color = 'yellow') {
 function ndSection(ic, title, rows) {
   const body = rows.filter(Boolean).join('');
   if (!body) return '';
-  return `<div class="nd-section">
-    <div class="nd-section-title">${icon(ic, 16)}${title}</div>
+  return `<section class="nd-section">
+    <h3 class="nd-section-title">${icon(ic, 14)}${title}</h3>
     ${body}
-  </div>`;
+  </section>`;
 }
 
 // ─── Modal de Detalhe de Nó (Topologia) ──────────────────
@@ -4289,7 +4320,7 @@ function renderNodeDetail(d) {
   // barra aqui induziria à leitura de "disco cheio". Explica em vez de medir.
   const frozenNode = isDedicatedFrozen(id.roles);
   const dskRows = frozenNode ? [
-    `<div class="nd-note"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-hard-drive"/></svg><span>${FROZEN_DISK_NOTE}</span></div>`,
+    `<div class="nd-note">${icon('hard-drive', 14)}<span>${FROZEN_DISK_NOTE}</span></div>`,
   ] : [
     dsk.total ? pctRow('Uso geral', dg.pct,
       `${singleType ? fsTypeTag(singleType) + ' · ' : ''}${fmtBytes(dg.used ?? 0)} de ${fmtBytes(dsk.total)} · livre ${fmtBytes(dg.avail ?? 0)}`) : '',
@@ -4299,7 +4330,7 @@ function renderNodeDetail(d) {
       if (!m.total) continue;
       const mu = diskUsage(m.total, m.available, m.free);
       const typeTag = m.type ? fsTypeTag(m.type) + ' · ' : '';
-      const label = `<svg class="eh-icon nd-dim" width="14" height="14" aria-hidden="true"><use href="#i-database"/></svg>${escHtml(m.path || m.mount || '—')}`;
+      const label = `${icon('database', 14, 'nd-dim')}${escHtml(m.path || m.mount || '—')}`;
       dskRows.push(pctRow(label, mu.pct,
         `${typeTag}${fmtBytes(mu.used ?? 0)} de ${fmtBytes(m.total)}`));
     }

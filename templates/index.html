@@ -75,11 +75,11 @@
 
 <!-- ═══════════════════ CONNECTION MODAL ═══════════════════ -->
 <div class="modal-overlay" id="connectModal">
-  <div class="connect-card">
+  <div class="connect-card" role="dialog" aria-modal="true" aria-labelledby="connectTitle">
     <div class="connect-header">
       <div class="connect-logo">
-        <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-database"/></svg>
-        <span>Elastic Helper</span>
+        <span class="eh-brand__mark" aria-hidden="true"><svg class="eh-icon eh-icon--bold" width="17" height="17"><use href="#i-layers"/></svg></span>
+        <span class="connect-logo__name" id="connectTitle">Elastic Helper</span>
         <span class="brand-badge">Beta</span>
       </div>
       <p class="connect-subtitle">Pré-análise de cluster Elasticsearch &ge; v8.x</p>
@@ -102,7 +102,7 @@
       <!-- Cabeçalho de edição (só em modo de edição) -->
       <div class="edit-header" id="editHeader" style="display:none">
         <span class="edit-header-title">Editando conexão</span>
-        <button class="btn-icon edit-delete-btn" id="deleteEditBtn" title="Excluir conexão"
+        <button type="button" class="btn-icon edit-delete-btn" id="deleteEditBtn" title="Excluir conexão" aria-label="Excluir conexão"
           onclick="deleteCurrentConnection()">
           <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-trash-2"/></svg>
         </button>
@@ -180,9 +180,9 @@
 
 <!-- ═══════════════════ ALIAS MODAL ═════════════════════════ -->
 <div class="modal-overlay" id="aliasModal" style="display:none" onclick="if(event.target===this)closeAliasModal()">
-  <div class="alias-card">
+  <div class="alias-card" role="dialog" aria-modal="true" aria-labelledby="aliasModalTitle">
     <div class="alias-header">
-      <h2 class="alias-title">Alias / Nome da conexão</h2>
+      <h2 class="alias-title" id="aliasModalTitle">Alias / Nome da conexão</h2>
       <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeAliasModal()" title="Fechar (Esc)" aria-label="Fechar">
         <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
@@ -204,7 +204,7 @@
 
 <!-- ═══════════════════ CONFIRM MODAL ═══════════════════════ -->
 <div class="modal-overlay" id="confirmModal" style="display:none" onclick="if(event.target===this)closeConfirmModal()">
-  <div class="alias-card">
+  <div class="alias-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
     <div class="alias-header">
       <h2 class="alias-title" id="confirmTitle">Confirmar</h2>
       <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeConfirmModal()" title="Fechar (Esc)" aria-label="Fechar">
@@ -432,6 +432,7 @@
   <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle" onclick="event.stopPropagation()">
 
     <div class="detail-header">
+      <span class="eh-tile" id="detailIcon" style="width:40px;height:40px" hidden><svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-layers"/></svg></span>
       <div>
         <div class="eh-dialog__titlerow">
           <h2 class="detail-title" id="detailTitle"></h2>
@@ -445,7 +446,7 @@
     </div>
 
     <div class="detail-breadcrumb" id="detailBreadcrumb" style="display:none">
-      <button class="btn-back" onclick="goBackDetail()">
+      <button type="button" class="eh-btn eh-btn--secondary eh-btn--sm btn-back" onclick="goBackDetail()">
         <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg> Voltar
       </button>
       <span class="breadcrumb-sep">/</span>
@@ -466,6 +467,15 @@
 
     <div class="detail-body" id="detailBody"></div>
 
+    <div class="eh-dialog__foot" id="detailFoot" hidden>
+      <span></span>
+      <span class="eh-legend">
+          <span class="eh-legend__item"><span class="eh-legend__swatch"></span>Normal</span>
+          <span class="eh-legend__item"><span class="eh-legend__swatch is-warning"></span>Atenção</span>
+          <span class="eh-legend__item"><span class="eh-legend__swatch is-danger"></span>Crítico</span>
+        </span>
+    </div>
+
   </div>
 </div>
 
@@ -473,6 +483,7 @@
 <div class="modal-overlay detail-overlay" id="taskJsonModal" style="display:none" onclick="if(event.target===this)closeTaskJsonModal()">
   <div class="task-json-card" role="dialog" aria-modal="true" aria-labelledby="taskJsonTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
+      <span class="eh-tile" style="width:40px;height:40px"><svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-code"/></svg></span>
       <div>
         <h2 class="detail-title" id="taskJsonTitle">Detalhes da Tarefa</h2>
         <div class="task-json-id-row">
@@ -494,6 +505,7 @@
 <div class="modal-overlay detail-overlay" id="jsonModal" style="display:none" onclick="if(event.target===this)closeJsonModal()">
   <div class="task-json-card" role="dialog" aria-modal="true" aria-labelledby="jsonModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
+      <span class="eh-tile" style="width:40px;height:40px"><svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-code"/></svg></span>
       <div>
         <h2 class="detail-title" id="jsonModalTitle"></h2>
         <p class="detail-subtitle" id="jsonModalSubtitle"></p>
@@ -510,6 +522,7 @@
 <div class="modal-overlay detail-overlay" id="diskModal" style="display:none" onclick="if(event.target===this)closeDiskModal()">
   <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="diskModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
+      <span class="eh-tile" style="width:40px;height:40px"><svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-hard-drive"/></svg></span>
       <div>
         <h2 class="detail-title" id="diskModalTitle">Uso de disco por nó</h2>
         <p class="detail-subtitle">Nós com uso de disco ≥ 70% (ordenados do maior para o menor)</p>
@@ -526,6 +539,7 @@
 <div class="modal-overlay detail-overlay" id="snapshotModal" style="display:none" onclick="if(event.target===this)closeSnapshotModal()">
   <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="snapshotModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
+      <span class="eh-tile" style="width:40px;height:40px"><svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-camera"/></svg></span>
       <div>
         <h2 class="detail-title" id="snapshotModalTitle">Snapshots em Execução</h2>
         <p class="detail-subtitle">Criação de snapshot em andamento por repositório</p>
@@ -542,6 +556,7 @@
 <div class="modal-overlay detail-overlay" id="nodeModal" style="display:none" onclick="if(event.target===this)closeNodeModal()">
   <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="nodeModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
+      <span class="eh-tile" style="width:40px;height:40px"><svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-server"/></svg></span>
       <div>
         <h2 class="detail-title" id="nodeModalTitle">Nó</h2>
         <p class="detail-subtitle" id="nodeModalSubtitle"></p>
@@ -559,6 +574,7 @@
 <div class="modal-overlay detail-overlay" id="lsInstanceModal" style="display:none" onclick="if(event.target===this)closeLsInstanceModal()">
   <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="lsInstanceModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
+      <span class="eh-tile" style="width:40px;height:40px"><svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-workflow"/></svg></span>
       <div>
         <h2 class="detail-title" id="lsInstanceModalTitle">Instância</h2>
         <p class="detail-subtitle" id="lsInstanceModalSubtitle"></p>
