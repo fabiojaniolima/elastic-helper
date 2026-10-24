@@ -2572,7 +2572,7 @@ function tableClusterHealth(rows) {
       <th data-col="initializing_shards" data-type="num">Inicializando <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${visible.map(r => `<tr>
-      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td>${healthBadge(r.status)}</td>
       <td>${fmtNum(r.active_primary_shards)}</td>
       <td style="color:${r.number_of_replicas === 0 ? 'var(--yellow)' : 'var(--text)'}">${fmtNum(r.number_of_replicas)}</td>
@@ -2605,7 +2605,7 @@ function tableIndices(rows) {
       <th data-col="docs.count" data-type="num">Documentos <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
-      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td>${healthBadge(r.health)}</td>
       <td>${r.pri || '-'}</td>
       <td><span style="color:${r.rep === '0' ? 'var(--yellow)' : 'var(--text)'}">${r.rep || '-'}</span></td>
@@ -2626,7 +2626,7 @@ function tableOversharded(rows) {
       <th data-col="docs" data-type="num">Documentos <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
-      <td style="font-family:monospace;font-size:12px">${escHtml(r.index)}</td>
+      <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.index)}</td>
       <td>${fmtNum(r.pri)}</td>
       <td>${fmtNum(r.rep)}</td>
       <td>${formatBytes(r.pri_store_bytes)}</td>
@@ -2646,7 +2646,7 @@ function tableLargeShards(rows) {
       <th data-col="total_size_bytes" data-type="num">Tamanho Médio/Shard <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
-      <td style="font-family:monospace;font-size:12px">${r.index}</td>
+      <td style="font-family:var(--font-mono);font-size:12px">${r.index}</td>
       <td>${r.shard_count}</td>
       <td style="color:var(--red);font-weight:600">${formatBytes(r.max_shard_bytes)}</td>
       <td>${formatBytes(r.total_size_bytes)}</td>
@@ -2664,7 +2664,7 @@ function tableIlm(rows) {
       <th data-col="modified_date">Última Modificação <span class="sort-icon">↕</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr>
-      <td style="font-family:monospace;font-size:12px">${r.name}</td>
+      <td style="font-family:var(--font-mono);font-size:12px">${r.name}</td>
       <td style="font-weight:600">${fmtNum(r.index_count ?? 0)}</td>
       <td>${(r.phases || []).map(p => `<span class="badge badge-blue" style="margin-right:4px">${p}</span>`).join('')}</td>
       <td style="color:var(--text-muted);font-size:12px">${r.modified_date || '-'}</td>
@@ -2685,10 +2685,10 @@ function tableIlmErrors(rows) {
       <th></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr class="task-row" onclick="showIlmErrorJson(this.dataset.index)" data-index="${escHtml(r.index)}">
-      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
-      <td style="font-family:monospace;font-size:12px">${escHtml(r.policy)}</td>
+      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.policy)}</td>
       <td><span class="badge badge-blue">${escHtml(r.phase)}</span></td>
-      <td style="font-family:monospace;font-size:12px;color:var(--red)">${escHtml(r.failed_step)}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--red)">${escHtml(r.failed_step)}</td>
       <td style="text-align:center;color:var(--text-muted)">${r.failed_step_retry_count ?? '-'}</td>
       <td><span class="badge badge-red">${escHtml(r.error_type)}</span></td>
       <td style="color:var(--text-muted);font-size:12px;max-width:480px;white-space:normal">${escHtml(r.error_reason)}</td>
@@ -2713,7 +2713,7 @@ function tableReadOnly(rows) {
       const [catCls, catLabel] = READ_ONLY_CAT[r.category] || ['badge-gray', r.category || '-'];
       const blockCls = r.category === 'flood' ? 'badge-red' : 'badge-yellow';
       return `<tr>
-      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td><span class="badge ${catCls}">${catLabel}</span></td>
       <td>${(r.blocks || '').split(', ').filter(Boolean).map(b => `<span class="badge ${blockCls}" style="margin-right:4px">${escHtml(b)}</span>`).join('')}</td>
       <td>${healthBadge(r.health)}</td>
@@ -2739,8 +2739,8 @@ function tableClusterSettings(rows) {
     <tbody>${rows.map(r => `<tr>
       <td><span class="badge ${SEVERITY_BADGE[r.severity] || 'badge-gray'}">${r.severity === 'red' ? 'Crítico' : r.severity === 'yellow' ? 'Atenção' : 'Info'}</span></td>
       <td><span class="badge ${SCOPE_BADGE[r.scope] || 'badge-gray'}">${escHtml(r.scope)}</span></td>
-      <td style="font-family:monospace;font-size:12px">${escHtml(r.key)}</td>
-      <td style="font-family:monospace;font-size:12px;font-weight:600">${escHtml(r.value)}</td>
+      <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.key)}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;font-weight:600">${escHtml(r.value)}</td>
       <td style="color:var(--text-muted);font-size:12px;max-width:520px;white-space:normal">${escHtml(r.message)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -2762,7 +2762,7 @@ function tableDeprecations(rows) {
       return `<tr>
       <td><span class="badge ${DEP_LEVEL_BADGE[r.level] || 'badge-gray'}">${r.level === 'critical' ? 'Crítico' : 'Aviso'}</span></td>
       <td><span class="badge badge-blue">${escHtml(r.category_label)}</span></td>
-      <td style="font-family:monospace;font-size:12px">${escHtml(r.resource)}</td>
+      <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.resource)}</td>
       <td style="max-width:560px;white-space:normal"><div>${escHtml(r.message)}</div>${details}${url}</td>
     </tr>`;
     }).join('')}</tbody>
@@ -2786,7 +2786,7 @@ function tableAllocationExplain(rows) {
         : '';
       const canColor = r.can_allocate === 'yes' ? 'green' : (r.can_allocate === 'no' ? 'red' : 'yellow');
       return `<tr class="task-row" data-idx="${escHtml(r.index)}" data-shard="${escHtml(r.shard)}" data-pri="${escHtml(r.primary)}" onclick="showAllocationJson(this.dataset.idx, this.dataset.shard, this.dataset.pri)">
-      <td style="font-family:monospace;font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
+      <td style="font-family:var(--font-mono);font-size:12px"><span class="index-link" data-index="${escHtml(r.index)}" onclick="event.stopPropagation();openIndexShards(this.dataset.index)">${escHtml(r.index)}</span></td>
       <td style="font-weight:700;color:var(--text-muted)">${r.shard ?? '-'}</td>
       <td>${shardTypeBadge(r.primary ? 'p' : 'r')}</td>
       <td><span class="badge badge-gray">${escHtml(r.reason)}</span></td>
@@ -2836,9 +2836,9 @@ function tableSlmPolicies(rows) {
         ? ` title="${escHtml(r.last_failure_reason)}"` : '';
       const snaps = `<span style="color:var(--green)">${fmtNum(r.snapshots_taken)}</span>${r.snapshots_failed > 0 ? ` / <span style="color:var(--red)">${fmtNum(r.snapshots_failed)}</span>` : ''}`;
       return `<tr class="task-row" data-name="${escHtml(r.name)}" onclick="showSlmJson(this.dataset.name)">
-        <td style="font-family:monospace;font-size:12px;font-weight:600">${escHtml(r.name)}${r.in_progress ? ' <span class="badge badge-blue" style="font-size:10px">em execução</span>' : ''}</td>
+        <td style="font-family:var(--font-mono);font-size:12px;font-weight:600">${escHtml(r.name)}${r.in_progress ? ' <span class="badge badge-blue" style="font-size:10px">em execução</span>' : ''}</td>
         <td>${slmStateBadge(r.state)}</td>
-        <td style="font-family:monospace;font-size:12px">${escHtml(r.repository)}</td>
+        <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.repository)}</td>
         <td style="font-size:12px"${successTitle}>${success}</td>
         <td style="font-size:12px"${failureTitle}>${failure}</td>
         <td style="font-size:12px;color:var(--text-muted)">${r.next_execution_millis ? fmtMillisDate(r.next_execution_millis) : '—'}</td>
@@ -3633,7 +3633,7 @@ function tablePendingTasks(rows) {
       return `<tr>
       <td style="font-weight:700;color:var(--text-muted)">${r.insert_order ?? '-'}</td>
       <td><span class="badge badge-${pc}">${escHtml(r.priority || '-')}</span></td>
-      <td style="font-family:monospace;font-size:12px;max-width:520px;white-space:normal">${escHtml(r.source || '-')}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;max-width:520px;white-space:normal">${escHtml(r.source || '-')}</td>
       <td>${r.executing ? '<span class="badge badge-green">sim</span>' : '<span class="badge badge-gray">não</span>'}</td>
       <td style="text-align:right;color:${wait >= 200 ? 'var(--red)' : wait > 0 ? 'var(--yellow)' : 'var(--text-muted)'};font-weight:${wait > 0 ? '700' : '400'}">${fmtDuration(wait)}</td>
     </tr>`;

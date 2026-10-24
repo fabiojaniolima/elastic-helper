@@ -1,0 +1,207 @@
+/* Elastic Helper — tokens do design system.
+   Gerado a partir de tokens.json (design system "Elastic Helper", v1). Não edite à mão:
+   os nomes são os mesmos dos tokens; ajuste o tokens.json e gere de novo. */
+
+:root {
+  /* Cor (tema único: escuro) */
+  --bg-backdrop: #06080a;
+  --bg-app: #0b0d10;
+  --bg-inset: #0f1115;
+  --bg-subtle: #111418;
+  --bg-card: #14171c;
+  --bg-nav-hover: #15181d;
+  --bg-item-hover: #171a20;
+  --bg-chip: #1a1e24;
+  --bg-track: #1e2229;
+  --border-subtle: #1c2027;
+  --border-card: #232830;
+  --border-control: #2e343e;
+  --border-strong: #3a414c;
+  --text-primary: #e7e9ec;
+  --text-secondary: #a3aab5;
+  --text-muted: #7c8492;
+  --text-note: #c9d2de;
+  --text-on-accent: var(--bg-app);
+  --accent: #7b8cff;
+  --accent-link: #9aa8ff;
+  --accent-link-hover: #c3ccff;
+  --accent-ring: rgba(123,140,255,0.18);
+  --accent-glow: rgba(123,140,255,0.06);
+  --accent-option-teal: #2dd4bf;
+  --accent-option-amber: #f59e0b;
+  --accent-option-fuchsia: #e879f9;
+  --data-neutral: #566070;
+  --data-neutral-strong: #7a8597;
+  --status-off: #4a515c;
+  --switch-thumb: #ffffff;
+  --success: #34d399;
+  --success-soft: rgba(52,211,153,0.12);
+  --success-border: rgba(52,211,153,0.45);
+  --success-halo: rgba(52,211,153,0.06);
+  --warning: #fbbf24;
+  --warning-muted: #c9a24a;
+  --warning-soft: rgba(251,191,36,0.10);
+  --warning-chip: rgba(251,191,36,0.12);
+  --warning-badge: rgba(251,191,36,0.14);
+  --warning-border: rgba(251,191,36,0.28);
+  --warning-card: rgba(251,191,36,0.06);
+  --warning-card-border: rgba(251,191,36,0.32);
+  --warning-card-hover: rgba(251,191,36,0.6);
+  --danger: #f87171;
+  --danger-text: #f8a5a5;
+  --danger-soft: rgba(248,113,113,0.10);
+  --danger-border: rgba(248,113,113,0.3);
+  --danger-card: rgba(248,113,113,0.07);
+  --danger-card-border: rgba(248,113,113,0.38);
+  --danger-card-hover: rgba(248,113,113,0.65);
+  --danger-row: rgba(248,113,113,0.05);
+  --info: #7db4f5;
+  --info-soft: rgba(125,180,245,0.07);
+  --info-tile: rgba(125,180,245,0.10);
+  --info-border: rgba(125,180,245,0.28);
+
+  /* Famílias */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* Estilos de texto: --<estilo>-size / -weight / -tracking / -line */
+  --status-display-size: 30px;
+  --status-display-weight: 600;
+  --status-display-tracking: -0.02em;
+  --status-display-line: 1.1;
+  --page-title-size: 26px;
+  --page-title-weight: 600;
+  --page-title-tracking: -0.02em;
+  --help-group-title-size: 20px;
+  --help-group-title-weight: 600;
+  --help-group-title-tracking: -0.01em;
+  --dialog-title-size: 19px;
+  --dialog-title-weight: 600;
+  --dialog-title-tracking: -0.01em;
+  --title-lg-size: 18px;
+  --title-lg-weight: 600;
+  --title-lg-tracking: -0.01em;
+  --panel-title-size: 17px;
+  --panel-title-weight: 600;
+  --panel-title-tracking: -0.01em;
+  --section-title-size: 16px;
+  --section-title-weight: 600;
+  --section-title-tracking: -0.01em;
+  --card-title-size: 15px;
+  --card-title-weight: 600;
+  --card-title-tracking: -0.01em;
+  --subsection-title-size: 14px;
+  --subsection-title-weight: 600;
+  --body-lg-size: 14.5px;
+  --body-lg-weight: 400;
+  --body-lg-line: 1.7;
+  --body-size: 14px;
+  --body-weight: 400;
+  --body-line: 1.55;
+  --body-sm-size: 13.5px;
+  --body-sm-weight: 400;
+  --body-sm-line: 1.6;
+  --card-label-size: 13.5px;
+  --card-label-weight: 500;
+  --nav-item-size: 14px;
+  --nav-item-weight: 500;
+  --button-sm-size: 13px;
+  --button-sm-weight: 500;
+  --caption-size: 13px;
+  --caption-weight: 400;
+  --caption-sm-size: 12.5px;
+  --caption-sm-weight: 400;
+  --meta-size: 12px;
+  --meta-weight: 400;
+  --field-label-size: 12px;
+  --field-label-weight: 500;
+  --overline-size: 11px;
+  --overline-weight: 600;
+  --overline-tracking: 0.08em;
+  --column-header-size: 11px;
+  --column-header-weight: 600;
+  --column-header-tracking: 0.07em;
+  --badge-size: 11px;
+  --badge-weight: 600;
+  --badge-tracking: 0.05em;
+  --role-tag-size: 10.5px;
+  --role-tag-weight: 600;
+  --role-tag-tracking: 0.05em;
+  --beta-tag-size: 10px;
+  --beta-tag-weight: 600;
+  --beta-tag-tracking: 0.06em;
+  --metric-xl-size: 34px;
+  --metric-xl-weight: 500;
+  --metric-xl-tracking: -0.02em;
+  --metric-xl-line: 1;
+  --metric-lg-size: 30px;
+  --metric-lg-weight: 500;
+  --metric-lg-tracking: -0.02em;
+  --metric-lg-line: 1.05;
+  --metric-md-size: 20px;
+  --metric-md-weight: 500;
+  --metric-unit-size: 18px;
+  --metric-unit-weight: 400;
+  --mono-strong-size: 13.5px;
+  --mono-strong-weight: 500;
+  --mono-body-size: 13px;
+  --mono-body-weight: 400;
+  --mono-sm-size: 12.5px;
+  --mono-sm-weight: 400;
+  --mono-xs-size: 11.5px;
+  --mono-xs-weight: 400;
+  --mono-count-size: 11px;
+  --mono-count-weight: 600;
+
+  /* Espaço */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-14: 14px;
+  --space-16: 16px;
+  --space-18: 18px;
+  --space-20: 20px;
+  --space-22: 22px;
+  --space-24: 24px;
+  --space-28: 28px;
+  --space-30: 30px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+  --space-56: 56px;
+
+  /* Raio */
+  --radius-bar: 2px;
+  --radius-code: 4px;
+  --radius-tag: 5px;
+  --radius-sm: 6px;
+  --radius-control: 8px;
+  --radius-tile: 10px;
+  --radius-note: 12px;
+  --radius-card: 14px;
+  --radius-panel: 16px;
+  --radius-dialog: 18px;
+  --radius-pill: 999px;
+
+  /* Sombra e foco */
+  --shadow-dialog: 0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.02);
+  --shadow-thumb: 0 1px 2px rgba(0,0,0,0.4);
+  --focus-field: 0 0 0 3px rgba(123,140,255,0.18);
+  --focus-card: 0 0 0 2px #7b8cff;
+  --halo-status: 0 0 0 7px rgba(52,211,153,0.06);
+
+  /* Medidas */
+  --size-sidebar: 256px;
+  --size-topbar: 60px;
+  --size-control-xs: 26px;
+  --size-control-sm: 32px;
+  --size-control-md: 36px;
+  --size-control-lg: 40px;
+  --size-tab: 52px;
+  --size-meter-sm: 4px;
+  --size-meter-md: 6px;
+  --size-meter-lg: 10px;
+}
