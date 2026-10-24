@@ -1411,27 +1411,7 @@ function section(label, sectionId, opts = {}) {
 }
 
 function sectionCardsHealth(d) {
-  const h = d.cluster_health;
-  const totalShards = d.total_shards || 0;
-  return [
-    cardHealth(h, d.es_version, d.license),
-    cardStat('openShardsDetail()', 'Total de Shards', 'layers', fmtNum(totalShards), 'shards (primários + réplicas)', 'blue',
-      'Número total de shards configurados (primários + réplicas). Muitos shards por nó pressionam a memória do master; a regra prática é manter abaixo de ~20 shards por GB de heap.',
-      [
-        // % de shards ativos só aparece quando < 100% (cluster com shards não
-        // alocados/em movimento); mesma convenção de cor/formato do modal openShardsDetail.
-        ...((h.active_shards_percent ?? 100) < 100 ? [{
-          label: 'Ativos',
-          val: `${Math.min(99.9, Math.round((h.active_shards_percent ?? 100) * 10) / 10)}%`,
-          color: (h.active_shards_percent ?? 100) >= 90 ? 'yellow' : 'red',
-        }] : []),
-        { label: 'Não Alocados',  val: fmtNum(h.unassigned_shards),   color: h.unassigned_shards > 0   ? 'red'    : null },
-        ...(h.delayed_unassigned_shards > 0 ? [{ label: 'Atraso (timeout)', val: fmtNum(h.delayed_unassigned_shards), color: 'yellow' }] : []),
-        { label: 'Realocando',    val: fmtNum(h.relocating_shards),   color: h.relocating_shards > 0   ? 'yellow' : null },
-        { label: 'Inicializando', val: fmtNum(h.initializing_shards), color: h.initializing_shards > 0 ? 'yellow' : null },
-      ],
-      'help-total-shards'),
-  ].join('');
+  return healthSummary(d.cluster_health, d.total_shards || 0, d.es_version, d.license);
 }
 
 // Faixa de sinais binários de saúde: pressão no master, falhas de ILM e
@@ -1523,22 +1503,49 @@ function cardSnapshotRunning(d) {
 // 'muted' (indisponível — renderiza '—' em vez do número, sem check nem cor).
 function signalItem(metric, detailTitle, detailSub, ic, label, value, color, sub, tip, topic) {
   const numHtml = color === 'muted' ? '&mdash;' : fmtNum(value);
-  const subHtml = color === 'green'
-    ? `<svg class="eh-icon signal-ok-icon" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg> ${sub}`
-    : sub;
-  const subStyle = (color === 'red' || color === 'yellow' || color === 'blue') ? `style="color:var(--${color})"` : '';
-  const clickAttr = `onclick="openDetail('${metric}','${detailTitle}','${detailSub}')"`;
-  return `<div class="signal-card status-${color}" ${clickAttr}>
-    <div class="signal-num value-${color}">${numHtml}</div>
-    <div class="signal-info">
-      <div class="signal-title">
-        ${icon(ic, 16, 'signal-title-icon')}
-        <span class="signal-label">${label}</span>
-      </div>
-      <div class="signal-sub" ${subStyle}>${subHtml}</div>
+  return metricCard({
+    ic, label, value: numHtml, tone: color, footer: sub,
+    footerIcon: color === 'green' ? 'check' : null,
+    onclick: `openDetail('${metric}','${detailTitle}','${detailSub}')`,
+    tip, topic,
+  });
+}
+
+// MetricCard do design system. `tone` recebe a cor de regra de sempre
+// ('green'/'yellow'/'red'/'blue'/'muted'): só amarelo e vermelho pintam o card;
+// verde, azul e indisponível ficam no tom normal (o "ok" vem do ícone de check).
+// Sem `onclick`, o card é estático (sem link nem seta).
+function metricCard({ ic, label, value, tone, footer, footerIcon, unitLabel, onclick, tip, topic }) {
+  const t = tone === 'red' ? 'danger' : tone === 'yellow' ? 'warning' : 'normal';
+  const go = onclick ? `<span class="eh-card__go">${icon('arrow-right', 14)}</span>` : '';
+  const title = onclick
+    ? `<a href="#" class="eh-card__link" onclick="${onclick};return false;">${label}</a>`
+    : `<span class="eh-card__label">${label}</span>`;
+  const valueCls = `eh-metric__value is-${tone === 'muted' ? 'none' : t}`;
+  const valueRow = unitLabel != null
+    ? `<div class="eh-metric__valuerow"><span class="eh-metric__valuegroup"><span class="${valueCls}">${value}</span><span class="eh-metric__unitlabel">${unitLabel}</span></span>${footer == null ? go : ''}</div>`
+    : `<span class="${valueCls}">${value}</span>`;
+  const foot = footer != null
+    ? `<div class="eh-metric__foot"><span class="eh-metric__note${t === 'danger' ? ' is-danger' : ''}">${footerIcon ? icon(footerIcon, 14) : ''}<span>${footer}</span></span>${go}</div>`
+    : '';
+  return `<article class="eh-card eh-metric${t !== 'normal' ? ' is-' + t : ''}${onclick ? '' : ' is-static'}">
+    <div class="eh-card__head">
+      ${ic ? `<span class="eh-card__icon">${icon(ic, 16)}</span>` : ''}
+      ${title}
+      ${tip ? `<span class="eh-card__above">${tooltip(tip, topic)}</span>` : ''}
     </div>
-    ${tooltip(tip, topic)}
-  </div>`;
+    ${valueRow}
+    ${foot}
+  </article>`;
+}
+
+// Legenda das cores de utilização (Legend do design system).
+function legendHtml() {
+  return `<span class="eh-legend">
+    <span class="eh-legend__item"><span class="eh-legend__swatch"></span>Normal</span>
+    <span class="eh-legend__item"><span class="eh-legend__swatch is-warning"></span>Atenção</span>
+    <span class="eh-legend__item"><span class="eh-legend__swatch is-danger"></span>Crítico</span>
+  </span>`;
 }
 
 function sectionCardsResources(d) {
@@ -1577,14 +1584,14 @@ function renderCards(d) {
   const grid = document.getElementById('metricsGrid');
 
   grid.innerHTML = [
-    section('Saúde do Cluster', 'health'),
-    `<div id="section-cards-health" class="section-health-cards">${sectionCardsHealth(d)}</div>`,
+    `<section class="page-section">${section('Saúde do Cluster', 'health')}
+      <div id="section-cards-health">${sectionCardsHealth(d)}</div></section>`,
 
-    section('Sinais de Alerta', 'signals'),
-    `<div id="section-cards-signals" class="section-signals-cards">${sectionCardsSignals(d)}</div>`,
+    `<section class="page-section">${section('Sinais de Alerta', 'signals')}
+      <div id="section-cards-signals" class="card-grid card-grid--5">${sectionCardsSignals(d)}</div></section>`,
 
-    section('Utilização de Recursos', 'resources'),
-    `<div id="section-cards-resources" style="display:contents">${sectionCardsResources(d)}</div>`,
+    `<section class="page-section">${section('Utilização de Recursos', 'resources', { actions: legendHtml() })}
+      <div id="section-cards-resources">${sectionCardsResources(d)}</div></section>`,
   ].join('');
 }
 
@@ -1668,40 +1675,79 @@ function licenseFooterStat(license) {
   return { label: 'Licença', val: `${escHtml(type)}${suffix}`, color };
 }
 
-function cardHealth(h, version, license) {
+// Faixa HealthSummary do design system: junta os antigos cards "Saúde do Cluster"
+// (área de status → Saúde por Índice) e "Total de Shards" (área de contagens →
+// openShardsDetail). Cada área continua clicável por um link que a cobre inteira.
+const HEALTH_SUMMARY = {
+  green: { tone: 'success', icon: 'check' },
+  yellow: { tone: 'warning', icon: 'triangle-alert' },
+  red: { tone: 'danger', icon: 'circle-alert' },
+};
+
+function healthSummary(h, totalShards, version, license) {
   const status = h.status;
-  const color = healthColor(status);
-  const tip = '<strong style="color:var(--green)">GREEN</strong>: Todos os shards primários e réplicas estão alocados e operacionais — cluster saudável.<br>' +
-    '<strong style="color:var(--yellow)">YELLOW</strong>: Todos os shards primários estão alocados, mas há réplicas não alocadas. Se um nó falhar, parte dos dados pode ficar temporariamente indisponível.<br>' +
-    '<strong style="color:var(--red)">RED</strong>: Um ou mais shards primários não estão alocados. Parte dos dados pode estar inacessível ou em risco de perda permanente.';
+  const hs = HEALTH_SUMMARY[status] || { tone: 'none', icon: 'circle-help' };
+  const word = status ? status.charAt(0).toUpperCase() + status.slice(1) : '—';
+  const tip = '<strong>Green</strong>: Todos os shards primários e réplicas estão alocados e operacionais — cluster saudável.<br>' +
+    '<strong>Yellow</strong>: Todos os shards primários estão alocados, mas há réplicas não alocadas. Se um nó falhar, parte dos dados pode ficar temporariamente indisponível.<br>' +
+    '<strong>Red</strong>: Um ou mais shards primários não estão alocados. Parte dos dados pode estar inacessível ou em risco de perda permanente.';
+  const shardsTip = 'Número total de shards configurados (primários + réplicas). Muitos shards por nó pressionam a memória do master; a regra prática é manter abaixo de ~20 shards por GB de heap.';
 
+  const activePct = h.active_shards_percent ?? 100;
   const stats = [
-    { label: 'Versão do Cluster', val: version ? `v${escHtml(version)}` : '-', color: 'text' },
+    // % de shards ativos só aparece quando < 100% (cluster com shards não
+    // alocados/em movimento); mesma convenção de cor/formato do modal openShardsDetail.
+    ...(activePct < 100 ? [{
+      label: 'Ativos',
+      val: fmtPct(Math.min(99.9, Math.round(activePct * 10) / 10)),
+      color: activePct >= 90 ? 'yellow' : 'red',
+    }] : []),
+    { label: 'Não Alocados',  val: fmtNum(h.unassigned_shards),   color: h.unassigned_shards > 0   ? 'red'    : null },
+    ...(h.delayed_unassigned_shards > 0 ? [{ label: 'Atraso (timeout)', val: fmtNum(h.delayed_unassigned_shards), color: 'yellow' }] : []),
+    { label: 'Realocando',    val: fmtNum(h.relocating_shards),   color: h.relocating_shards > 0   ? 'yellow' : null },
+    { label: 'Inicializando', val: fmtNum(h.initializing_shards), color: h.initializing_shards > 0 ? 'yellow' : null },
   ];
-  const lic = licenseFooterStat(license);
-  if (lic) stats.push(lic);
 
-  return `<div class="metric-card card-health-hero status-${color}" onclick="openDetail('cluster_health','Saúde por Índice','Status e shards por índice')">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon" style="--card-icon-bg:var(--${color}-bg);--card-icon-color:var(--${color})"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-heart-pulse"/></svg></div>
-        <div class="card-title">Saúde do Cluster</div>
-      </div>
-      ${tooltip(tip, 'help-cluster-health')}
+  const facts = [{ label: 'Versão do Cluster', val: version ? `v${escHtml(version)}` : '-', color: null }];
+  const lic = licenseFooterStat(license);
+  if (lic) facts.push({ ...lic, color: lic.color === 'text' ? null : lic.color });
+  const valCls = c => c ? ` lvl-${levelClass(c)}` : '';
+
+  return `<section class="eh-health is-${hs.tone} health-summary" aria-label="Saúde do cluster">
+    <div class="eh-health__status hs-area">
+      <span class="eh-health__ring">${icon(hs.icon, 26, 'eh-icon--bold')}</span>
+      <span class="eh-health__words">
+        <span class="hs-labelrow">
+          <a href="#" class="eh-overline eh-health__label hs-link" onclick="openDetail('cluster_health','Saúde por Índice','Status e shards por índice');return false;">Saúde do Cluster</a>
+          ${tooltip(tip, 'help-cluster-health')}
+        </span>
+        <span class="eh-health__word">${word}</span>
+      </span>
     </div>
-    <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;flex-wrap:wrap">
-      <div class="health-badge ${status}">
-        <span class="health-dot"></span>
-        ${status.toUpperCase()}
-      </div>
+    <div class="eh-health__counts hs-area">
+      <span class="eh-health__total">
+        <span class="hs-labelrow">
+          <a href="#" class="eh-meta hs-link" onclick="openShardsDetail();return false;">Total de Shards</a>
+          ${tooltip(shardsTip, 'help-total-shards')}
+        </span>
+        <span class="eh-health__totalvalue">${fmtNum(totalShards)}</span>
+        <span class="eh-meta">shards (primários + réplicas)</span>
+      </span>
+      <span class="eh-health__divider"></span>
+      <span class="eh-health__stats" style="grid-template-columns:repeat(${stats.length}, minmax(0, 1fr))">
+        ${stats.map(st => `<span class="eh-health__stat">
+          <span class="eh-meta">${st.label}</span>
+          <span class="eh-health__statvalue${valCls(st.color)}">${st.val}</span>
+        </span>`).join('')}
+      </span>
     </div>
-    <div class="card-footer" style="flex-wrap:wrap;gap:14px 20px">
-      ${stats.map(s => `<div class="footer-stat">
-        <span class="footer-stat-label">${s.label}</span>
-        <span class="footer-stat-val" style="color:${s.color !== 'text' ? `var(--${s.color})` : 'var(--text)'}">${s.val}</span>
-      </div>`).join('')}
+    <div class="eh-health__facts">
+      ${facts.map(f => `<span class="eh-health__fact">
+        <span class="eh-meta">${f.label}</span>
+        <span class="eh-health__factvalue${valCls(f.color)}">${f.val}</span>
+      </span>`).join('')}
     </div>
-  </div>`;
+  </section>`;
 }
 
 // Conta nós por tier de dados (HOT/WARM/COLD/FROZEN), mas só quando o nó tem
@@ -2010,6 +2056,24 @@ function sectionCardsVolume(d) {
   ].join('');
 }
 
+// Fila de thread pool: chip em atenção quando há fila (indicador antecipado).
+function tpQueueCell(q) {
+  return q > 0
+    ? `<span class="eh-badge eh-badge--chip eh-badge--warning">${fmtNum(q)}</span>`
+    : `<span class="eh-mono lvl-none">${fmtNum(q)}</span>`;
+}
+
+// Cabeçalho de painel (ícone + título + "?"). `clickable` mostra a seta de abrir
+// no hover quando o painel inteiro é clicável.
+function panelHead(ic, title, tipHtml, clickable) {
+  return `<div class="panel-head">
+    <span class="eh-card__icon">${icon(ic, 16)}</span>
+    <h3 class="panel-title">${title}</h3>
+    ${tipHtml || ''}
+    ${clickable ? `<span class="eh-card__go panel-go">${icon('arrow-right', 14)}</span>` : ''}
+  </div>`;
+}
+
 function cardResourceTable(d) {
   const nodes = sortNodesByRole(d.nodes_summary || []);
   const tip = 'Métricas de utilização ao vivo por nó — um indicador por dimensão de saturação. Clique para a visão completa (Heap JVM, GC Overhead, Rejeições e shards por nó).<br>' +
@@ -2030,20 +2094,14 @@ function cardResourceTable(d) {
       <td>${pctBar(n.mem_pressure)}</td>
       <td>${pctBar(n.parent_cb_pct || 0)}</td>
       <td>${pctBar(n.write_pressure_pct || 0)}</td>
-      <td style="text-align:right;color:${q > 0 ? 'var(--yellow)' : 'var(--text-muted)'};font-weight:${q > 0 ? '700' : '400'}">${fmtNum(q)}</td>
+      <td class="num">${tpQueueCell(q)}</td>
     </tr>`;
   }).join('');
 
-  const emptyRow = `<tr><td colspan="${colCount}" style="text-align:center;color:var(--text-dim);padding:24px">Nenhum nó encontrado</td></tr>`;
+  const emptyRow = `<tr><td colspan="${colCount}" class="table-empty">Nenhum nó encontrado</td></tr>`;
 
-  return `<div class="metric-card card-full" onclick="openDetail('nodes','Nós do Cluster','Detalhes completos — roles, shards e recursos por nó')">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-server"/></svg></div>
-        <div class="card-title">Utilização por Nó</div>
-      </div>
-      ${tooltip(tip, 'help-resource-table')}
-    </div>
+  return `<section class="eh-panel panel-click" onclick="openDetail('nodes','Nós do Cluster','Detalhes completos — roles, shards e recursos por nó')">
+    ${panelHead('server', 'Utilização por Nó', tooltip(tip, 'help-resource-table'), true)}
     <div class="resource-table-wrap">
       <table class="data-table resource-table">
         <thead><tr>
@@ -2053,12 +2111,12 @@ function cardResourceTable(d) {
           <th>Mem. Pressure</th>
           <th>Parent CB</th>
           <th>Pressão Escrita</th>
-          <th style="text-align:right">Fila TP</th>
+          <th class="num">Fila TP</th>
         </tr></thead>
         <tbody>${rows || emptyRow}</tbody>
       </table>
     </div>
-  </div>`;
+  </section>`;
 }
 
 // ─── Export Config ────────────────────────────────────────
@@ -2925,12 +2983,6 @@ function closeJsonModal() {
   document.body.style.overflow = '';
 }
 
-const ROLE_COLOR = {
-  master: 'yellow', data: 'blue', data_hot: 'blue', data_warm: 'blue',
-  data_cold: 'blue', data_frozen: 'blue', ingest: 'green',
-  ml: 'gray', voting_only: 'gray',
-};
-
 // Rótulos curtos das roles para a linha compacta abaixo do nome do nó
 const ROLE_SHORT = {
   master: 'MASTER', data: 'DATA', data_content: 'CONTENT', data_hot: 'HOT',
@@ -2939,7 +2991,6 @@ const ROLE_SHORT = {
 };
 // Roles principais exibidas (em ordem) na linha compacta sob o nome do nó
 const ROLE_INLINE_ORDER = ['master', 'data_hot', 'data_warm', 'data_cold', 'data_frozen'];
-const ROLE_CSS_VAR = { yellow: '--yellow', blue: '--blue', green: '--green', gray: '--text-dim' };
 
 // Um nó é considerado dedicado a ML quando tem a role `ml` e nenhuma role de
 // master ou de dados. Nesse caso a linha compacta — que normalmente ficaria
@@ -2950,7 +3001,7 @@ function isDedicatedMl(roles) {
   return r.includes('ml') && !r.includes('master') && !r.some(x => x.startsWith('data'));
 }
 
-// Linha compacta e colorida ("MASTER / HOT / WARM / ...") exibida sob o nome do nó
+// RoleTags exibidas sob o nome do nó (master eleito com estrela, em accent)
 function renderRolesInline(roles, isElectedMaster) {
   if (!Array.isArray(roles) || !roles.length) return '';
   const present = new Set(roles);
@@ -2958,10 +3009,9 @@ function renderRolesInline(roles, isElectedMaster) {
   if (isDedicatedMl(roles)) ordered.push('ml');
   if (!ordered.length) return '';
   return ordered.map(role => {
-    const v = ROLE_CSS_VAR[ROLE_COLOR[role] || 'gray'] || '--text-dim';
-    const star = (role === 'master' && isElectedMaster) ? '&#9733;' : '';
-    return `<span style="color:var(${v})">${star}${ROLE_SHORT[role] || role.toUpperCase()}</span>`;
-  }).join('<span style="color:var(--text-dim)"> / </span>');
+    const elected = role === 'master' && isElectedMaster;
+    return `<span class="eh-role${elected ? ' is-elected' : ''}">${elected ? icon('star', 10, 'eh-icon--star') : ''}${ROLE_SHORT[role] || role.toUpperCase()}</span>`;
+  }).join('');
 }
 
 // Texto do hover (title) listando TODAS as roles do nó (master eleito com ★)
@@ -2977,10 +3027,10 @@ function nodeNameCell(name, roles, isElectedMaster) {
   const title = rolesTitle(roles, isElectedMaster);
   const safeAttr = (name || '').replace(/'/g, '&#39;');
   const click = name ? ` onclick="event.stopPropagation();openNodeModal('${safeAttr}')"` : '';
-  return `<div class="node-name-cell" title="${title}">
-    <div class="node-name node-name-clickable"${click}>${escHtml(name) || '-'}</div>
-    ${inline ? `<div class="node-roles-inline">${inline}</div>` : ''}
-  </div>`;
+  return `<span class="eh-node node-name-cell" title="${title}">
+    <span class="eh-node__name node-name node-name-clickable"${click}>${escHtml(name) || '-'}</span>
+    ${inline ? `<span class="eh-node__roles node-roles-inline">${inline}</span>` : ''}
+  </span>`;
 }
 
 // Nome do master eleito, a partir dos dados de dashboard já carregados (para a ★)
@@ -3025,11 +3075,11 @@ const FROZEN_DISK_NOTE_TEXT = FROZEN_DISK_NOTE.replace(/<[^>]+>/g, '');
 
 // Marca que substitui a barra de disco de um nó frozen em tabelas e cards.
 function frozenDiskMark() {
-  return `<div class="tooltip-wrap" style="display:inline-flex;align-items:center;gap:6px;cursor:help">
-    <span style="color:var(--text-dim)">—</span>
-    <span style="font-size:11px;color:var(--text-dim)">cache frozen</span>
-    <div class="tooltip-box" style="width:340px;font-weight:400;text-transform:none;letter-spacing:0">${FROZEN_DISK_NOTE}</div>
-  </div>`;
+  return `<span class="tooltip-wrap frozen-mark" tabindex="0">
+    <span class="eh-mono">—</span>
+    <span class="frozen-mark__txt">cache frozen</span>
+    <span class="tooltip-box" role="tooltip">${FROZEN_DISK_NOTE}</span>
+  </span>`;
 }
 
 // Ordem padrão da coluna "Nó" nas tabelas de utilização/detalhe: MASTER dedicado >
@@ -3936,7 +3986,7 @@ function renderTasksTable(tasks) {
 
   if (!tasks.length) {
     body.innerHTML = `<div class="empty-state tasks-empty">
-      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg>
+      ${icon('circle-check', 20)}
       <p>Nenhuma tarefa com mais de 5 segundos em execução</p>
     </div>`;
     return;
@@ -3957,14 +4007,14 @@ function renderTasksTable(tasks) {
   const actionCounts = tasks.reduce((acc, t) => { acc[t.action] = (acc[t.action] || 0) + 1; return acc; }, {});
   const pills = actions.map(a => {
     const sel = selectedActions.has(a);
-    return `<button class="task-action-pill${sel ? ' selected' : ''}" onclick="toggleActionFilter('${escHtml(a)}')">${escHtml(a)} (total: ${actionCounts[a]})</button>`;
+    return `<button type="button" class="eh-chip task-action-pill${sel ? ' is-pressed' : ''}" aria-pressed="${sel}" onclick="toggleActionFilter('${escHtml(a)}')"><span class="eh-chip__label">${escHtml(a)}</span><span class="eh-chip__count">${actionCounts[a]}</span></button>`;
   }).join('');
 
   const clearBtn = selectedActions.size
-    ? `<button class="tasks-filter-clear" onclick="clearActionFilter()"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-x"/></svg> Limpar</button>`
+    ? `<button type="button" class="eh-btn eh-btn--ghost eh-btn--sm tasks-filter-clear" onclick="clearActionFilter()">${icon('x', 14)} Limpar</button>`
     : '';
 
-  const filterHtml = `<div class="tasks-filter">
+  const filterHtml = `<div class="tasks-filter" role="group" aria-label="Filtrar por ação">
     <span class="tasks-filter-label">Ação</span>
     ${pills}
     ${clearBtn}
@@ -3979,25 +4029,26 @@ function renderTasksTable(tasks) {
     const idx = tasksList.indexOf(t);
     const kids = childrenOf.get(t.id) || [];
     const expanded = expandedTasks.has(t.id);
+    const cancelLabel = `Cancelar tarefa ${escHtml(t.action)} em ${escHtml(t.node)}`;
     const cancelBtn = t.cancellable
-      ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();cancelTask('${escHtml(t.id)}', this)">
-           <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-ban"/></svg> Cancelar
+      ? `<button type="button" class="eh-btn eh-btn--danger eh-btn--sm" aria-label="${cancelLabel}" onclick="event.stopPropagation();cancelTask('${escHtml(t.id)}', this)">
+           ${icon('ban', 14)} Cancelar
          </button>`
-      : `<button class="btn btn-ghost btn-sm" style="cursor:not-allowed;opacity:0.45" title="Essa tarefa não pode ser cancelada" onclick="event.stopPropagation()">
-           <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-ban"/></svg> Cancelar
+      : `<button type="button" class="eh-btn eh-btn--secondary eh-btn--sm" aria-disabled="true" title="Essa tarefa não pode ser cancelada" onclick="event.stopPropagation()">
+           ${icon('ban', 14)} Cancelar
          </button>`;
     const toggle = kids.length
-      ? `<button class="task-group-toggle${expanded ? ' open' : ''}" onclick="event.stopPropagation();toggleTaskGroup('${escHtml(t.id)}')" title="${expanded ? 'Recolher' : 'Expandir'} sub-tarefas"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>`
+      ? `<button type="button" class="eh-iconbtn eh-iconbtn--xs eh-iconbtn--ghost task-group-toggle${expanded ? ' open' : ''}" aria-expanded="${expanded}" onclick="event.stopPropagation();toggleTaskGroup('${escHtml(t.id)}')" title="${expanded ? 'Recolher' : 'Expandir'} sub-tarefas" aria-label="${expanded ? 'Recolher' : 'Expandir'} sub-tarefas">${icon('chevron-right', 14)}</button>`
       : '<span class="task-group-spacer"></span>';
     const subBadge = kids.length
-      ? `<span class="task-subcount">${fmtNum(kids.length)} sub-tarefa${kids.length !== 1 ? 's' : ''}</span>`
+      ? `<span class="eh-badge eh-badge--soft task-subcount">${fmtNum(kids.length)} sub-tarefa${kids.length !== 1 ? 's' : ''}</span>`
       : '';
     return `<tr class="task-row${isChild ? ' task-child-row' : ''}" onclick="showTaskJson(${idx})">
       <td><div class="task-node-cell">${toggle}${nodeNameCell(t.node, t.roles || [], t.node === electedMasterName())}</div></td>
-      <td><code class="task-action">${escHtml(t.action)}</code>${subBadge}</td>
+      <td><div class="task-action-cell"><code class="task-action">${escHtml(t.action)}</code>${subBadge}</div></td>
       <td class="task-desc">${escHtml(t.description || '—')}</td>
-      <td class="task-elapsed" style="white-space:nowrap;font-weight:700;color:var(--yellow)" title="Início: ${escHtml(fmtMillisDate(t.start_time_in_millis))}">${fmtNanosToSecs(t.running_time_in_nanos)}</td>
-      <td style="text-align:right">${cancelBtn}</td>
+      <td class="task-elapsed" title="Início: ${escHtml(fmtMillisDate(t.start_time_in_millis))}">${fmtNanosToSecs(t.running_time_in_nanos).replace('.', ',')}</td>
+      <td class="num">${cancelBtn}</td>
     </tr>`;
   };
 
@@ -4010,7 +4061,7 @@ function renderTasksTable(tasks) {
   }).join('');
 
   const emptyFilter = visible.length === 0
-    ? `<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-dim)">Nenhuma tarefa para os filtros selecionados</td></tr>`
+    ? `<tr><td colspan="5" class="table-empty">Nenhuma tarefa para os filtros selecionados</td></tr>`
     : '';
 
   body.innerHTML = `<div class="tasks-table-wrap">
@@ -4021,7 +4072,7 @@ function renderTasksTable(tasks) {
         <th>Ação</th>
         <th>Descrição</th>
         <th>Tempo</th>
-        <th></th>
+        <th><span class="eh-sr">Ações</span></th>
       </tr></thead>
       <tbody>${rows || emptyFilter}</tbody>
     </table>

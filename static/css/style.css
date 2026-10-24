@@ -738,7 +738,7 @@ input[type="checkbox"] {
 .eh-sidebar__nav { overflow-y: auto; overflow-x: hidden; }
 .eh-nav { white-space: nowrap; }
 .eh-nav > .eh-icon { flex-shrink: 0; }
-.eh-sidebar__foot .eh-btn--nav { color: var(--text-secondary); }
+.eh-sidebar__foot .eh-btn--nav { color: var(--text-secondary); text-align: left; }
 .sidebar-collapse .eh-icon { transition: transform .2s ease; }
 
 /* Recolhida: só ícones */
@@ -766,121 +766,105 @@ input[type="checkbox"] {
 .page[hidden] { display: none; }
 .app-footer { margin-top: auto; }
 
-/* ─── Grid ─── */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
+/* ═══════════════════ PÁGINAS: SEÇÕES E GRADES ═══════════════════ */
+/* Cada página empilha seções (SectionHeader + conteúdo) com space-30 entre elas. */
+.metrics-grid { display: flex; flex-direction: column; gap: var(--space-30); }
+.page-section { display: flex; flex-direction: column; gap: var(--space-14); min-width: 0; }
+.card-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-14); }
+.card-grid--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.card-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.card-grid > .loading-state, .card-grid > .error-state { grid-column: 1 / -1; }
 
-.grid-section {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-top: 8px;
-}
-
-.grid-section:first-child { padding-top: 0; }
-
-.grid-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--text-dim);
-}
-
-.grid-section-line {
-  flex: 1;
-  height: 1px;
-  background: var(--border-subtle);
-}
-
+/* Legados ainda usados pelas telas não migradas */
 .metric-card.card-full { grid-column: 1 / -1; }
+.section-volume-cards { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-14); }
 
-.section-health-cards {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+/* MetricCard sem link (estático): sem hover de borda */
+.eh-metric.is-static:hover { border-color: var(--border-card); }
+.eh-metric.is-static.is-warning:hover { border-color: var(--warning-card-border); }
+.eh-metric.is-static.is-danger:hover { border-color: var(--danger-card-border); }
+.eh-metric__value.is-none { color: var(--text-muted); }
+.eh-card__head { min-width: 0; }
+.eh-card__link, .eh-card__label { min-width: 0; }
+
+/* Painel com cabeçalho próprio (ícone + título + "?") */
+.panel-head { display: flex; align-items: center; gap: var(--space-8); padding: var(--space-18) var(--space-28) var(--space-14); }
+.panel-title { margin: 0; font-size: var(--card-label-size); font-weight: 600; color: var(--text-primary); }
+.panel-click { cursor: pointer; transition: border-color .15s ease; }
+.panel-click:hover { border-color: var(--border-strong); }
+.panel-go { margin-left: auto; }
+.panel-click:hover .panel-go { opacity: 1; }
+.table-empty { text-align: center; color: var(--text-muted); padding: var(--space-24) !important; font-family: var(--font-sans); }
+.data-table .num { text-align: right; }
+
+/* NodeName + RoleTag */
+.eh-node__name { white-space: nowrap; }
+.node-name-clickable { cursor: pointer; }
+.node-name-clickable:hover { text-decoration: underline; }
+.eh-role .eh-icon--star { stroke-width: 2.5; }
+.frozen-mark { align-items: center; gap: var(--space-6); cursor: help; color: var(--text-muted); }
+.frozen-mark__txt { font-size: var(--meta-size); }
+
+/* ═══════════════════ SINAIS VITAIS ═══════════════════ */
+/* HealthSummary: duas áreas clicáveis (status → Saúde por Índice; contagens →
+   Total de Shards), cada uma coberta pelo link do seu rótulo. */
+.health-summary .hs-area { position: relative; transition: background-color .15s ease; }
+.health-summary .hs-area:hover { background-color: var(--bg-item-hover); }
+.health-summary .eh-health__status.hs-area:hover { background-color: transparent; }
+.health-summary .hs-area:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
+.hs-labelrow { display: inline-flex; align-items: center; gap: var(--space-4); }
+.hs-link { color: inherit; text-decoration: none; }
+.hs-link::after { content: ""; position: absolute; inset: 0; }
+.hs-link:focus { outline: none; }
+.hs-labelrow .tooltip-wrap { position: relative; z-index: 1; }
+.eh-health__statvalue.lvl-normal, .eh-health__factvalue.lvl-normal { color: var(--text-primary); }
+/* A licença da app é mais longa que a do protótipo ("ENTERPRISE · expira em 19d"):
+   a coluna de fatos cresce até caber, com 220 px de mínimo como no design system. */
+.health-summary { grid-template-columns: 260px minmax(0, 1fr) auto; }
+.health-summary .eh-health__facts { min-width: 220px; }
+.health-summary .eh-health__label, .health-summary .eh-health__total .eh-meta, .health-summary .eh-health__fact .eh-meta, .health-summary .eh-health__factvalue { white-space: nowrap; }
+/* As contagens variam (Ativos e Atraso só aparecem quando > 0): quebram em linhas em vez de se sobrepor */
+.health-summary .eh-health__stats { display: flex; flex-wrap: wrap; gap: var(--space-14) var(--space-28); }
+
+/* Tabela de utilização por nó */
+.resource-table-wrap { max-height: 420px; overflow: auto; }
+.resource-table thead th { cursor: default; }
+.resource-table thead th:hover { color: var(--text-muted); }
+
+/* Tarefas em execução */
+.tasks-filter { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-8); padding: var(--space-16) var(--space-28); }
+.tasks-filter-label { font-size: var(--column-header-size); font-weight: var(--column-header-weight); letter-spacing: var(--column-header-tracking); text-transform: uppercase; color: var(--text-muted); margin-right: var(--space-4); }
+.tasks-table-wrap { overflow-x: auto; }
+.task-row { cursor: pointer; }
+.task-node-cell { display: flex; align-items: flex-start; gap: var(--space-6); }
+.task-group-spacer { width: var(--size-control-xs); flex-shrink: 0; }
+.task-group-toggle .eh-icon { transition: transform .15s ease; }
+.task-group-toggle.open .eh-icon { transform: rotate(90deg); }
+.task-child-row td:first-child { padding-left: calc(var(--space-28) + var(--space-24)); }
+.task-child-row td { background: var(--bg-subtle); }
+.task-action-cell { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-6); }
+.task-action { font-family: var(--font-mono); font-size: 12px; padding: 3px var(--space-8); border-radius: var(--radius-sm); background: var(--bg-chip); border: 1px solid var(--border-control); color: var(--text-secondary); word-break: break-all; }
+.task-desc { font-family: var(--font-mono); font-size: var(--mono-sm-size); color: var(--text-secondary); max-width: 420px; overflow-wrap: anywhere; }
+.task-elapsed { font-family: var(--font-mono); white-space: nowrap; }
+#tasksBody > .tasks-empty, #tasksBody > .tasks-loading { padding: 40px var(--space-28); }
+
+@media (max-width: 1280px) {
+  .card-grid--5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-
-.section-volume-cards {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+@media (max-width: 1200px) {
+  .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-
-/* ─── Sinais de Alerta (faixa de cards horizontais) ─── */
-.section-signals-cards {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 16px;
+@media (max-width: 900px) {
+  .card-grid, .card-grid--5, .card-grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-.signal-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 18px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--card-accent, var(--border));
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background var(--transition), border-color var(--transition);
+@media (max-width: 560px) {
+  .card-grid, .card-grid--5, .card-grid--3 { grid-template-columns: 1fr; }
 }
-.signal-card:hover { background: var(--surface-2); }
-
-/* "?" no canto superior direito, igual aos demais cards da Visão Geral */
-.signal-card > .tooltip-wrap { position: absolute; top: 16px; right: 18px; }
-/* reserva espaço para o "?" não encostar no título/sub */
-.signal-info { padding-right: 24px; }
-.signal-card.status-green  { --card-accent: var(--green); }
-.signal-card.status-yellow { --card-accent: var(--yellow); }
-.signal-card.status-red    { --card-accent: var(--red); }
-.signal-card.status-blue   { --card-accent: var(--blue); }
-.signal-card.status-muted  { --card-accent: var(--text-dim); }
-
-.signal-num {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -1px;
-  line-height: 1;
-  color: var(--text);
-  flex-shrink: 0;
+@media (max-width: 1100px) {
+  .eh-health { grid-template-columns: 1fr; }
+  .eh-health__counts, .eh-health__facts { border-left: none; border-top: 1px solid var(--border-subtle); }
+  .eh-health__counts { flex-wrap: wrap; gap: var(--space-24); }
 }
-.signal-num.value-green  { color: var(--green); }
-.signal-num.value-yellow { color: var(--yellow); }
-.signal-num.value-red    { color: var(--red); }
-.signal-num.value-blue   { color: var(--blue); }
-.signal-num.value-muted  { color: var(--text-dim); }
-
-.signal-info { flex: 1; min-width: 0; }
-
-.signal-title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 3px;
-}
-.signal-title-icon { font-size: 12px; flex-shrink: 0; }
-.signal-card.status-green  .signal-title-icon { color: var(--green); }
-.signal-card.status-yellow .signal-title-icon { color: var(--yellow); }
-.signal-card.status-red    .signal-title-icon { color: var(--red); }
-.signal-card.status-blue   .signal-title-icon { color: var(--blue); }
-.signal-card.status-muted  .signal-title-icon { color: var(--text-dim); }
-.signal-label { white-space: nowrap; }
-
-.signal-sub { font-size: 11.5px; color: var(--text-dim); }
-.signal-ok-icon { color: var(--green); margin-right: 2px; }
 
 /* ─── Cards ─── */
 .metric-card {
@@ -1059,42 +1043,6 @@ input[type="checkbox"] {
   color: var(--text);
 }
 
-/* ─── Resource Table (inline dashboard) ─── */
-.resource-table-wrap {
-  margin-top: 4px;
-  max-height: 360px;
-  overflow-y: auto;
-  overflow-x: auto;
-}
-
-/* Célula mesclada de nó: nome + roles compactas embaixo */
-.node-name-cell { cursor: default; }
-.node-name { font-weight: 500; white-space: nowrap; }
-.node-name-clickable { display: inline-block; cursor: pointer; transition: color var(--transition); }
-.node-name-clickable:hover { color: var(--blue); }
-.node-roles-inline {
-  margin-top: 3px;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  white-space: nowrap;
-}
-
-.resource-table thead th {
-  position: relative;
-  cursor: default;
-  background: var(--surface);
-}
-
-.resource-table thead th:hover {
-  background: var(--surface);
-  color: var(--text-muted);
-}
-
-.metric-card:hover .resource-table thead th {
-  background: var(--surface-2);
-}
-
 /* ─── Carregando / erro ─── */
 .loading-state, .error-state { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-12); padding: 60px var(--space-20); color: var(--text-secondary); font-size: var(--caption-size); }
 .loading-state .eh-icon { width: 22px; height: 22px; color: var(--accent); }
@@ -1205,212 +1153,6 @@ input[type="checkbox"] {
   .metrics-grid { grid-template-columns: 1fr; }
   .section-health-cards { grid-template-columns: 1fr; }
   .section-volume-cards { grid-template-columns: 1fr; }
-}
-
-/* ─── Tasks Section ─── */
-.tasks-section-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 24px;
-  margin-bottom: 16px;
-}
-
-.tasks-section-hint {
-  font-size: 11px;
-  color: var(--text-dim);
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-.tasks-badge {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--yellow);
-  background: var(--yellow-bg);
-  border: 1px solid var(--yellow-dim);
-  border-radius: 20px;
-  padding: 2px 10px;
-  display: none;
-}
-
-.tasks-table-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.tasks-filter {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-2);
-  border-radius: var(--radius) var(--radius) 0 0;
-}
-
-.tasks-filter-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-dim);
-  flex-shrink: 0;
-  margin-right: 2px;
-}
-
-.task-action-pill {
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  cursor: pointer;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
-  transition: all var(--transition);
-  white-space: nowrap;
-}
-
-.task-action-pill:hover {
-  border-color: var(--blue-dim);
-  color: var(--blue);
-  background: var(--blue-bg);
-}
-
-.task-action-pill.selected {
-  background: var(--blue-bg);
-  border-color: var(--blue-dim);
-  color: var(--blue);
-  font-weight: 600;
-}
-
-.tasks-filter-clear {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-family: inherit;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 3px 6px;
-  border-radius: var(--radius-sm);
-  margin-left: 2px;
-  transition: color var(--transition);
-}
-
-.tasks-filter-clear:hover { color: var(--red); }
-
-.tasks-table td {
-  vertical-align: middle;
-  padding: 12px 16px;
-}
-
-.task-row {
-  cursor: pointer;
-}
-
-/* Coluna Tempo: o hover revela a data/hora de início (atributo title) */
-.task-elapsed {
-  cursor: help;
-}
-
-/* ─── Agrupamento de sub-tarefas (slices) sob a tarefa-pai ─── */
-.task-node-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Chevron de expandir/recolher as filhas do pai */
-.task-group-toggle {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: 10px;
-  cursor: pointer;
-  transition: transform var(--transition), background var(--transition), color var(--transition);
-}
-.task-group-toggle:hover {
-  background: var(--blue-bg);
-  color: var(--blue);
-  border-color: var(--blue-dim);
-}
-.task-group-toggle.open {
-  transform: rotate(90deg);
-}
-
-/* Espaçador para alinhar linhas sem chevron (pais sem filhas) com as que têm */
-.task-group-spacer {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-}
-
-/* "N sub-tarefas" abaixo da action do pai — mesma tipografia da role sob o nome
-   do nó (.node-roles-inline), mantendo a cor azul. */
-.task-subcount {
-  display: block;
-  margin-top: 3px;
-  color: var(--blue);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  white-space: nowrap;
-}
-
-/* Linha-filha (slice) recuada e com fundo sutil */
-.task-child-row {
-  background: var(--surface-2);
-}
-.task-child-row > td:first-child {
-  padding-left: 40px;
-}
-.task-child-row .task-action {
-  color: var(--text-muted);
-}
-
-.tasks-loading {
-  padding: 32px 20px !important;
-}
-
-.section-loading {
-  padding: 40px 20px !important;
-}
-
-.tasks-empty {
-  padding: 36px 20px;
-}
-
-.task-action {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text);
-  word-break: break-all;
-}
-
-.task-desc {
-  font-size: 12px;
-  color: var(--text-muted);
-  max-width: 450px;
-  word-break: break-word;
-}
-
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 12px;
 }
 
 /* ─── Task JSON Modal ─── */

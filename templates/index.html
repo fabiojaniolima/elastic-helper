@@ -328,26 +328,33 @@
           </div>
         </div>
 
-        <!-- Tarefas em Execução -->
-        <div class="tasks-section-header">
-          <span class="grid-section-label">Tarefas em Execução</span>
-          <span class="tasks-section-hint">&gt; 5s</span>
-          <div class="tooltip-wrap" style="font-weight:400;text-transform:none;letter-spacing:0">
-            <div class="tooltip-btn tooltip-btn-link" onclick="goToHelp('help-running-tasks')" title="Abrir a ajuda detalhada desta seção">?</div>
-            <div class="tooltip-box" style="left:0;right:auto">Tarefas do cluster com tempo de execução acima de <strong>5s</strong> (ignora ações internas de baixo nível). Útil para flagrar operações travadas, reindexações longas ou consultas pesadas. Cada tarefa pode ser inspecionada e, quando cancelável, cancelada.<div class="tooltip-help-hint"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-help"/></svg> Clique no <strong>?</strong> para abrir a ajuda detalhada</div></div>
+        <!-- Tarefas em Execução (fora do #metricsGrid; recarregada por loadTasks) -->
+        <section class="page-section" aria-labelledby="h-tasks">
+          <div class="eh-sectionhead">
+            <div class="eh-sectionhead__titles">
+              <div class="eh-sectionhead__row">
+                <h2 class="eh-sectionhead__title" id="h-tasks">Tarefas em Execução</h2>
+                <span class="eh-badge eh-badge--label eh-mono">&gt; 5s</span>
+                <span class="tooltip-wrap">
+                  <button type="button" class="eh-iconbtn eh-iconbtn--xs eh-iconbtn--ghost tooltip-btn tooltip-btn-link" onclick="goToHelp('help-running-tasks')" title="Abrir a ajuda detalhada desta seção" aria-label="Abrir a ajuda de Tarefas em Execução"><svg class="eh-icon" width="15" height="15" aria-hidden="true"><use href="#i-circle-help"/></svg></button>
+                  <span class="tooltip-box flip-left" role="tooltip">Tarefas do cluster com tempo de execução acima de <strong>5s</strong> (ignora ações internas de baixo nível). Útil para flagrar operações travadas, reindexações longas ou consultas pesadas. Cada tarefa pode ser inspecionada e, quando cancelável, cancelada.<span class="tooltip-help-hint"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-help"/></svg> Clique no <strong>?</strong> para abrir a ajuda detalhada</span></span>
+                </span>
+              </div>
+            </div>
+            <div class="eh-sectionhead__actions">
+              <span class="eh-badge eh-badge--soft" id="tasksCount" style="display:none"></span>
+              <button type="button" class="eh-iconbtn eh-iconbtn--sm eh-iconbtn--outline" onclick="loadTasks()" title="Atualizar tarefas" aria-label="Atualizar tarefas em execução">
+                <svg class="eh-icon" width="16" height="16" id="tasksRefreshIcon" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
+              </button>
+            </div>
           </div>
-          <span class="grid-section-line"></span>
-          <span class="tasks-badge" id="tasksCount"></span>
-          <button class="btn-icon" onclick="loadTasks()" title="Atualizar tarefas">
-            <svg class="eh-icon" width="14" height="14" id="tasksRefreshIcon" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
-          </button>
-        </div>
-        <div id="tasksBody">
-          <div class="loading-state tasks-loading">
-            <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
-            <span>Carregando tarefas...</span>
+          <div id="tasksBody" class="eh-panel">
+            <div class="loading-state tasks-loading">
+              <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
+              <span>Carregando tarefas...</span>
+            </div>
           </div>
-        </div>
+        </section>
       </section>
 
       <!-- ========== INVENTÁRIO (id interno: capacity) ========== -->
