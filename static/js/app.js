@@ -83,6 +83,21 @@ function escHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// Ícone do design system (sprite #i-<nome> no index.html; traço 1.75, currentColor).
+// `cls` acrescenta classes ao <svg> (ex.: 'spin' no ícone de carregando).
+function icon(name, size = 16, cls = '') {
+  return `<svg class="eh-icon${cls ? ' ' + cls : ''}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" ` +
+    `stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+    `<use href="#i-${name}"></use></svg>`;
+}
+
+// Carimbo "Atualizado às" da topbar, com o ponto ao vivo.
+function setUpdatedNow() {
+  document.getElementById('lastUpdated').innerHTML =
+    '<span class="eh-live eh-live--success eh-live--pulse" style="width:7px;height:7px"></span>' +
+    `Atualizado às <span class="eh-mono eh-topbar__time">${new Date().toLocaleTimeString('pt-BR')}</span>`;
+}
+
 function pctColor(pct) {
   if (pct >= 80) return 'red';
   if (pct >= 65) return 'yellow';
@@ -555,10 +570,14 @@ function setClusterInfo(info) {
   const name = info.alias || deployment;
   const tooltip = `Clique para copiar · Cluster: ${deployment}`;
   el.innerHTML = `
-    <div class="sidebar-cluster-name-row">
-      <span class="sidebar-cluster-dot"></span>
-      <span class="sidebar-cluster-name" title="${escHtml(tooltip)}" data-alias="${escHtml(name)}" data-cluster="${escHtml(deployment)}" onclick="copyAlias(this)">${escHtml(name)}</span>
-    </div>`;
+    <button type="button" class="eh-conn" title="${escHtml(tooltip)}" onclick="copyAlias(this.querySelector('.sidebar-cluster-name'))">
+      <span class="eh-live eh-live--success eh-live--pulse" style="width:8px;height:8px" aria-hidden="true"></span>
+      <span class="eh-conn__text">
+        <span class="eh-conn__name sidebar-cluster-name" data-alias="${escHtml(name)}" data-cluster="${escHtml(deployment)}">${escHtml(name)}</span>
+      </span>
+    </button>`;
+  const crumb = document.getElementById('topbarConn');
+  if (crumb) crumb.textContent = name;
 }
 
 function copyAlias(el) {
@@ -570,7 +589,7 @@ function copyAlias(el) {
     if (el.classList.contains('sidebar-cluster-name--copied')) return;
     const original = el.innerHTML;
     const originalTitle = el.title;
-    el.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+    el.innerHTML = `${icon('check', 14)} Copiado!`;
     el.title = 'Copiado!';
     el.classList.add('sidebar-cluster-name--copied');
     setTimeout(() => {
@@ -586,14 +605,14 @@ let currentPage = 'overview';
 // O id 'overview' é mantido por compatibilidade (hash #overview, page-overview,
 // sectionCardsHealth, refreshSection('health')…); o rótulo é "Sinais Vitais".
 const PAGE_META = {
-  overview: { title: 'Sinais Vitais do Cluster', subtitle: 'Está tudo funcionando agora? Saúde, recursos e disponibilidade ao vivo' },
-  capacity: { title: 'Inventário', subtitle: 'Nós, volume de dados e higiene de configuração dos índices' },
-  insights: { title: 'Diagnóstico', subtitle: 'Leitura interpretada dos dados do cluster — o que merece atenção' },
-  kibana:   { title: 'Kibana', subtitle: 'Instâncias, Task Manager, frota do Fleet e APM Server' },
-  logstash: { title: 'Logstash', subtitle: 'Instâncias, vazão de eventos, pipelines, filas e DLQ' },
-  cluster:  { title: 'Cluster', subtitle: 'Ajustes de _cluster/settings que o Kibana não expõe' },
-  config:   { title: 'Configuração', subtitle: 'Integrações e preferências desta conexão' },
-  help:     { title: 'Ajuda', subtitle: 'O que cada métrica significa e como agir' },
+  overview: { title: 'Sinais Vitais', subtitle: 'Está tudo funcionando agora? Saúde, recursos e disponibilidade ao vivo.' },
+  capacity: { title: 'Inventário', subtitle: 'Nós, volume de dados e higiene de configuração dos índices.' },
+  insights: { title: 'Diagnóstico', subtitle: 'Leitura interpretada dos dados do cluster — o que merece atenção.' },
+  kibana:   { title: 'Kibana', subtitle: 'Instâncias, Task Manager, frota do Fleet e APM Server.' },
+  logstash: { title: 'Logstash', subtitle: 'Instâncias, vazão de eventos, pipelines, filas e DLQ.' },
+  cluster:  { title: 'Cluster', subtitle: 'Ajustes de _cluster/settings que o Kibana não expõe.' },
+  config:   { title: 'Configuração', subtitle: 'Integrações e preferências desta conexão.' },
+  help:     { title: 'Ajuda', subtitle: 'O que cada métrica significa e como agir.' },
 };
 
 const PAGES = ['overview', 'capacity', 'insights', 'kibana', 'logstash', 'cluster', 'config', 'help'];
@@ -607,10 +626,14 @@ function showPage(page) {
     const sec = document.getElementById('page-' + p);
     if (sec) sec.hidden = p !== page;
     const nav = document.getElementById('nav-' + p);
-    if (nav) nav.classList.toggle('active', p === page);
+    if (nav) {
+      nav.classList.toggle('is-current', p === page);
+      if (p === page) nav.setAttribute('aria-current', 'page'); else nav.removeAttribute('aria-current');
+    }
   }
-  document.getElementById('topbarTitle').textContent = PAGE_META[page].title;
-  document.getElementById('topbarSubtitle').textContent = PAGE_META[page].subtitle;
+  document.getElementById('pageTitle').textContent = PAGE_META[page].title;
+  document.getElementById('pageSubtitle').textContent = PAGE_META[page].subtitle;
+  document.getElementById('topbarCrumb').textContent = PAGE_META[page].title;
   // O timestamp / refresh só fazem sentido onde há dado ao vivo para recarregar.
   document.getElementById('topbarActions').style.visibility =
     REFRESHABLE_PAGES.has(page) ? 'visible' : 'hidden';
@@ -647,10 +670,7 @@ window.addEventListener('hashchange', () => {
 });
 
 function toggleSidebar() {
-  const sb = document.getElementById('sidebar');
-  const collapsed = sb.classList.toggle('collapsed');
-  document.getElementById('collapseIcon').className =
-    collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
+  document.getElementById('sidebar').classList.toggle('collapsed');
 }
 
 // ─── Ajuda: busca na documentação ─────────────────────────
@@ -1297,8 +1317,7 @@ async function loadDashboard() {
     // Capacidade compartilha o mesmo dashboardData — re-renderiza quando ativa.
     if (currentPage === 'capacity') renderCapacity(data);
 
-    document.getElementById('lastUpdated').textContent =
-      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+    setUpdatedNow();
   } catch (e) {
     if (e.message === 'unauthorized') return;  // página já está recarregando
     grid.innerHTML = `<div class="error-state">
@@ -1327,8 +1346,7 @@ async function loadCapacity() {
     renderCapacity(data);
     // O badge do Diagnóstico sai do mesmo dashboardData — segue o dado novo.
     renderInsights();
-    document.getElementById('lastUpdated').textContent =
-      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+    setUpdatedNow();
   } catch (e) {
     if (e.message === 'unauthorized') return;  // página já está recarregando
     grid.innerHTML = `<div class="error-state">
@@ -4444,8 +4462,7 @@ async function loadIntegrationPage(key, render) {
     if (data.error) throw new Error(data.error);
     integrationData[key] = data;
     render(data);
-    document.getElementById('lastUpdated').textContent =
-      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+    setUpdatedNow();
   } catch (e) {
     page.innerHTML = `<div class="error-state">
       <i class="fas fa-triangle-exclamation"></i>
@@ -5814,8 +5831,7 @@ async function loadCluster() {
     clusterSettings = data.settings;
     clusterShardBudget = data.shard_budget || null;
     renderCluster();
-    document.getElementById('lastUpdated').textContent =
-      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+    setUpdatedNow();
   } catch (e) {
     clusterSettings = null;
     clusterShardBudget = null;

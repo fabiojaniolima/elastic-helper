@@ -12,6 +12,67 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+<!-- Ícones do design system (estilo Lucide, 24×24). Uso: <svg class="eh-icon" …><use href="#i-nome"/></svg>,
+     ou icon(nome, tamanho) no app.js. Traço e cor vêm do <svg> que referencia (currentColor). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7l10-5z"></path><path d="m2 17 10 5 10-5"></path><path d="m2 12 10 5 10-5"></path></symbol>
+  <symbol id="i-chevrons-up-down" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></symbol>
+  <symbol id="i-heart-pulse" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"></path></symbol>
+  <symbol id="i-package" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"></path><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></symbol>
+  <symbol id="i-lightbulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></symbol>
+  <symbol id="i-chart-line" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"></path><path d="m19 9-5 5-4-4-3 3"></path></symbol>
+  <symbol id="i-workflow" viewBox="0 0 24 24"><rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"></rect><rect width="20" height="8" x="2" y="14" rx="2"></rect><path d="M6 6h.01"></path><path d="M6 18h.01"></path></symbol>
+  <symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"></path></symbol>
+  <symbol id="i-circle-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></symbol>
+  <symbol id="i-panel-left-close" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18M16 15l-3-3 3-3"></path></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10"></path><path d="M18.4 6.6a9 9 0 1 1-12.77.04"></path></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></symbol>
+  <symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"></path><path d="M3.34 19a10 10 0 1 1 17.32 0"></path></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"></path></symbol>
+  <symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="M7 21h10"></path><path d="M12 3v18"></path><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"></path></symbol>
+  <symbol id="i-arrow-left-right" viewBox="0 0 24 24"><path d="m16 3 4 4-4 4"></path><path d="M20 7H4"></path><path d="m8 21-4-4 4-4"></path><path d="M4 17h16"></path></symbol>
+  <symbol id="i-key-round" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"></circle><path d="m21 2-9.6 9.6"></path><path d="m15.5 7.5 3 3L22 7l-3-3"></path></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"></path></symbol>
+  <symbol id="i-trash-2" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="m4.9 4.9 14.2 14.2"></path></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"></path><path d="M7 3v4a1 1 0 0 0 1 1h7"></path></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"></path></symbol>
+  <symbol id="i-layout-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></symbol>
+  <symbol id="i-clipboard-check" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></symbol>
+  <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5v14a9 3 0 0 0 18 0V5"></path><path d="M3 12a9 3 0 0 0 18 0"></path></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></symbol>
+  <symbol id="i-hard-drive" viewBox="0 0 24 24"><path d="M22 12H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><path d="M6 16h.01M10 16h.01"></path></symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"></path><path d="M5 21h14"></path></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"></path></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path></symbol>
+  <symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path><circle cx="12" cy="12" r="2"></circle><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></symbol>
+  <symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01M3 6h.01M3 18h.01M8 6h13M8 12h13M8 18h13"></path></symbol>
+  <symbol id="i-circle-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></symbol>
+  <symbol id="i-waves" viewBox="0 0 24 24"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"></path></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path><path d="M12 15V3"></path></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"></path><path d="m8 6-6 6 6 6"></path></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M8 21h8M12 17v4"></path></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="4" rx="2"></rect><rect width="6" height="6" x="9" y="9" rx="1"></rect><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"></path></symbol>
+  <symbol id="i-memory-stick" viewBox="0 0 24 24"><path d="M6 19v-3M10 19v-3M14 19v-3M18 19v-3M8 11V9M16 11V9M12 11V9M2 15h20M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1.1a2 2 0 0 0 0 3.837V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5.1a2 2 0 0 0 0-3.837Z"></path></symbol>
+</svg>
 
 <!-- ═══════════════════ CONNECTION MODAL ═══════════════════ -->
 <div class="modal-overlay" id="connectModal">
@@ -162,99 +223,102 @@
 </div>
 
 <!-- ═══════════════════ MAIN APP ═══════════════════════════ -->
-<div class="app" id="app" style="display:none">
+<div class="app eh-shell" id="app" style="display:none">
 
   <!-- ─────────────── SIDEBAR ─────────────── -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-      <div class="sidebar-brand-icon"><i class="fas fa-layer-group"></i></div>
-      <div class="sidebar-brand-name">
-        <span class="sidebar-brand-text">Elastic Helper</span>
-        <span class="brand-badge">Beta</span>
-      </div>
+  <aside class="eh-sidebar sidebar" id="sidebar">
+    <div class="eh-brand">
+      <span class="eh-brand__mark" aria-hidden="true"><svg class="eh-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-layers"/></svg></span>
+      <span class="eh-brand__name">Elastic Helper</span>
+      <span class="eh-brand__beta">Beta</span>
     </div>
 
     <div class="sidebar-cluster" id="sidebarCluster"></div>
 
-    <nav class="sidebar-nav">
-      <div class="nav-group-label">Monitoramento</div>
-      <div class="nav-item active" id="nav-overview" onclick="showPage('overview')">
-        <span class="nav-item-bar"></span>
-        <i class="fas fa-heart-pulse nav-item-icon"></i>
-        <span class="nav-item-text">Sinais Vitais</span>
-      </div>
-      <div class="nav-item" id="nav-capacity" onclick="showPage('capacity')">
-        <span class="nav-item-bar"></span>
-        <i class="fas fa-boxes-stacked nav-item-icon"></i>
-        <span class="nav-item-text">Inventário</span>
-      </div>
-      <div class="nav-item" id="nav-insights" onclick="showPage('insights')">
-        <span class="nav-item-bar"></span>
-        <i class="fas fa-lightbulb nav-item-icon"></i>
-        <span class="nav-item-text">Diagnóstico<span class="nav-badge" id="insightsBadge" hidden></span></span>
-      </div>
-      <!-- Integrações: só aparecem com a respectiva ativação na Configuração
-           (applyIntegrationNav); a ordem aqui é a ordem exibida na sidebar -->
-      <div class="nav-item" id="nav-kibana" onclick="showPage('kibana')" style="display:none">
-        <span class="nav-item-bar"></span>
-        <i class="fas fa-chart-line nav-item-icon"></i>
-        <span class="nav-item-text">Kibana</span>
-      </div>
-      <div class="nav-item" id="nav-logstash" onclick="showPage('logstash')" style="display:none">
-        <span class="nav-item-bar"></span>
-        <i class="fas fa-diagram-project nav-item-icon"></i>
-        <span class="nav-item-text">Logstash</span>
+    <nav class="eh-sidebar__nav" aria-label="Principal">
+      <div class="eh-sidebar__group">
+        <div class="eh-overline eh-sidebar__grouplabel">Monitoramento</div>
+        <a class="eh-nav" id="nav-overview" href="#overview" onclick="showPage('overview');return false;" title="Sinais Vitais">
+          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-heart-pulse"/></svg>
+          <span class="eh-nav__label">Sinais Vitais</span>
+        </a>
+        <a class="eh-nav" id="nav-capacity" href="#capacity" onclick="showPage('capacity');return false;" title="Inventário">
+          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-package"/></svg>
+          <span class="eh-nav__label">Inventário</span>
+        </a>
+        <a class="eh-nav" id="nav-insights" href="#insights" onclick="showPage('insights');return false;" title="Diagnóstico">
+          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-lightbulb"/></svg>
+          <span class="eh-nav__label">Diagnóstico</span>
+          <span class="eh-badge eh-badge--count eh-badge--warning" id="insightsBadge" hidden></span>
+        </a>
+        <!-- Integrações: só aparecem com a respectiva ativação na Configuração
+             (applyIntegrationNav); a ordem aqui é a ordem exibida na sidebar -->
+        <a class="eh-nav" id="nav-kibana" href="#kibana" onclick="showPage('kibana');return false;" title="Kibana" style="display:none">
+          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chart-line"/></svg>
+          <span class="eh-nav__label">Kibana</span>
+        </a>
+        <a class="eh-nav" id="nav-logstash" href="#logstash" onclick="showPage('logstash');return false;" title="Logstash" style="display:none">
+          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-workflow"/></svg>
+          <span class="eh-nav__label">Logstash</span>
+        </a>
       </div>
 
       <!-- Administração: páginas que alteram o cluster (as de Monitoramento só leem) -->
-      <div class="nav-group-label">Administração</div>
-      <div class="nav-item" id="nav-cluster" onclick="showPage('cluster')">
-        <span class="nav-item-bar"></span>
-        <i class="fas fa-gears nav-item-icon"></i>
-        <span class="nav-item-text">Cluster</span>
+      <div class="eh-sidebar__group">
+        <div class="eh-overline eh-sidebar__grouplabel">Administração</div>
+        <a class="eh-nav" id="nav-cluster" href="#cluster" onclick="showPage('cluster');return false;" title="Cluster">
+          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-server"/></svg>
+          <span class="eh-nav__label">Cluster</span>
+        </a>
       </div>
 
-      <div class="nav-group-label">Suporte</div>
-      <div class="nav-item" id="nav-config" onclick="showPage('config')">
-        <span class="nav-item-bar"></span>
-        <i class="fas fa-sliders nav-item-icon"></i>
-        <span class="nav-item-text">Configuração</span>
-      </div>
-      <div class="nav-item" id="nav-help" onclick="showPage('help')">
-        <span class="nav-item-bar"></span>
-        <i class="fas fa-circle-question nav-item-icon"></i>
-        <span class="nav-item-text">Ajuda</span>
+      <div class="eh-sidebar__group">
+        <div class="eh-overline eh-sidebar__grouplabel">Suporte</div>
+        <a class="eh-nav" id="nav-config" href="#config" onclick="showPage('config');return false;" title="Configuração">
+          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>
+          <span class="eh-nav__label">Configuração</span>
+        </a>
+        <a class="eh-nav" id="nav-help" href="#help" onclick="showPage('help');return false;" title="Ajuda">
+          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-circle-help"/></svg>
+          <span class="eh-nav__label">Ajuda</span>
+        </a>
       </div>
     </nav>
 
-    <div class="sidebar-footer">
-      <div class="sidebar-collapse" onclick="toggleSidebar()" title="Recolher/expandir">
-        <i class="fas fa-chevron-left" id="collapseIcon"></i>
-        <span class="nav-item-text">Recolher</span>
-      </div>
-      <button class="sidebar-disconnect" onclick="disconnect()">
-        <i class="fas fa-power-off"></i>
-        <span class="nav-item-text">Desconectar</span>
+    <div class="eh-sidebar__spacer"></div>
+    <div class="eh-sidebar__foot">
+      <button type="button" class="eh-btn eh-btn--ghost eh-btn--nav sidebar-collapse" onclick="toggleSidebar()" title="Recolher/expandir" aria-label="Recolher menu">
+        <svg class="eh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-panel-left-close"/></svg>
+        <span class="eh-nav__label">Recolher menu</span>
+      </button>
+      <button type="button" class="eh-btn eh-btn--ghost eh-btn--nav" onclick="disconnect()" aria-label="Desconectar">
+        <svg class="eh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-power"/></svg>
+        <span class="eh-nav__label">Desconectar</span>
       </button>
     </div>
   </aside>
 
   <!-- ─────────────── MAIN AREA ─────────────── -->
-  <main class="main-area">
-    <header class="topbar">
-      <div class="topbar-titles">
-        <div class="topbar-title" id="topbarTitle">Sinais Vitais do Cluster</div>
-        <div class="topbar-subtitle" id="topbarSubtitle">Está tudo funcionando agora? Saúde, recursos e disponibilidade ao vivo</div>
-      </div>
-      <div class="topbar-actions" id="topbarActions">
-        <span class="last-updated" id="lastUpdated"></span>
-        <button class="topbar-refresh" onclick="refreshCurrentPage()" title="Atualizar (R)">
-          <i class="fas fa-rotate-right" id="refreshIcon"></i>
+  <main class="eh-shell__main main-area">
+    <header class="eh-topbar">
+      <nav class="eh-crumbs" aria-label="Trilha">
+        <span class="eh-crumbs__item" id="topbarConn"></span>
+        <span class="eh-crumbs__sep" aria-hidden="true">/</span>
+        <span class="eh-crumbs__here" id="topbarCrumb">Sinais Vitais</span>
+      </nav>
+      <div class="eh-topbar__right" id="topbarActions">
+        <span class="eh-topbar__updated" id="lastUpdated"></span>
+        <button type="button" class="eh-iconbtn eh-iconbtn--sm eh-iconbtn--outline" onclick="refreshCurrentPage()" title="Atualizar (R)" aria-label="Atualizar tudo">
+          <svg class="eh-icon" id="refreshIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
         </button>
       </div>
     </header>
 
     <div class="page-scroll">
+      <div class="eh-pagehead page-head">
+        <h1 class="eh-pagehead__title" id="pageTitle">Sinais Vitais</h1>
+        <p class="eh-pagehead__desc" id="pageSubtitle">Está tudo funcionando agora? Saúde, recursos e disponibilidade ao vivo.</p>
+      </div>
 
       <!-- ========== SINAIS VITAIS (id interno: overview) ========== -->
       <section class="page page-overview" id="page-overview">
@@ -345,9 +409,8 @@
       </section>
 
       <!-- ========== RODAPÉ (rola com o conteúdo, sem posição fixa) ========== -->
-      <footer class="app-footer">
-        Desenvolvido por
-        <a href="https://fabiojanio.com" target="_blank" rel="noopener noreferrer">fabiojanio.com</a>
+      <footer class="eh-footer app-footer">
+        <span>Desenvolvido por <a href="https://fabiojanio.com" target="_blank" rel="noopener noreferrer">fabiojanio.com</a></span>
       </footer>
 
     </div>
