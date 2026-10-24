@@ -19,6 +19,12 @@ function formatBytes(bytes) {
   return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
 }
 
+// Tamanho para exibição na tela, com vírgula decimal ("105,24 GB"). O Exportar
+// lista continua usando formatBytes, para o arquivo gerado não mudar.
+function fmtBytes(bytes) {
+  return formatBytes(bytes).replace('.', ',');
+}
+
 function parseSizeStr(str) {
   if (!str || str === '-') return 0;
   const units = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3, tb: 1024 ** 4 };
@@ -30,6 +36,14 @@ function parseSizeStr(str) {
 function fmtNum(n) {
   if (n == null || n === '') return '-';
   return Number(n).toLocaleString('pt-BR');
+}
+
+// Percentual para exibição, com vírgula decimal (o valor numérico não muda).
+function fmtPct(n, digits) {
+  const v = Number(n);
+  if (!isFinite(v)) return '—';
+  const txt = digits == null ? String(v) : v.toFixed(digits);
+  return txt.replace('.', ',') + '%';
 }
 
 function fmtMillisDate(ms) {
@@ -86,9 +100,8 @@ function escHtml(str) {
 // Ícone do design system (sprite #i-<nome> no index.html; traço 1.75, currentColor).
 // `cls` acrescenta classes ao <svg> (ex.: 'spin' no ícone de carregando).
 function icon(name, size = 16, cls = '') {
-  return `<svg class="eh-icon${cls ? ' ' + cls : ''}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" ` +
-    `stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
-    `<use href="#i-${name}"></use></svg>`;
+  return `<svg class="eh-icon${cls ? ' ' + cls : ''}" width="${size}" height="${size}" aria-hidden="true">` +
+    `<use href="#i-${name}"/></svg>`;
 }
 
 // Carimbo "Atualizado às" da topbar, com o ponto ao vivo.
@@ -104,23 +117,31 @@ function pctColor(pct) {
   return 'green';
 }
 
+// Cor de nível devolvida pelas funções de regra ('green'/'yellow'/'red') → classe
+// de apresentação do design system: normal é cinza/texto, não verde.
+const LEVEL_CLASS = { green: 'normal', yellow: 'warning', red: 'danger' };
+function levelClass(color) {
+  return LEVEL_CLASS[color] || 'none';
+}
+
 function healthColor(status) {
   return { green: 'green', yellow: 'yellow', red: 'red' }[status] || 'gray';
 }
 
-// `topic` (opcional) torna o "?" clicável: o hover continua mostrando o resumo,
-// mas o clique leva à página de Ajuda, direto na explicação detalhada do card.
+// "?" de ajuda (IconButton xs `circle-help`) com o resumo num balão ao passar o
+// mouse ou focar. `topic` (opcional) torna o "?" clicável: o clique leva à página
+// de Ajuda, direto na explicação detalhada do card.
 function tooltip(text, topic) {
   if (topic) {
-    return `<div class="tooltip-wrap">
-    <div class="tooltip-btn tooltip-btn-link" onclick="event.stopPropagation();goToHelp('${topic}')">?</div>
-    <div class="tooltip-box">${text}<div class="tooltip-help-hint"><i class="fas fa-circle-question"></i> Clique no <strong>?</strong> para abrir a ajuda detalhada</div></div>
-  </div>`;
+    return `<span class="tooltip-wrap">
+    <button type="button" class="eh-iconbtn eh-iconbtn--xs eh-iconbtn--ghost tooltip-btn tooltip-btn-link" aria-label="Abrir a ajuda deste item" onclick="event.stopPropagation();goToHelp('${topic}')">${icon('circle-help', 15)}</button>
+    <span class="tooltip-box" role="tooltip">${text}<span class="tooltip-help-hint">${icon('circle-help', 14)} Clique no <strong>?</strong> para abrir a ajuda detalhada</span></span>
+  </span>`;
   }
-  return `<div class="tooltip-wrap">
-    <div class="tooltip-btn">?</div>
-    <div class="tooltip-box">${text}</div>
-  </div>`;
+  return `<span class="tooltip-wrap">
+    <button type="button" class="eh-iconbtn eh-iconbtn--xs eh-iconbtn--ghost tooltip-btn" aria-label="Mais informações" onclick="event.stopPropagation()">${icon('circle-help', 15)}</button>
+    <span class="tooltip-box" role="tooltip">${text}</span>
+  </span>`;
 }
 
 // ─── Connection ───────────────────────────────────────────
@@ -210,7 +231,7 @@ async function doConnect(payload, btn) {
   const original = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Conectando...';
+    btn.innerHTML = '<svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Conectando...';
   }
 
   try {
@@ -264,7 +285,7 @@ async function testConnection() {
 
   const original = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Testando...';
+  btn.innerHTML = '<svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Testando...';
 
   try {
     const res = await fetch('/api/test_connection', {
@@ -314,7 +335,7 @@ function renderConnList(conns) {
       </div>
       <button class="conn-item-gear" title="Configurar"
         onclick="event.stopPropagation(); editConnection(${c.id})">
-        <i class="fas fa-gear"></i>
+        <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>
       </button>
     </div>
   `).join('');
@@ -530,7 +551,7 @@ async function persistConnection(alias, btn, errEl) {
   const url = editing ? '/api/connections/' + editingConnId : '/api/connections';
   const original = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+  btn.innerHTML = '<svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Salvando...';
 
   try {
     const res = await fetch(url, {
@@ -727,7 +748,7 @@ function setActiveTocLink(topic) {
 // cards existem / quando cada um aparece).
 const HELP_CONTENT = [
   {
-    label: 'Saúde e Infraestrutura', icon: 'fa-heart-pulse',
+    label: 'Saúde e Infraestrutura', icon: 'heart-pulse',
     topics: [
       {
         id: 'help-cluster-health', q: 'Saúde do Cluster',
@@ -819,7 +840,7 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Sinais de Alerta', icon: 'fa-triangle-exclamation',
+    label: 'Sinais de Alerta', icon: 'triangle-alert',
     topics: [
       {
         id: 'help-pending-tasks', q: 'Tarefas Pendentes',
@@ -863,7 +884,7 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Utilização de Recursos', icon: 'fa-microchip',
+    label: 'Utilização de Recursos', icon: 'cpu',
     topics: [
       {
         id: 'help-resource-table', q: 'Utilização por Nó',
@@ -884,7 +905,7 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Configuração de Índices', icon: 'fa-layer-group',
+    label: 'Configuração de Índices', icon: 'layers',
     topics: [
       {
         id: 'help-without-replicas', q: 'Sem Réplica',
@@ -917,7 +938,7 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Tarefas em Execução', icon: 'fa-list-check',
+    label: 'Tarefas em Execução', icon: 'list',
     topics: [
       {
         id: 'help-running-tasks', q: 'Tarefas em Execução',
@@ -934,7 +955,7 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Página de Diagnóstico', icon: 'fa-lightbulb',
+    label: 'Página de Diagnóstico', icon: 'lightbulb',
     topics: [
       {
         id: 'help-insights-overview', q: 'O que é a página de Diagnóstico',
@@ -974,7 +995,7 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Página Kibana', icon: 'fa-chart-line',
+    label: 'Página Kibana', icon: 'chart-line',
     topics: [
       {
         id: 'help-kibana-config', q: 'Configuração e de onde vêm os dados',
@@ -1042,7 +1063,7 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Página Logstash', icon: 'fa-diagram-project',
+    label: 'Página Logstash', icon: 'workflow',
     topics: [
       {
         id: 'help-logstash-config', q: 'Configuração e de onde vêm os dados',
@@ -1155,7 +1176,7 @@ const HELP_CONTENT = [
     ],
   },
   {
-    label: 'Página Cluster', icon: 'fa-gears',
+    label: 'Página Cluster', icon: 'server',
     topics: [
       {
         id: 'help-cluster-page', q: 'Ajustes do cluster',
@@ -1228,7 +1249,7 @@ function renderHelp() {
 
   container.innerHTML = HELP_CONTENT.map(group => `
     <section class="help-section">
-      <h2 class="help-section-title"><i class="fas ${group.icon}"></i> ${group.label}</h2>
+      <h2 class="help-section-title">${icon(group.icon, 18)} ${group.label}</h2>
       ${group.topics.map(renderHelpItem).join('')}
     </section>`).join('');
 
@@ -1295,11 +1316,11 @@ async function fetchDashboard(sections) {
 
 async function loadDashboard() {
   const grid = document.getElementById('metricsGrid');
-  const icon = document.getElementById('refreshIcon');
-  icon.classList.add('spin');
+  const iconEl = document.getElementById('refreshIcon');
+  iconEl.classList.add('spin');
 
   grid.innerHTML = `<div class="loading-state">
-    <i class="fas fa-circle-notch fa-spin"></i>
+    <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
     <span>Carregando métricas...</span>
   </div>`;
 
@@ -1321,23 +1342,23 @@ async function loadDashboard() {
   } catch (e) {
     if (e.message === 'unauthorized') return;  // página já está recarregando
     grid.innerHTML = `<div class="error-state">
-      <i class="fas fa-triangle-exclamation"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
       <p>${e.message}</p>
     </div>`;
   } finally {
-    icon.classList.remove('spin');
+    iconEl.classList.remove('spin');
   }
 }
 
 // Página "Inventário": mesma fonte do dashboard, pedindo só as seções dela.
 async function loadCapacity() {
   const grid = document.getElementById('capacityGrid');
-  const icon = document.getElementById('refreshIcon');
+  const iconEl = document.getElementById('refreshIcon');
   if (!grid) return;
-  if (icon) icon.classList.add('spin');
+  if (iconEl) iconEl.classList.add('spin');
 
   grid.innerHTML = `<div class="loading-state">
-    <i class="fas fa-circle-notch fa-spin"></i>
+    <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
     <span>Carregando métricas...</span>
   </div>`;
 
@@ -1350,11 +1371,11 @@ async function loadCapacity() {
   } catch (e) {
     if (e.message === 'unauthorized') return;  // página já está recarregando
     grid.innerHTML = `<div class="error-state">
-      <i class="fas fa-triangle-exclamation"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
       <p>${escHtml(e.message)}</p>
     </div>`;
   } finally {
-    if (icon) icon.classList.remove('spin');
+    if (iconEl) iconEl.classList.remove('spin');
   }
 }
 
@@ -1368,14 +1389,24 @@ function refreshCurrentPage() {
 }
 
 // ─── Card Definitions ─────────────────────────────────────
-function section(label, sectionId) {
+// Cabeçalho de seção (SectionHeader do design system): título, "?" e badge
+// opcionais e, quando a seção tem id, o botão de atualizar só aquela seção.
+// opts: { tip, topic, badge, subtitle, actions, id }
+function section(label, sectionId, opts = {}) {
   const refreshBtn = sectionId
-    ? `<button class="btn-icon" onclick="refreshSection('${sectionId}')" title="Atualizar seção"><i class="fas fa-rotate-right" id="sectionRefreshIcon-${sectionId}"></i></button>`
+    ? `<button type="button" class="eh-iconbtn eh-iconbtn--sm eh-iconbtn--outline" onclick="refreshSection('${sectionId}')" title="Atualizar seção" aria-label="Atualizar ${escHtml(label.toLowerCase())}"><svg class="eh-icon" id="sectionRefreshIcon-${sectionId}" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg></button>`
     : '';
-  return `<div class="grid-section">
-    <span class="grid-section-label">${label}</span>
-    <span class="grid-section-line"></span>
-    ${refreshBtn}
+  const badge = opts.badge ? `<span class="eh-badge eh-badge--label eh-mono">${opts.badge}</span>` : '';
+  const tip = opts.tip ? tooltip(opts.tip, opts.topic) : '';
+  const actions = (opts.actions || '') + refreshBtn;
+  return `<div class="eh-sectionhead">
+    <div class="eh-sectionhead__titles">
+      <div class="eh-sectionhead__row">
+        <h2 class="eh-sectionhead__title"${opts.id ? ` id="${opts.id}"` : ''}>${label}</h2>${badge}${tip}
+      </div>
+      ${opts.subtitle ? `<p class="eh-sectionhead__sub">${opts.subtitle}</p>` : ''}
+    </div>
+    ${actions ? `<div class="eh-sectionhead__actions">${actions}</div>` : ''}
   </div>`;
 }
 
@@ -1384,7 +1415,7 @@ function sectionCardsHealth(d) {
   const totalShards = d.total_shards || 0;
   return [
     cardHealth(h, d.es_version, d.license),
-    cardStat('openShardsDetail()', 'Total de Shards', 'fa-cubes', fmtNum(totalShards), 'shards (primários + réplicas)', 'blue',
+    cardStat('openShardsDetail()', 'Total de Shards', 'layers', fmtNum(totalShards), 'shards (primários + réplicas)', 'blue',
       'Número total de shards configurados (primários + réplicas). Muitos shards por nó pressionam a memória do master; a regra prática é manter abaixo de ~20 shards por GB de heap.',
       [
         // % de shards ativos só aparece quando < 100% (cluster com shards não
@@ -1462,11 +1493,11 @@ function cardAlertSignals(d, h) {
     'Bloqueios <em>read-only manuais</em> (fora do ILM) não são incidente e aparecem como apontamento na página <strong>Diagnóstico</strong>; read-only definido pelo ILM é esperado. Clique para listar os índices bloqueados e a categoria de cada um.';
 
   return [
-    signalItem('pending_tasks', 'Tarefas Pendentes', 'Tarefas de cluster state aguardando o nó master', 'fa-list-check', 'Tarefas Pendentes', pending, pendColor, pendSub, pendTip, 'help-pending-tasks'),
-    signalItem('ilm_errors', 'ILM com Falha', '', 'fa-circle-exclamation', 'ILM com Falha', ilm, ilmColor, ilmSub, ilmTip, 'help-ilm-errors'),
-    signalItem('circuit_breakers', 'Circuit Breakers', '', 'fa-bolt', 'Circuit Breakers', cb, cbColor, cbSub, cbTip, 'help-circuit-breakers'),
-    signalItem('slm_policies', 'Políticas de Snapshot (SLM)', 'Último backup, falhas e agendamento', 'fa-database', 'Backup (SLM)', slmVal, slmColor, slmSub, slmTip, 'help-slm-policies'),
-    signalItem('read_only_indices', 'Índices Read-only', '', 'fa-water', 'Flood-stage', flood, floodColor, floodSub, floodTip, 'help-flood-stage'),
+    signalItem('pending_tasks', 'Tarefas Pendentes', 'Tarefas de cluster state aguardando o nó master', 'list', 'Tarefas Pendentes', pending, pendColor, pendSub, pendTip, 'help-pending-tasks'),
+    signalItem('ilm_errors', 'ILM com Falha', '', 'circle-alert', 'ILM com Falha', ilm, ilmColor, ilmSub, ilmTip, 'help-ilm-errors'),
+    signalItem('circuit_breakers', 'Circuit Breakers', '', 'zap', 'Circuit Breakers', cb, cbColor, cbSub, cbTip, 'help-circuit-breakers'),
+    signalItem('slm_policies', 'Políticas de Snapshot (SLM)', 'Último backup, falhas e agendamento', 'database', 'Backup (SLM)', slmVal, slmColor, slmSub, slmTip, 'help-slm-policies'),
+    signalItem('read_only_indices', 'Índices Read-only', '', 'waves', 'Flood-stage', flood, floodColor, floodSub, floodTip, 'help-flood-stage'),
   ].join('');
 }
 
@@ -1485,15 +1516,15 @@ function cardSnapshotRunning(d) {
   }
   const tip = 'Snapshots em <strong>criação</strong> neste momento — visão ao vivo de qual backup está rodando, em qual repositório, há quanto tempo e o progresso total (bytes e shards).<br><br>' +
     'Clique para abrir o painel com barra de progresso por snapshot em andamento.';
-  return cardStat('openSnapshotModal()', 'Snapshot em Execução', 'fa-camera', valueHtml, unit, color, tip, [], 'help-snapshot-running');
+  return cardStat('openSnapshotModal()', 'Snapshot em Execução', 'camera', valueHtml, unit, color, tip, [], 'help-snapshot-running');
 }
 
 // color: 'green' (ok, com check) | 'yellow'/'red'/'blue' (alerta, sub colorido) |
 // 'muted' (indisponível — renderiza '—' em vez do número, sem check nem cor).
-function signalItem(metric, detailTitle, detailSub, icon, label, value, color, sub, tip, topic) {
+function signalItem(metric, detailTitle, detailSub, ic, label, value, color, sub, tip, topic) {
   const numHtml = color === 'muted' ? '&mdash;' : fmtNum(value);
   const subHtml = color === 'green'
-    ? `<i class="fas fa-check signal-ok-icon"></i> ${sub}`
+    ? `<svg class="eh-icon signal-ok-icon" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg> ${sub}`
     : sub;
   const subStyle = (color === 'red' || color === 'yellow' || color === 'blue') ? `style="color:var(--${color})"` : '';
   const clickAttr = `onclick="openDetail('${metric}','${detailTitle}','${detailSub}')"`;
@@ -1501,7 +1532,7 @@ function signalItem(metric, detailTitle, detailSub, icon, label, value, color, s
     <div class="signal-num value-${color}">${numHtml}</div>
     <div class="signal-info">
       <div class="signal-title">
-        <i class="fas ${icon} signal-title-icon"></i>
+        ${icon(ic, 16, 'signal-title-icon')}
         <span class="signal-label">${label}</span>
       </div>
       <div class="signal-sub" ${subStyle}>${subHtml}</div>
@@ -1516,22 +1547,22 @@ function sectionCardsResources(d) {
 
 function sectionCardsIndices(d) {
   return [
-    cardCount('indices_without_replicas', 'Sem Réplica', 'fa-shield-halved', d.indices_without_replicas,
+    cardCount('indices_without_replicas', 'Sem Réplica', 'shield', d.indices_without_replicas,
       'índices', d.indices_without_replicas > 0 ? 'yellow' : 'green',
       d.indices_without_replicas > 0 ? 'yellow' : 'green',
       'Índices sem réplicas são pontos únicos de falha. A perda de um nó com um shard primário sem réplica resulta em perda de dados permanente.',
       [], null, 'help-without-replicas'),
-    cardCount('large_primary_shards', 'Shards Primários > 50 GB', 'fa-hard-drive', d.large_primary_shards,
+    cardCount('large_primary_shards', 'Shards Primários > 50 GB', 'hard-drive', d.large_primary_shards,
       'índices', d.large_primary_shards > 0 ? 'yellow' : 'green',
       d.large_primary_shards > 0 ? 'yellow' : 'green',
       'Sinaliza índices que têm <strong>algum shard primário individual</strong> acima de 50 GB (não a soma do índice). Shards primários grandes causam recuperação lenta, realocação demorada e queda de desempenho. Considere reindexar com mais shards ou revisar a política de ILM.',
       [], null, 'help-large-shards'),
-    cardCount('indices_without_ilm', 'Sem Política de ILM', 'fa-clock-rotate-left', d.indices_without_ilm,
+    cardCount('indices_without_ilm', 'Sem Política de ILM', 'history', d.indices_without_ilm,
       'índices', d.indices_without_ilm > 0 ? 'yellow' : 'green',
       d.indices_without_ilm > 0 ? 'yellow' : 'green',
       'Índices sem ILM podem crescer indefinidamente. O ILM automatiza a transição por fases (hot → warm → cold → delete), otimizando uso de recursos.',
       [], null, 'help-without-ilm'),
-    cardCount('ilm_without_delete', 'ILM sem Fase DELETE', 'fa-trash-can', d.ilm_without_delete,
+    cardCount('ilm_without_delete', 'ILM sem Fase DELETE', 'trash-2', d.ilm_without_delete,
       'políticas', d.ilm_without_delete > 0 ? 'yellow' : 'green',
       d.ilm_without_delete > 0 ? 'yellow' : 'green',
       'Políticas de ILM sem fase de exclusão acumulam dados antigos indefinidamente, levando ao esgotamento de disco ao longo do tempo.',
@@ -1593,13 +1624,13 @@ const SECTION_RENDERERS = {
 const CAPACITY_SECTIONS = ['volume', 'tierdisk', 'indices', 'topology'];
 
 async function refreshSection(sectionId) {
-  const icon = document.getElementById(`sectionRefreshIcon-${sectionId}`);
+  const iconEl = document.getElementById(`sectionRefreshIcon-${sectionId}`);
   const container = document.getElementById(`section-cards-${sectionId}`);
   if (!container) return;
   const fn = SECTION_RENDERERS[sectionId];
-  if (icon) icon.classList.add('spin');
+  if (iconEl) iconEl.classList.add('spin');
 
-  container.innerHTML = `<div class="loading-state section-loading"><i class="fas fa-circle-notch fa-spin"></i><span>Atualizando...</span></div>`;
+  container.innerHTML = `<div class="loading-state section-loading"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Atualizando...</span></div>`;
 
   try {
     // Só as métricas desta seção são consultadas no cluster; o resultado é
@@ -1614,7 +1645,7 @@ async function refreshSection(sectionId) {
     // mantém dados antigos: restaura a render da seção a partir do último estado
     if (fn && dashboardData) container.innerHTML = fn(dashboardData);
   } finally {
-    if (icon) icon.classList.remove('spin');
+    if (iconEl) iconEl.classList.remove('spin');
   }
 }
 
@@ -1653,7 +1684,7 @@ function cardHealth(h, version, license) {
   return `<div class="metric-card card-health-hero status-${color}" onclick="openDetail('cluster_health','Saúde por Índice','Status e shards por índice')">
     <div class="card-header">
       <div class="card-icon-title">
-        <div class="card-icon" style="--card-icon-bg:var(--${color}-bg);--card-icon-color:var(--${color})"><i class="fas fa-heart-pulse"></i></div>
+        <div class="card-icon" style="--card-icon-bg:var(--${color}-bg);--card-icon-color:var(--${color})"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-heart-pulse"/></svg></div>
         <div class="card-title">Saúde do Cluster</div>
       </div>
       ${tooltip(tip, 'help-cluster-health')}
@@ -1705,7 +1736,7 @@ function cardNodes(total, h, dedicatedMasters, nodes) {
   return `<div class="metric-card status-blue" onclick="openDetail('nodes','Nós do Cluster','Detalhes de CPU, Heap e Disco por nó')">
     <div class="card-header">
       <div class="card-icon-title">
-        <div class="card-icon"><i class="fas fa-server"></i></div>
+        <div class="card-icon"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-server"/></svg></div>
         <div class="card-title">Total de Nós</div>
       </div>
       ${tooltip(tip, 'help-total-nodes')}
@@ -1722,13 +1753,13 @@ function cardNodes(total, h, dedicatedMasters, nodes) {
   </div>`;
 }
 
-function cardCount(metric, title, icon, value, unit, valColor, cardStatus, tipText, footerStats, detailTitle, topic) {
+function cardCount(metric, title, ic, value, unit, valColor, cardStatus, tipText, footerStats, detailTitle, topic) {
   const iconBg = `--card-icon-bg:var(--${valColor}-bg);--card-icon-color:var(--${valColor})`;
   const dt = detailTitle || title;
   return `<div class="metric-card status-${cardStatus}" onclick="openDetail('${metric}','${dt}','')">
     <div class="card-header">
       <div class="card-icon-title">
-        <div class="card-icon" style="${iconBg}"><i class="fas ${icon}"></i></div>
+        <div class="card-icon" style="${iconBg}">${icon(ic, 16)}</div>
         <div class="card-title">${title}</div>
       </div>
       ${tooltip(tipText, topic)}
@@ -1742,7 +1773,7 @@ function cardCount(metric, title, icon, value, unit, valColor, cardStatus, tipTe
 }
 
 // Card de valor genérico (aceita HTML já formatado no valor, ex.: formatBytes).
-function cardStat(metric, title, icon, valueHtml, unit, color, tip, footerStats, topic) {
+function cardStat(metric, title, ic, valueHtml, unit, color, tip, footerStats, topic) {
   const iconBg = `--card-icon-bg:var(--${color}-bg);--card-icon-color:var(--${color})`;
   const click = metric
     ? ` onclick="${metric.includes('(') ? metric : `openDetail('${metric}','${title}','')`}"`
@@ -1751,7 +1782,7 @@ function cardStat(metric, title, icon, valueHtml, unit, color, tip, footerStats,
   return `<div class="metric-card status-${color}${staticCls}"${click}>
     <div class="card-header">
       <div class="card-icon-title">
-        <div class="card-icon" style="${iconBg}"><i class="fas ${icon}"></i></div>
+        <div class="card-icon" style="${iconBg}">${icon(ic, 16)}</div>
         <div class="card-title">${title}</div>
       </div>
       ${tip ? tooltip(tip, topic) : ''}
@@ -1798,7 +1829,7 @@ function tierDiskRow(tier, agg) {
       <div class="tier-disk-track"><div class="tier-disk-fill" style="width:${pct}%;background:var(--${color})"></div></div>
       <div class="tier-disk-pct text-${color}">${pct}%</div>
     </div>
-    <div class="tier-disk-bytes">${formatBytes(used)} usado · ${formatBytes(total)} total · ${formatBytes(free)} livre (${freePct}%)</div>
+    <div class="tier-disk-bytes">${fmtBytes(used)} usado · ${fmtBytes(total)} total · ${fmtBytes(free)} livre (${freePct}%)</div>
   </div>`;
 }
 
@@ -1811,11 +1842,11 @@ function sectionCardsTierDisk(d) {
     '<strong>FROZEN não entra:</strong> ' + FROZEN_DISK_NOTE;
   const body = order.length
     ? `<div class="tier-disk-list">${order.map(t => tierDiskRow(t, tiers[t])).join('')}</div>`
-    : `<div class="empty-state" style="padding:16px"><i class="fas fa-circle-info"></i><p>Sem dados de disco por tier — nenhum data node com role de tier (<code>data_hot/warm/cold</code>) reportou capacidade. Nós <strong>frozen</strong> não entram: o disco deles é cache de searchable snapshots.</p></div>`;
+    : `<div class="empty-state" style="padding:16px"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg><p>Sem dados de disco por tier — nenhum data node com role de tier (<code>data_hot/warm/cold</code>) reportou capacidade. Nós <strong>frozen</strong> não entram: o disco deles é cache de searchable snapshots.</p></div>`;
   return `<div class="metric-card metric-card-static card-full">
     <div class="card-header">
       <div class="card-icon-title">
-        <div class="card-icon"><i class="fas fa-hard-drive"></i></div>
+        <div class="card-icon"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-hard-drive"/></svg></div>
         <div class="card-title">Capacidade por tier</div>
       </div>
       ${tooltip(tip, 'help-tier-disk')}
@@ -1831,7 +1862,7 @@ function sectionCardsTierDisk(d) {
 
 const TOPOLOGY_TIER_ORDER = ['data_hot', 'data_warm', 'data_cold', 'data_frozen'];
 const TOPOLOGY_TIER_LABEL = { data_hot: 'HOT', data_warm: 'WARM', data_cold: 'COLD', data_frozen: 'FROZEN' };
-const TOPOLOGY_TIER_ICON  = { MASTER: 'fa-crown', HOT: 'fa-fire-flame-curved', WARM: 'fa-temperature-half', COLD: 'fa-snowflake', FROZEN: 'fa-icicles', OUTROS: 'fa-server' };
+const TOPOLOGY_TIER_ICON  = { MASTER: 'crown', HOT: 'hard-drive', WARM: 'hard-drive', COLD: 'hard-drive', FROZEN: 'hard-drive', OUTROS: 'server' };
 
 // Agrupa nós por camada; retorna array ordenado { label, nodes, sortKey, isMaster, isOthers }.
 function groupNodesByLayer(nodes) {
@@ -1894,7 +1925,7 @@ function topologyNodeCard(n, electedName) {
 function topologyConnector(label) {
   return `<div class="topology-connector">
     <div class="topology-connector-stem"></div>
-    <div class="topology-connector-badge"><i class="fas fa-arrow-down"></i>${label}</div>
+    <div class="topology-connector-badge"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-down"/></svg>${label}</div>
     <div class="topology-connector-stem"></div>
     <div class="topology-connector-arrow"></div>
   </div>`;
@@ -1903,10 +1934,10 @@ function topologyConnector(label) {
 // Bloco visual de uma camada: cabeçalho com ícone/rótulo + grid de cards de nó.
 function topologyLayerBlock(layer, electedName) {
   const firstLabel = layer.label.split(' / ')[0];
-  const icon = TOPOLOGY_TIER_ICON[firstLabel] || 'fa-server';
+  const ic = TOPOLOGY_TIER_ICON[firstLabel] || 'server';
   return `<div class="topology-layer${layer.isMasterLayer ? ' topology-layer-master' : ''}${layer.isOthers ? ' topology-layer-others' : ''}">
     <div class="topology-layer-label">
-      <i class="fas ${icon}"></i>
+      ${icon(ic, 16)}
       <span>${layer.label}</span>
     </div>
     <div class="topology-nodes">
@@ -1931,7 +1962,7 @@ function sectionCardsTopology(d) {
 
   const header = `<div class="card-header">
     <div class="card-icon-title">
-      <div class="card-icon"><i class="fas fa-sitemap"></i></div>
+      <div class="card-icon"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-workflow"/></svg></div>
       <div class="card-title">Topologia do Cluster</div>
     </div>
     ${tooltip(tip, 'help-cluster-topology')}
@@ -1939,7 +1970,7 @@ function sectionCardsTopology(d) {
 
   if (!allLayers.length) {
     return `<div class="metric-card metric-card-static card-full">${header}
-      <div class="empty-state" style="padding:16px"><i class="fas fa-circle-info"></i><p>Sem dados de nós disponíveis.</p></div>
+      <div class="empty-state" style="padding:16px"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg><p>Sem dados de nós disponíveis.</p></div>
     </div>`;
   }
 
@@ -1965,12 +1996,12 @@ function sectionCardsVolume(d) {
   const h = d.cluster_health || {};
   return [
     cardNodes(d.total_nodes, h, d.dedicated_master_nodes || 0, d.nodes_summary || []),
-    cardStat(null, 'Volume de Dados', 'fa-database', formatBytes(d.total_store_bytes || 0), 'em disco (store, com réplicas)', 'blue',
+    cardStat(null, 'Volume de Dados', 'database', fmtBytes(d.total_store_bytes || 0), 'em disco (store, com réplicas)', 'blue',
       'Soma do tamanho em disco de todos os índices (primários + réplicas, incluindo índices de sistema). ' +
       'No rodapé, o total de <strong>documentos indexados</strong>: a soma de <code>docs.count</code>, ' +
       'que não conta os documentos marcados para exclusão ainda não expurgados por merge.',
       [{ label: 'Documentos', val: fmtNum(d.total_docs || 0), color: null }], 'help-data-volume'),
-    cardCount('all_indices', 'Total de Índices', 'fa-layer-group', d.total_indices,
+    cardCount('all_indices', 'Total de Índices', 'layers', d.total_indices,
       'índices', 'blue', 'blue',
       'Contagem total de índices do cluster, incluindo índices de sistema (prefixo <code>.</code>). Uma contagem elevada pode impactar o desempenho — avalie o uso de data streams para séries temporais. Clique para listar todos os índices.',
       [],
@@ -2008,7 +2039,7 @@ function cardResourceTable(d) {
   return `<div class="metric-card card-full" onclick="openDetail('nodes','Nós do Cluster','Detalhes completos — roles, shards e recursos por nó')">
     <div class="card-header">
       <div class="card-icon-title">
-        <div class="card-icon"><i class="fas fa-server"></i></div>
+        <div class="card-icon"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-server"/></svg></div>
         <div class="card-title">Utilização por Nó</div>
       </div>
       ${tooltip(tip, 'help-resource-table')}
@@ -2240,12 +2271,12 @@ function openShardsDetail() {
   const delayedNote = delayed > 0 ? ` · ${fmtNum(delayed)} com atraso por timeout` : '';
   const noticeHtml = unassigned > 0 ? `
     <div class="shards-notice">
-      <i class="fas fa-circle-info"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
       <div class="shards-notice-text">
         <span class="shards-notice-main">${unassignedLabel}</span>
         <span class="shards-notice-sub">Pode incluir restaurações de snapshot e réplicas pendentes. Consulte o diagnóstico para ver o motivo de cada shard.${delayedNote}</span>
       </div>
-      <button class="btn btn-ghost shards-notice-btn" onclick="openDetail('allocation_explain','Diagnóstico de Alocação','Por que cada shard não aloca')"><i class="fas fa-arrow-right"></i> Ver diagnóstico</button>
+      <button class="btn btn-ghost shards-notice-btn" onclick="openDetail('allocation_explain','Diagnóstico de Alocação','Por que cada shard não aloca')"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg> Ver diagnóstico</button>
     </div>` : '';
 
   document.getElementById('detailBody').innerHTML = `
@@ -2260,11 +2291,11 @@ function openShardsDetail() {
       ${noticeHtml}
       <div class="shards-recovery">
         <div class="shards-recovery-head">
-          <h3><i class="fas fa-right-left"></i> Realocação e Recuperação de Shards</h3>
+          <h3><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-left-right"/></svg> Realocação e Recuperação de Shards</h3>
           <span id="recoveryCount" class="shards-recovery-count"></span>
         </div>
         <div id="recoveryBody">
-          <div class="loading-state section-loading"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando...</span></div>
+          <div class="loading-state section-loading"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando...</span></div>
         </div>
       </div>
     </div>`;
@@ -2329,7 +2360,7 @@ async function loadRecovery() {
     if (data.error) throw new Error(data.error);
     renderRecovery(data);
   } catch (e) {
-    body.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${e.message}</p></div>`;
+    body.innerHTML = `<div class="error-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg><p>${e.message}</p></div>`;
   }
 }
 
@@ -2341,7 +2372,7 @@ function renderRecovery(rows) {
   if (!rows || rows.length === 0) {
     if (countEl) countEl.textContent = '';
     body.innerHTML = `<div class="empty-state" style="padding:28px 16px">
-      <i class="fas fa-circle-check"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg>
       <p>Nenhuma realocação ou recuperação de shards em andamento.</p></div>`;
     return;
   }
@@ -2361,7 +2392,7 @@ function renderRecovery(rows) {
     const stagePart = `Stage: ${r.stage}${stageDesc ? ` — ${stageDesc}` : ''}`;
     const opTitle = `${typePart}\n\n${stagePart}`;
     const route = r.source_node && r.target_node
-      ? `${nodeCellByName(r.source_node)}<i class="fas fa-arrow-right-long rarrow"></i>${nodeCellByName(r.target_node)}`
+      ? `${nodeCellByName(r.source_node)}<svg class="eh-icon rarrow" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg>${nodeCellByName(r.target_node)}`
       : nodeCellByName(r.target_node || r.source_node);
     return `
       <div class="recovery-item">
@@ -2369,13 +2400,13 @@ function renderRecovery(rows) {
           <span class="recovery-index">${r.index}</span>
           <span class="recovery-shard">shard ${r.shard} · ${r.primary ? 'Primário' : 'Réplica'}</span>
           <span class="recovery-op" title="${escHtml(opTitle)}">${meta.label} / ${r.stage}</span>
-          <span class="recovery-time"><i class="far fa-clock"></i> ${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
+          <span class="recovery-time"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-clock"/></svg> ${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
         </div>
         <div class="recovery-route">${route}</div>
         <div class="recovery-progress">
           <div class="recovery-track"><div class="recovery-fill" style="width:${pct}%;background:var(--${fillColor})"></div></div>
           <span class="recovery-pct">${pct.toFixed(1)}%</span>
-          <span class="recovery-bytes">${formatBytes(r.bytes_recovered)} / ${formatBytes(r.bytes_total)}</span>
+          <span class="recovery-bytes">${fmtBytes(r.bytes_recovered)} / ${fmtBytes(r.bytes_total)}</span>
         </div>
         <div class="recovery-sub">
           <span>Arquivos ${fmtNum(r.files_recovered)} / ${fmtNum(r.files_total)} (${(r.files_percent || 0).toFixed(0)}%)</span>
@@ -2404,7 +2435,7 @@ async function openDetail(metric, title, subtitle) {
   document.getElementById('detailSearch').value = '';
   document.getElementById('detailSearchBar').style.display = '';
   document.getElementById('detailBody').innerHTML =
-    `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando...</span></div>`;
+    `<div class="loading-state"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando...</span></div>`;
   document.getElementById('detailModal').style.display = 'flex';
   document.querySelector('#detailModal .detail-card')
     .classList.toggle('detail-card--wide', WIDE_DETAIL_METRICS.has(metric));
@@ -2422,7 +2453,7 @@ async function openDetail(metric, title, subtitle) {
     renderDetailTable(metric, currentRows);
   } catch (e) {
     document.getElementById('detailBody').innerHTML =
-      `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${e.message}</p></div>`;
+      `<div class="error-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg><p>${e.message}</p></div>`;
   }
 }
 
@@ -2488,7 +2519,7 @@ function renderDetailTableBody(metric, rows) {
 // Mensagem de estado vazio por métrica (quando o detalhe não traz nenhuma linha).
 const EMPTY_MESSAGES = {
   slm_policies: {
-    icon: 'fa-database',
+    icon: 'database',
     text: 'Nenhuma política de snapshot (SLM) configurada — o cluster não tem backups automáticos. Crie uma política em Kibana → Stack Management → Snapshot and Restore (ou via <code>PUT _slm/policy</code>) para garantir recuperação em caso de perda de dados.',
   },
 };
@@ -2497,8 +2528,8 @@ function renderDetailTable(metric, rows) {
   const body = document.getElementById('detailBody');
 
   if (!rows.length) {
-    const empty = EMPTY_MESSAGES[metric] || { icon: 'fa-circle-check', text: 'Nenhum item encontrado' };
-    body.innerHTML = `<div class="empty-state"><i class="fas ${empty.icon}"></i><p>${empty.text}</p></div>`;
+    const empty = EMPTY_MESSAGES[metric] || { icon: 'circle-check', text: 'Nenhum item encontrado' };
+    body.innerHTML = `<div class="empty-state">${icon(empty.icon, 20)}<p>${empty.text}</p></div>`;
     document.getElementById('detailCount').textContent = '0 registros';
     setExportBtn(false);
     return;
@@ -2513,15 +2544,17 @@ function renderDetailTable(metric, rows) {
 // ─── Table Renderers ──────────────────────────────────────
 function healthBadge(status) {
   const c = healthColor(status || '');
-  return `<span class="badge badge-${c}">${status || '-'}</span>`;
+  // Palavra sempre escrita (Green/Yellow/Red), nunca só a cor.
+  const word = status ? status.charAt(0).toUpperCase() + status.slice(1) : '-';
+  return `<span class="badge badge-${c}">${status ? '<span class="eh-badge__dot"></span>' : ''}${word}</span>`;
 }
 
 function pctBar(val) {
   const n = parseFloat(val) || 0;
   const c = pctColor(n);
-  return `<div style="display:flex;align-items:center;gap:8px;width:100%">
-    <span style="font-weight:600;color:var(--${c})">${n}%</span>
-    <div class="progress-bar" style="flex:1"><div class="progress-fill progress-${c}" style="width:${Math.min(n, 100)}%"></div></div>
+  return `<div class="pct-cell">
+    <span class="pct-cell__val lvl-${levelClass(c)}">${fmtPct(n)}</span>
+    <div class="progress-bar"><div class="progress-fill progress-${c}" style="width:${Math.min(n, 100)}%"></div></div>
   </div>`;
 }
 
@@ -2534,9 +2567,9 @@ function gcOverheadColor(pct) {
 function gcOverheadBar(val) {
   const n = parseFloat(val) || 0;
   const c = gcOverheadColor(n);
-  return `<div style="display:flex;align-items:center;gap:8px;width:100%">
-    <span style="font-weight:600;color:var(--${c})">${n}%</span>
-    <div class="progress-bar" style="flex:1"><div class="progress-fill progress-${c}" style="width:${Math.min(n, 100)}%"></div></div>
+  return `<div class="pct-cell">
+    <span class="pct-cell__val lvl-${levelClass(c)}">${fmtPct(n)}</span>
+    <div class="progress-bar"><div class="progress-fill progress-${c}" style="width:${Math.min(n, 100)}%"></div></div>
   </div>`;
 }
 
@@ -2551,8 +2584,7 @@ function loadColor(load, availableProcessors) {
 function loadBadge(load, availableProcessors) {
   if (load == null || load === '') return '-';
   const c = loadColor(load, availableProcessors);
-  const colorVar = c === 'text-muted' ? 'var(--text-muted)' : `var(--${c})`;
-  return `<span style="font-variant-numeric:tabular-nums;font-weight:600;color:${colorVar}">${load}</span>`;
+  return `<span class="eh-mono lvl-${levelClass(c)}">${String(load).replace('.', ',')}</span>`;
 }
 
 function tableClusterHealth(rows) {
@@ -2572,7 +2604,7 @@ function tableClusterHealth(rows) {
   }).join('');
 
   const clearBtn = clusterHealthFilters.size
-    ? `<button class="tasks-filter-clear" onclick="clearClusterHealthFilter()"><i class="fas fa-xmark"></i> Limpar</button>`
+    ? `<button class="tasks-filter-clear" onclick="clearClusterHealthFilter()"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-x"/></svg> Limpar</button>`
     : '';
 
   const filterHtml = filterDefs.length
@@ -2647,8 +2679,8 @@ function tableOversharded(rows) {
       <td style="font-family:var(--font-mono);font-size:12px">${escHtml(r.index)}</td>
       <td>${fmtNum(r.pri)}</td>
       <td>${fmtNum(r.rep)}</td>
-      <td>${formatBytes(r.pri_store_bytes)}</td>
-      <td style="color:var(--yellow);font-weight:600">${formatBytes(r.avg_shard_bytes)}</td>
+      <td>${fmtBytes(r.pri_store_bytes)}</td>
+      <td style="color:var(--yellow);font-weight:600">${fmtBytes(r.avg_shard_bytes)}</td>
       <td>${fmtNum(r.docs)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -2666,9 +2698,9 @@ function tableLargeShards(rows) {
     <tbody>${rows.map(r => `<tr>
       <td style="font-family:var(--font-mono);font-size:12px">${r.index}</td>
       <td>${r.shard_count}</td>
-      <td style="color:var(--red);font-weight:600">${formatBytes(r.max_shard_bytes)}</td>
-      <td>${formatBytes(r.total_size_bytes)}</td>
-      <td>${formatBytes(r.shard_count > 0 ? r.total_size_bytes / r.shard_count : 0)}</td>
+      <td style="color:var(--red);font-weight:600">${fmtBytes(r.max_shard_bytes)}</td>
+      <td>${fmtBytes(r.total_size_bytes)}</td>
+      <td>${fmtBytes(r.shard_count > 0 ? r.total_size_bytes / r.shard_count : 0)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -2710,7 +2742,7 @@ function tableIlmErrors(rows) {
       <td style="text-align:center;color:var(--text-muted)">${r.failed_step_retry_count ?? '-'}</td>
       <td><span class="badge badge-red">${escHtml(r.error_type)}</span></td>
       <td style="color:var(--text-muted);font-size:12px;max-width:480px;white-space:normal">${escHtml(r.error_reason)}</td>
-      <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><i class="fas fa-code"></i></td>
+      <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-code"/></svg></td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -2776,7 +2808,7 @@ function tableDeprecations(rows) {
     </tr></thead>
     <tbody>${rows.map(r => {
       const details = r.details ? `<div style="color:var(--text-dim);font-size:11px;margin-top:4px">${escHtml(r.details)}</div>` : '';
-      const url = r.url ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:11px;margin-top:4px;display:inline-block"><i class="fas fa-up-right-from-square"></i> Documentação</a>` : '';
+      const url = r.url ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:11px;margin-top:4px;display:inline-block"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg> Documentação</a>` : '';
       return `<tr>
       <td><span class="badge ${DEP_LEVEL_BADGE[r.level] || 'badge-gray'}">${r.level === 'critical' ? 'Crítico' : 'Aviso'}</span></td>
       <td><span class="badge badge-blue">${escHtml(r.category_label)}</span></td>
@@ -2810,7 +2842,7 @@ function tableAllocationExplain(rows) {
       <td><span class="badge badge-gray">${escHtml(r.reason)}</span></td>
       <td><span class="badge badge-${canColor}">${escHtml(r.can_allocate)}</span></td>
       <td style="max-width:560px;white-space:normal;font-size:12px"><div>${escHtml(r.explanation)}</div>${deciders}</td>
-      <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><i class="fas fa-code"></i></td>
+      <td style="text-align:right;color:var(--text-dim)" title="Ver JSON completo"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-code"/></svg></td>
     </tr>`;
     }).join('')}</tbody>
   </table>`;
@@ -3022,14 +3054,14 @@ function sortNodesByRole(nodes) {
   });
 }
 
-function insightCard(sev, icon, title, metric, desc, tag, onclick) {
+function insightCard(sev, ic, title, metric, desc, tag, onclick) {
   const click = onclick ? ` onclick="${onclick}"` : '';
   return `<div class="insight-card sev-${sev}">
-    <div class="insight-icon"><i class="fas ${icon}"></i></div>
+    <div class="insight-icon">${icon(ic, 16)}</div>
     <div class="insight-body">
       <div class="insight-head"><span class="insight-title">${title}</span>${metric ? `<span class="insight-metric">${metric}</span>` : ''}</div>
       <div class="insight-desc">${desc}</div>
-      ${tag ? `<div class="insight-tag"${click}><i class="fas fa-arrow-right"></i>${tag}</div>` : ''}
+      ${tag ? `<div class="insight-tag"${click}><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg>${tag}</div>` : ''}
     </div>
   </div>`;
 }
@@ -3060,7 +3092,7 @@ function openHeapRamDetail() {
 
   const body = document.getElementById('detailBody');
   if (!nodes.length) {
-    body.innerHTML = `<div class="empty-state"><i class="fas fa-circle-check"></i><p>Nenhum nó com heap acima de 50% da RAM.</p></div>`;
+    body.innerHTML = `<div class="empty-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg><p>Nenhum nó com heap acima de 50% da RAM.</p></div>`;
     return;
   }
   const rows = nodes.map(n => {
@@ -3069,8 +3101,8 @@ function openHeapRamDetail() {
     return `<tr>
       <td>${nodeNameCell(n.name, n.roles, n.is_master)}</td>
       <td><span class="text-${color}" style="font-weight:700">${pct}%</span></td>
-      <td>${formatBytes(n.heap_max)}</td>
-      <td>${formatBytes(n.ram_total)}</td>
+      <td>${fmtBytes(n.heap_max)}</td>
+      <td>${fmtBytes(n.ram_total)}</td>
     </tr>`;
   }).join('');
   body.innerHTML = `<table class="data-table">
@@ -3090,7 +3122,7 @@ function renderInsights() {
   const d = dashboardData;
   if (!d) {
     el.innerHTML = `<div class="empty-state">
-      <i class="fas fa-circle-info"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
       <p>Sem dados ainda — abra os Sinais Vitais para carregar as métricas.</p>
     </div>`;
     return;
@@ -3100,8 +3132,8 @@ function renderInsights() {
   const status = h.status || 'green';
   const nodes = d.nodes_summary || [];
   const insights = [];
-  const add = (sev, icon, title, metric, desc, tag, onclick) =>
-    insights.push({ sev, html: insightCard(sev, icon, title, metric, desc, tag, onclick) });
+  const add = (sev, ic, title, metric, desc, tag, onclick) =>
+    insights.push({ sev, html: insightCard(sev, ic, title, metric, desc, tag, onclick) });
   const plural = (n) => n !== 1 ? 's' : '';
 
   // 1. Índices sem réplica
@@ -3109,7 +3141,7 @@ function renderInsights() {
   if (noRep > 0) {
     const total = d.total_indices || 0;
     const pct = total ? Math.round(noRep / total * 100) : 0;
-    add('red', 'fa-shield-halved',
+    add('red', 'shield',
       `${fmtNum(noRep)} índice${plural(noRep)} sem réplica`,
       total ? `≈ ${pct}% do total` : '',
       'Índices sem cópia — a perda de um único data node pode significar perda de dados.',
@@ -3120,7 +3152,7 @@ function renderInsights() {
   // 2. Índices sem política de ILM
   const noIlm = d.indices_without_ilm || 0;
   if (noIlm > 0) {
-    add('yellow', 'fa-clock-rotate-left',
+    add('yellow', 'history',
       `${fmtNum(noIlm)} índice${plural(noIlm)} sem política de ILM`,
       'sem ciclo de vida',
       'Crescem sem rollover nem expurgo automático — risco de saturar o disco com o tempo.',
@@ -3151,7 +3183,7 @@ function renderInsights() {
     else if (max >= 90) tail = 'acima do high watermark (≥ 90%) — o ES força a realocação de shards para fora do nó.';
     else if (max >= 85) tail = 'acima do low watermark (≥ 85%) — novos shards deixam de ser alocados no nó.';
     else tail = 'acima do limite de alerta (70%).';
-    add(max >= 85 ? 'red' : 'yellow', 'fa-hard-drive',
+    add(max >= 85 ? 'red' : 'yellow', 'hard-drive',
       `Disco alto no tier ${tier}`,
       `${hot.length} nó${plural(hot.length)} ≥ 70%`,
       `${list} — ${tail}`,
@@ -3162,7 +3194,7 @@ function renderInsights() {
   // 4. Políticas de ILM sem fase delete
   const ilmNoDel = d.ilm_without_delete || 0;
   if (ilmNoDel > 0) {
-    add('yellow', 'fa-trash-can',
+    add('yellow', 'trash-2',
       `${fmtNum(ilmNoDel)} política${plural(ilmNoDel)} de ILM sem fase delete`,
       'retenção infinita',
       'Dados gerenciados por essas políticas migram entre tiers mas nunca são removidos.',
@@ -3174,7 +3206,7 @@ function renderInsights() {
   const unassignRep = d.unassignable_replicas || 0;
   if (unassignRep > 0) {
     const dataNodes = h.number_of_data_nodes || 0;
-    add('red', 'fa-clone',
+    add('red', 'file',
       `${fmtNum(unassignRep)} índice${plural(unassignRep)} com réplicas não alocáveis`,
       `≥ ${dataNodes} data node${plural(dataNodes)}`,
       'O número de réplicas é maior ou igual ao de data nodes, então essas réplicas nunca alocam e mantêm o cluster em YELLOW. Reduza as réplicas ou adicione data nodes.',
@@ -3190,7 +3222,7 @@ function renderInsights() {
     const msg = me < 3
       ? `Há apenas ${fmtNum(me)} nó${plural(me)} master-eligible — sem tolerância à falha do master (o recomendado em produção são 3).`
       : `${fmtNum(me)} nós master-eligible (número par) — recomenda-se um número ímpar para um quorum saudável e evitar split-brain.`;
-    add(sev, 'fa-crown',
+    add(sev, 'crown',
       'Quorum de master frágil',
       `${fmtNum(me)} master-eligible`,
       msg,
@@ -3201,7 +3233,7 @@ function renderInsights() {
   // 7. Oversharding — vários primários com tamanho médio por shard < 1 GB
   const overshard = d.oversharded_indices || 0;
   if (overshard > 0) {
-    add('yellow', 'fa-grip',
+    add('yellow', 'layout-grid',
       `${fmtNum(overshard)} índice${plural(overshard)} com oversharding`,
       'shards pequenos demais',
       'Índices com mais de um shard primário e tamanho médio por shard abaixo de 1 GB — muitos shards pequenos desperdiçam heap e geram overhead de cluster.',
@@ -3213,7 +3245,7 @@ function renderInsights() {
   const memHot = nodes.filter(n => (n.gc_overhead || 0) >= 25 || (n.mem_pressure || 0) >= 75);
   if (memHot.length) {
     const list = memHot.map(n => n.name).join(', ');
-    add('yellow', 'fa-memory',
+    add('yellow', 'memory-stick',
       `${fmtNum(memHot.length)} nó${plural(memHot.length)} sob pressão de memória`,
       'GC / heap alto',
       `${list} — GC overhead ≥ 25% ou memory pressure ≥ 75%, sinal de heap pressionado (risco de pausas longas de GC).`,
@@ -3225,7 +3257,7 @@ function renderInsights() {
   const heapBig = nodes.filter(n => n.heap_max && n.ram_total && n.heap_max / n.ram_total > 0.5);
   if (heapBig.length) {
     const list = heapBig.map(n => `${n.name} (${Math.round(n.heap_max / n.ram_total * 100)}%)`).join(', ');
-    add('yellow', 'fa-scale-unbalanced',
+    add('yellow', 'scale',
       `${fmtNum(heapBig.length)} nó${plural(heapBig.length)} com heap acima de 50% da RAM`,
       'Heap desproporcional',
       `${list} — o heap ocupa mais da metade da RAM física, sobrando pouca memória para o filesystem cache (essencial ao desempenho de busca do ES). O recomendado é manter o heap em ≤ 50% da RAM.`,
@@ -3238,7 +3270,7 @@ function renderInsights() {
   if (writeHot.length) {
     const critical = writeHot.some(n => (n.write_pressure_pct || 0) >= 90);
     const list = writeHot.map(n => `${n.name} (${n.write_pressure_pct}%)`).join(', ');
-    add(critical ? 'red' : 'yellow', 'fa-pen-to-square',
+    add(critical ? 'red' : 'yellow', 'sliders-horizontal',
       `${fmtNum(writeHot.length)} nó${plural(writeHot.length)} sob pressão de escrita`,
       'Indexing pressure alto',
       `${list} — memória de buffer de indexação acima de 70% do limite. Ao chegar a 100% o nó passa a rejeitar escritas (HTTP 429). Veja a coluna "Pressão Escrita" na tabela de nós.`,
@@ -3249,7 +3281,7 @@ function renderInsights() {
   // 9. Versões de ES mistas (rolling upgrade em andamento/incompleto)
   const versions = d.node_versions || [];
   if (versions.length > 1) {
-    add('yellow', 'fa-code-branch',
+    add('yellow', 'workflow',
       'Versões de Elasticsearch mistas',
       `${versions.length} versões`,
       `Nós rodando versões diferentes (${escHtml(versions.join(', '))}) — rolling upgrade em andamento ou incompleto. Evite operações prolongadas (reindex, snapshots grandes) até concluir.`,
@@ -3261,14 +3293,14 @@ function renderInsights() {
   const slm = d.slm || {};
   if (slm.available) {
     if (slm.failed > 0) {
-      add('red', 'fa-database',
+      add('red', 'database',
         `${fmtNum(slm.failed)} política${plural(slm.failed)} de snapshot com falha`,
         'backup falhando',
         'A execução mais recente de uma ou mais políticas de SLM falhou — os backups podem estar desatualizados. Verifique o repositório de snapshots.',
         'Revisar SLM',
         `openDetail('slm_policies','Políticas de Snapshot (SLM)','Último backup, falhas e agendamento')`);
     } else if (!slm.configured) {
-      add('yellow', 'fa-database',
+      add('yellow', 'database',
         'Sem política de backup (SLM)',
         'sem snapshots automáticos',
         'Não há nenhuma política de snapshot (SLM) configurada — o cluster não possui backups automáticos. Configure o SLM para garantir recuperação em caso de perda de dados.',
@@ -3284,7 +3316,7 @@ function renderInsights() {
     // Contagem por operação (tarefas-pai), coerente com o badge da seção; o "mais
     // longa" continua sendo o maior tempo bruto (o pai carrega o tempo total).
     const ops = taskRoots(tasksList).length;
-    add('blue', 'fa-gears',
+    add('blue', 'server',
       `${fmtNum(ops)} tarefa${plural(ops)} longa${plural(ops)} em execução`,
       `${fmtNanosToSecs(longest.running_time_in_nanos || 0)} ativa`,
       `Mais longa: <code>${escHtml(longest.action || '—')}</code> no ${escHtml(longest.node || '—')}.`,
@@ -3298,7 +3330,7 @@ function renderInsights() {
   const roFlood = ro.flood || 0;
   const roManual = ro.manual || 0;
   if (roFlood > 0) {
-    add('red', 'fa-lock',
+    add('red', 'lock',
       `${fmtNum(roFlood)} índice${plural(roFlood)} bloqueado${plural(roFlood)} por flood-stage`,
       'disco / escrita bloqueada',
       'Bloqueio de escrita aplicado automaticamente pelo ES quando o disco passou de 95% (flood-stage). Pode persistir mesmo após liberar disco — verifique e remova com <code>"index.blocks.read_only_allow_delete": null</code> depois de resolver o espaço.',
@@ -3306,7 +3338,7 @@ function renderInsights() {
       `openDetail('read_only_indices','Índices Read-only','')`);
   }
   if (roManual > 0) {
-    add('yellow', 'fa-lock',
+    add('yellow', 'lock',
       `${fmtNum(roManual)} índice${plural(roManual)} read-only sem ILM`,
       'bloqueio manual',
       'Índices com bloqueio de escrita (<code>read_only</code>/<code>write</code>) que <strong>não</strong> são gerenciados por ILM — pode ser intencional (dados arquivados) ou um bloqueio manual esquecido. Índices deixados read-only pelo ILM não entram aqui.',
@@ -3318,7 +3350,7 @@ function renderInsights() {
   const cs = d.cluster_settings_risks || {};
   if (cs.available && (cs.red > 0 || cs.yellow > 0)) {
     const n = cs.red + cs.yellow;
-    add(cs.red > 0 ? 'red' : 'yellow', 'fa-sliders',
+    add(cs.red > 0 ? 'red' : 'yellow', 'sliders-horizontal',
       `${fmtNum(n)} ${n !== 1 ? 'configurações de cluster de risco' : 'configuração de cluster de risco'}`,
       'overrides',
       'Sobrescritas no cluster que podem causar problemas — por exemplo alocação de shards restrita, watermarks de disco desabilitados ou cluster em read-only.',
@@ -3332,7 +3364,7 @@ function renderInsights() {
     const parts = [];
     if (dep.critical) parts.push(`${fmtNum(dep.critical)} crítico${plural(dep.critical)}`);
     if (dep.warning) parts.push(`${fmtNum(dep.warning)} aviso${plural(dep.warning)}`);
-    add(dep.critical > 0 ? 'red' : 'yellow', 'fa-clipboard-check',
+    add(dep.critical > 0 ? 'red' : 'yellow', 'clipboard-check',
       `${fmtNum(dep.total)} aviso${plural(dep.total)} de deprecação`,
       'prontidão p/ upgrade',
       `${parts.join(' e ')} — configurações que vão mudar ou quebrar na próxima versão major. Resolva antes de atualizar.`,
@@ -3349,7 +3381,7 @@ function renderInsights() {
     const msg = expired
       ? `A licença ${escHtml(type)} está expirada — recursos licenciados podem estar desativados.`
       : `A licença ${escHtml(type)} expira em ${fmtNum(lic.days_left)} dia${plural(lic.days_left)}. Renove para não perder recursos.`;
-    add(sev, 'fa-id-card',
+    add(sev, 'file',
       expired ? 'Licença expirada' : 'Licença expirando',
       escHtml(type),
       msg,
@@ -3359,7 +3391,7 @@ function renderInsights() {
   // 16. Shards não alocados — diagnóstico via allocation explain
   const unassignedShards = h.unassigned_shards || 0;
   if (unassignedShards > 0) {
-    add('red', 'fa-circle-question',
+    add('red', 'circle-help',
       `${fmtNum(unassignedShards)} shard${plural(unassignedShards)} não alocado${plural(unassignedShards)} — diagnóstico`,
       'allocation explain',
       'Descubra a razão exata pela qual cada shard não aloca (a decisão dos deciders por nó) via <code>_cluster/allocation/explain</code>.',
@@ -3376,7 +3408,7 @@ function renderInsights() {
     const sev = (status === 'red' || unassigned > 0) ? 'red' : 'yellow';
     const parts = [`${activePct}% dos shards ativos`, `${fmtNum(unassigned)} não alocado${plural(unassigned)}`];
     if (cbTrips > 0) parts.push(`${fmtNum(cbTrips)} disparo${plural(cbTrips)} de circuit breaker`);
-    add(sev, 'fa-heart-pulse',
+    add(sev, 'heart-pulse',
       'Disponibilidade comprometida',
       status.toUpperCase(),
       parts.join(', ') + '.',
@@ -3397,8 +3429,8 @@ function renderInsights() {
   // severidades de configuração: um cluster GREEN mostra o card verde (OK) mesmo
   // havendo riscos de configuração a tratar.
   const sumColor = healthColor(status);
-  const sumIcon = status === 'red' ? 'fa-circle-exclamation'
-    : (status === 'yellow' ? 'fa-triangle-exclamation' : 'fa-circle-check');
+  const sumIcon = status === 'red' ? 'circle-alert'
+    : (status === 'yellow' ? 'triangle-alert' : 'circle-check');
   const configRisks = riskTotal - (availabilityAdded ? 1 : 0);
   const v = configRisks !== 1 ? 'precisam' : 'precisa';
   const riskPhrase = configRisks > 0
@@ -3413,7 +3445,7 @@ function renderInsights() {
 
   const summary = `<div class="insights-summary">
     <div class="insights-summary-main">
-      <div class="insights-summary-icon" style="background:var(--${sumColor}-bg);color:var(--${sumColor})"><i class="fas ${sumIcon}"></i></div>
+      <div class="insights-summary-icon" style="background:var(--${sumColor}-bg);color:var(--${sumColor})">${icon(sumIcon, 26)}</div>
       <div>
         <div class="insights-summary-title">Cluster operando em ${status.toUpperCase()}</div>
         <div class="insights-summary-desc">${sumDesc}</div>
@@ -3437,7 +3469,7 @@ function renderInsights() {
         <div class="insights-grid">${ordered.map(i => i.html).join('')}</div>
       </div>`
     : `<div class="insights-block">
-        <div class="empty-state"><i class="fas fa-circle-check"></i><p>Nenhum ponto de atenção nos dados atuais.</p></div>
+        <div class="empty-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg><p>Nenhum ponto de atenção nos dados atuais.</p></div>
       </div>`;
 
   el.innerHTML = summary + gridBlock;
@@ -3463,14 +3495,14 @@ function diskByNodeContent() {
   }).join('');
   return `<div class="disk-card">
     ${rows}
-    <div class="disk-note"><i class="fas fa-circle-info"></i>Alerta de disco: <strong class="text-yellow">≥ 70%</strong> (atenção) · <strong class="text-red">≥ 85%</strong> (crítico). Watermarks padrão do ES: low 85% / high 90%.</div>
+    <div class="disk-note"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>Alerta de disco: <strong class="text-yellow">≥ 70%</strong> (atenção) · <strong class="text-red">≥ 85%</strong> (crítico). Watermarks padrão do ES: low 85% / high 90%.</div>
   </div>`;
 }
 
 function openDiskModal() {
   const content = diskByNodeContent();
   document.getElementById('diskModalBody').innerHTML = content ||
-    `<div class="empty-state"><i class="fas fa-circle-check"></i><p>Nenhum nó acima de 70% de uso de disco.</p></div>`;
+    `<div class="empty-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg><p>Nenhum nó acima de 70% de uso de disco.</p></div>`;
   document.getElementById('diskModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
 }
@@ -3483,7 +3515,7 @@ function closeDiskModal() {
 // ─── Modal: Snapshots em Execução ────────────────────────
 function openSnapshotModal() {
   document.getElementById('snapshotModalBody').innerHTML =
-    `<div class="loading-state section-loading"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando...</span></div>`;
+    `<div class="loading-state section-loading"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando...</span></div>`;
   document.getElementById('snapshotModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   loadSnapshots();
@@ -3503,7 +3535,7 @@ async function loadSnapshots() {
     if (data.error) throw new Error(data.error);
     renderSnapshots(data);
   } catch (e) {
-    body.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${e.message}</p></div>`;
+    body.innerHTML = `<div class="error-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg><p>${e.message}</p></div>`;
   }
 }
 
@@ -3513,7 +3545,7 @@ function renderSnapshots(rows) {
 
   if (!rows || rows.length === 0) {
     body.innerHTML = `<div class="empty-state" style="padding:28px 16px">
-      <i class="fas fa-circle-check"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg>
       <p>Nenhum snapshot em execução no momento.</p></div>`;
     return;
   }
@@ -3532,12 +3564,12 @@ function renderSnapshots(rows) {
           <span class="recovery-index">${escHtml(r.snapshot)}</span>
           <span class="recovery-shard">repo: ${escHtml(r.repository)}</span>
           <span class="recovery-op" title="${escHtml(stateTitle)}">${stateMeta.label}</span>
-          <span class="recovery-time"><i class="far fa-clock"></i> ${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
+          <span class="recovery-time"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-clock"/></svg> ${r.time_ms ? fmtDuration(r.time_ms) : '—'}</span>
         </div>
         <div class="recovery-progress">
           <div class="recovery-track"><div class="recovery-fill" style="width:${pct}%;background:var(--${fillColor})"></div></div>
           <span class="recovery-pct">${pct.toFixed(1)}%</span>
-          <span class="recovery-bytes">${formatBytes(r.bytes_processed)} / ${formatBytes(r.bytes_total)}</span>
+          <span class="recovery-bytes">${fmtBytes(r.bytes_processed)} / ${fmtBytes(r.bytes_total)}</span>
         </div>
         <div class="recovery-sub">
           <span>Shards ${fmtNum(r.shards_done)} / ${fmtNum(r.shards_total)}${failedNote}</span>
@@ -3624,8 +3656,8 @@ A cor reflete a proporção entre o uso estimado do breaker e o limite configura
       <td>${nodeCellByName(r.node)}</td>
       <td><span class="badge badge-gray">${escHtml(r.breaker || '-')}</span></td>
       <td style="color:${(r.tripped||0)>0?'var(--red)':'var(--text-muted)'};font-weight:${(r.tripped||0)>0?'700':'400'}">${fmtNum(r.tripped)}</td>
-      <td>${formatBytes(r.estimated_size_in_bytes)}</td>
-      <td style="color:var(--text-muted)">${formatBytes(r.limit_size_in_bytes)}</td>
+      <td>${fmtBytes(r.estimated_size_in_bytes)}</td>
+      <td style="color:var(--text-muted)">${fmtBytes(r.limit_size_in_bytes)}</td>
       <td>${pctBar(r.usage_pct)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -3688,7 +3720,7 @@ async function openIndexShards(indexName) {
   document.getElementById('detailBreadcrumb').style.display = 'flex';
   document.getElementById('breadcrumbCurrent').textContent = indexName;
   document.getElementById('detailBody').innerHTML =
-    `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando shards...</span></div>`;
+    `<div class="loading-state"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando shards...</span></div>`;
 
   try {
     const res = await fetch(`/api/index_shards/${encodeURIComponent(indexName)}`);
@@ -3700,7 +3732,7 @@ async function openIndexShards(indexName) {
     renderDetailTable('index_shards', data);
   } catch (e) {
     document.getElementById('detailBody').innerHTML =
-      `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p></div>`;
+      `<div class="error-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg><p>${escHtml(e.message)}</p></div>`;
   }
 }
 
@@ -3735,7 +3767,7 @@ function shardStateBadge(state) {
 
 function tableIndexShards(rows) {
   if (!rows.length) {
-    return `<div class="empty-state"><i class="fas fa-circle-check"></i><p>Nenhum shard encontrado</p></div>`;
+    return `<div class="empty-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg><p>Nenhum shard encontrado</p></div>`;
   }
   return `<table class="data-table">
     <thead><tr>
@@ -3751,9 +3783,9 @@ function tableIndexShards(rows) {
     <tbody>${rows.map(r => {
       let infoCell = '<span style="color:var(--text-dim)">—</span>';
       if (r.state === 'RELOCATING' && r.relocation_target) {
-        infoCell = `<span class="reloc-info reloc-out"><i class="fas fa-arrow-right"></i> ${escHtml(r.relocation_target)}</span>`;
+        infoCell = `<span class="reloc-info reloc-out"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-right"/></svg> ${escHtml(r.relocation_target)}</span>`;
       } else if (r.state === 'INITIALIZING' && r.relocation_source) {
-        infoCell = `<span class="reloc-info reloc-in"><i class="fas fa-arrow-left"></i> ${escHtml(r.relocation_source)}</span>`;
+        infoCell = `<span class="reloc-info reloc-in"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg> ${escHtml(r.relocation_source)}</span>`;
       } else if (r.state === 'UNASSIGNED' && r['unassigned.reason']) {
         infoCell = `<span class="badge badge-red" style="font-size:10px">${escHtml(r['unassigned.reason'])}</span>`;
       }
@@ -3789,8 +3821,8 @@ function setupSort(metric, allRows) {
         // participa do toggle asc/desc genérico das demais colunas.
         currentSort = { col, dir: 'role' };
         th.classList.add('sort-role');
-        const icon = th.querySelector('.sort-icon');
-        if (icon) icon.textContent = '⟲';
+        const iconEl = th.querySelector('.sort-icon');
+        if (iconEl) iconEl.textContent = '⟲';
         sorted = sortNodesByRole(allRows);
       } else {
         if (currentSort.col === col) {
@@ -3800,8 +3832,8 @@ function setupSort(metric, allRows) {
           currentSort.dir = 'asc';
         }
         th.classList.add(`sort-${currentSort.dir}`);
-        const icon = th.querySelector('.sort-icon');
-        if (icon) icon.textContent = currentSort.dir === 'asc' ? '↑' : '↓';
+        const iconEl = th.querySelector('.sort-icon');
+        if (iconEl) iconEl.textContent = currentSort.dir === 'asc' ? '↑' : '↓';
 
         sorted = [...allRows].sort((a, b) => {
           let va, vb;
@@ -3836,11 +3868,11 @@ function setupSort(metric, allRows) {
 // ─── Tasks Section ────────────────────────────────────────
 async function loadTasks() {
   const body = document.getElementById('tasksBody');
-  const icon = document.getElementById('tasksRefreshIcon');
-  if (icon) icon.classList.add('spin');
+  const iconEl = document.getElementById('tasksRefreshIcon');
+  if (iconEl) iconEl.classList.add('spin');
 
   body.innerHTML = `<div class="loading-state tasks-loading">
-    <i class="fas fa-circle-notch fa-spin"></i><span>Carregando tarefas...</span>
+    <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando tarefas...</span>
   </div>`;
 
   try {
@@ -3866,10 +3898,10 @@ async function loadTasks() {
     if (dashboardData) renderInsights();
   } catch (e) {
     body.innerHTML = `<div class="error-state tasks-loading">
-      <i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg><p>${escHtml(e.message)}</p>
     </div>`;
   } finally {
-    if (icon) icon.classList.remove('spin');
+    if (iconEl) iconEl.classList.remove('spin');
   }
 }
 
@@ -3904,7 +3936,7 @@ function renderTasksTable(tasks) {
 
   if (!tasks.length) {
     body.innerHTML = `<div class="empty-state tasks-empty">
-      <i class="fas fa-circle-check"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg>
       <p>Nenhuma tarefa com mais de 5 segundos em execução</p>
     </div>`;
     return;
@@ -3929,7 +3961,7 @@ function renderTasksTable(tasks) {
   }).join('');
 
   const clearBtn = selectedActions.size
-    ? `<button class="tasks-filter-clear" onclick="clearActionFilter()"><i class="fas fa-xmark"></i> Limpar</button>`
+    ? `<button class="tasks-filter-clear" onclick="clearActionFilter()"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-x"/></svg> Limpar</button>`
     : '';
 
   const filterHtml = `<div class="tasks-filter">
@@ -3949,13 +3981,13 @@ function renderTasksTable(tasks) {
     const expanded = expandedTasks.has(t.id);
     const cancelBtn = t.cancellable
       ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();cancelTask('${escHtml(t.id)}', this)">
-           <i class="fas fa-ban"></i> Cancelar
+           <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-ban"/></svg> Cancelar
          </button>`
       : `<button class="btn btn-ghost btn-sm" style="cursor:not-allowed;opacity:0.45" title="Essa tarefa não pode ser cancelada" onclick="event.stopPropagation()">
-           <i class="fas fa-ban"></i> Cancelar
+           <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-ban"/></svg> Cancelar
          </button>`;
     const toggle = kids.length
-      ? `<button class="task-group-toggle${expanded ? ' open' : ''}" onclick="event.stopPropagation();toggleTaskGroup('${escHtml(t.id)}')" title="${expanded ? 'Recolher' : 'Expandir'} sub-tarefas"><i class="fas fa-chevron-right"></i></button>`
+      ? `<button class="task-group-toggle${expanded ? ' open' : ''}" onclick="event.stopPropagation();toggleTaskGroup('${escHtml(t.id)}')" title="${expanded ? 'Recolher' : 'Expandir'} sub-tarefas"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>`
       : '<span class="task-group-spacer"></span>';
     const subBadge = kids.length
       ? `<span class="task-subcount">${fmtNum(kids.length)} sub-tarefa${kids.length !== 1 ? 's' : ''}</span>`
@@ -4028,9 +4060,9 @@ function showTaskJson(idx) {
 async function copyTaskId() {
   try {
     await navigator.clipboard.writeText(currentTaskId);
-    const icon = document.querySelector('#taskJsonCopyBtn i');
-    icon.className = 'fas fa-check';
-    setTimeout(() => { icon.className = 'fas fa-copy'; }, 1500);
+    const iconEl = document.querySelector('#taskJsonCopyBtn use');
+    iconEl.setAttribute('href', '#i-check');
+    setTimeout(() => { iconEl.setAttribute('href', '#i-file'); }, 1500);
   } catch (_) {}
 }
 
@@ -4043,7 +4075,7 @@ async function cancelTask(taskId, btn) {
   if (!confirm(`Cancelar a tarefa:\n${taskId}\n\nEsta ação envia um sinal de cancelamento ao Elasticsearch. Confirma?`)) return;
 
   btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+  btn.innerHTML = '<svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>';
 
   try {
     const res = await fetch('/api/tasks/cancel', {
@@ -4055,17 +4087,17 @@ async function cancelTask(taskId, btn) {
     if (data.success) {
       const row = btn.closest('tr');
       if (row) row.style.opacity = '0.4';
-      btn.innerHTML = '<i class="fas fa-check"></i> Cancelada';
+      btn.innerHTML = '<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg> Cancelada';
       setTimeout(loadTasks, 2500);
     } else {
       alert('Erro ao cancelar: ' + (data.error || 'desconhecido'));
       btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-ban"></i> Cancelar';
+      btn.innerHTML = '<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-ban"/></svg> Cancelar';
     }
   } catch (e) {
     alert('Erro de rede: ' + e.message);
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-ban"></i> Cancelar';
+    btn.innerHTML = '<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-ban"/></svg> Cancelar';
   }
 }
 
@@ -4107,16 +4139,16 @@ function ndValRow(label, value, dim = false) {
 // Nota de alerta (linha sem coluna de rótulo), amarela por padrão.
 function ndWarnRow(text, color = 'yellow') {
   return `<div class="nd-row"><span class="nd-value text-${color}" style="font-size:12px">
-    <i class="fas fa-triangle-exclamation" style="margin-right:6px"></i>${text}</span></div>`;
+    <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>${text}</span></div>`;
 }
 
 // Seção com título; devolve '' quando nenhuma linha sobreviveu, para a modal
 // não exibir cabeçalho de seção vazia.
-function ndSection(icon, title, rows) {
+function ndSection(ic, title, rows) {
   const body = rows.filter(Boolean).join('');
   if (!body) return '';
   return `<div class="nd-section">
-    <div class="nd-section-title"><i class="fas ${icon}"></i>${title}</div>
+    <div class="nd-section-title">${icon(ic, 16)}${title}</div>
     ${body}
   </div>`;
 }
@@ -4128,7 +4160,7 @@ function openNodeModal(name) {
   document.getElementById('nodeModalTitle').textContent = name;
   document.getElementById('nodeModalSubtitle').textContent = '';
   document.getElementById('nodeModalBody').innerHTML =
-    `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando...</span></div>`;
+    `<div class="loading-state"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando...</span></div>`;
   document.getElementById('nodeModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   loadNodeDetail(name);
@@ -4148,7 +4180,7 @@ async function loadNodeDetail(name) {
     if (data.error) throw new Error(data.error);
     renderNodeDetail(data);
   } catch (e) {
-    body.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p></div>`;
+    body.innerHTML = `<div class="error-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg><p>${escHtml(e.message)}</p></div>`;
   }
 }
 
@@ -4198,19 +4230,19 @@ function renderNodeDetail(d) {
   // barra aqui induziria à leitura de "disco cheio". Explica em vez de medir.
   const frozenNode = isDedicatedFrozen(id.roles);
   const dskRows = frozenNode ? [
-    `<div class="nd-note"><i class="fas fa-snowflake"></i><span>${FROZEN_DISK_NOTE}</span></div>`,
+    `<div class="nd-note"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-hard-drive"/></svg><span>${FROZEN_DISK_NOTE}</span></div>`,
   ] : [
     dsk.total ? pctRow('Uso geral', dg.pct,
-      `${singleType ? fsTypeTag(singleType) + ' · ' : ''}${formatBytes(dg.used ?? 0)} de ${formatBytes(dsk.total)} · livre ${formatBytes(dg.avail ?? 0)}`) : '',
+      `${singleType ? fsTypeTag(singleType) + ' · ' : ''}${fmtBytes(dg.used ?? 0)} de ${fmtBytes(dsk.total)} · livre ${fmtBytes(dg.avail ?? 0)}`) : '',
   ];
   if (showMounts && !frozenNode) {
     for (const m of mounts) {
       if (!m.total) continue;
       const mu = diskUsage(m.total, m.available, m.free);
       const typeTag = m.type ? fsTypeTag(m.type) + ' · ' : '';
-      const label = `<i class="fas fa-folder nd-dim" style="margin-right:6px"></i>${escHtml(m.path || m.mount || '—')}`;
+      const label = `<svg class="eh-icon nd-dim" width="14" height="14" aria-hidden="true"><use href="#i-database"/></svg>${escHtml(m.path || m.mount || '—')}`;
       dskRows.push(pctRow(label, mu.pct,
-        `${typeTag}${formatBytes(mu.used ?? 0)} de ${formatBytes(m.total)}`));
+        `${typeTag}${fmtBytes(mu.used ?? 0)} de ${fmtBytes(m.total)}`));
     }
   }
 
@@ -4255,8 +4287,8 @@ function renderNodeDetail(d) {
   const swapRow = swapTotal === 0
     ? valRow('Swap', `<span class="text-green">desabilitado</span>`)
     : swapUsed === 0
-      ? valRow('Swap', `<span class="text-green">0 em uso</span> <span class="nd-dim">· ${formatBytes(swapTotal)} disponível</span>`)
-      : valRow('Swap', `<span class="text-yellow">${formatBytes(swapUsed)} em uso</span> <span class="nd-dim">de ${formatBytes(swapTotal)}</span>`);
+      ? valRow('Swap', `<span class="text-green">0 em uso</span> <span class="nd-dim">· ${fmtBytes(swapTotal)} disponível</span>`)
+      : valRow('Swap', `<span class="text-yellow">${fmtBytes(swapUsed)} em uso</span> <span class="nd-dim">de ${fmtBytes(swapTotal)}</span>`);
   const swapWarn = (swapTotal > 0 && swapUsed > 0)
     ? warnRow('Swap em uso — o ES recomenda desabilitar o swap para evitar pausas de GC e latência')
     : '';
@@ -4274,7 +4306,7 @@ function renderNodeDetail(d) {
     : prc.open_fds != null ? fmtNum(prc.open_fds) : null;
 
   body.innerHTML = `<div class="nd-body">
-    ${sec('fa-server', 'Identificação', [
+    ${sec('server', 'Identificação', [
       valRow('Host', id.host),
       valRow('Versão ES', id.version),
       valRow('Build flavor', id.build_flavor, true),
@@ -4282,21 +4314,21 @@ function renderNodeDetail(d) {
       valRow('Build hash', id.build_hash, true),
       valRow('Roles', (id.roles || []).join(', '), true),
     ])}
-    ${sec('fa-desktop', 'Sistema Operacional', [
+    ${sec('monitor', 'Sistema Operacional', [
       valRow('SO', os.pretty_name || os.name),
       valRow('Versão do kernel', os.version, true),
       valRow('Arquitetura', os.arch, true),
     ])}
-    ${sec('fa-microchip', 'CPU', [
+    ${sec('cpu', 'CPU', [
       cpu.percent != null ? pctRow('CPU (SO)', cpu.percent) : '',
       cpu.proc_percent != null ? pctRow('CPU (processo ES)', cpu.proc_percent) : '',
       loadLine,
     ])}
-    ${sec('fa-memory', 'RAM/JVM', [
+    ${sec('memory-stick', 'RAM/JVM', [
       mem.total ? pctRow('RAM usada', mem.used_percent,
-        `${formatBytes(mem.used)} de ${formatBytes(mem.total)} · livre ${formatBytes(mem.free ?? (mem.total - mem.used))}`, { fixedBar: true }) : '',
+        `${fmtBytes(mem.used)} de ${fmtBytes(mem.total)} · livre ${fmtBytes(mem.free ?? (mem.total - mem.used))}`, { fixedBar: true }) : '',
       jvm.heap_max ? pctRow('Heap usada', heapPct,
-        `${formatBytes(jvm.heap_used)} de ${formatBytes(jvm.heap_max)} · livre ${formatBytes(jvm.heap_max - jvm.heap_used)}`, { fixedBar: true }) : '',
+        `${fmtBytes(jvm.heap_used)} de ${fmtBytes(jvm.heap_max)} · livre ${fmtBytes(jvm.heap_max - jvm.heap_used)}`, { fixedBar: true }) : '',
       heapRatioRow,
       ...heapWarns,
       swapRow,
@@ -4306,8 +4338,8 @@ function renderNodeDetail(d) {
       valRow('Versão JVM', jvm.version),
       valRow('VM', [jvm.vm_name, jvm.vm_vendor].filter(Boolean).join(' · '), true),
     ])}
-    ${sec('fa-hard-drive', 'Disco', dskRows)}
-    ${(fdsStr || jvm.threads) ? sec('fa-file', 'Processo', [
+    ${sec('hard-drive', 'Disco', dskRows)}
+    ${(fdsStr || jvm.threads) ? sec('file', 'Processo', [
       fdsStr ? valRow('File descriptors (abertos / máx.)', fdsStr) : '',
       jvm.threads ? valRow('Threads', fmtNum(jvm.threads)) : '',
     ]) : ''}
@@ -4324,7 +4356,7 @@ function renderNodeDetail(d) {
 const INTEGRATIONS = {
   kibana: {
     label: 'Kibana',
-    icon: 'fa-chart-line',
+    icon: 'chart-line',
     urlPlaceholder: 'https://kibana.exemplo:5601',
     helpTopic: 'help-kibana-config',
     // A API do Kibana sempre exige credencial.
@@ -4337,7 +4369,7 @@ const INTEGRATIONS = {
   },
   logstash: {
     label: 'Logstash',
-    icon: 'fa-diagram-project',
+    icon: 'workflow',
     urlPlaceholder: 'http://logstash.exemplo:9600',
     helpTopic: 'help-logstash-config',
     // A API de monitoramento do Logstash é aberta por padrão
@@ -4448,10 +4480,10 @@ function resetIntegrations() {
 // Busca o dashboard de uma integração e delega a renderização ao `render`.
 async function loadIntegrationPage(key, render) {
   const page = document.getElementById('page-' + key);
-  const icon = document.getElementById('refreshIcon');
-  if (icon) icon.classList.add('spin');
+  const iconEl = document.getElementById('refreshIcon');
+  if (iconEl) iconEl.classList.add('spin');
   page.innerHTML = `<div class="loading-state">
-    <i class="fas fa-circle-notch fa-spin"></i>
+    <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
     <span>Carregando dados do ${INTEGRATIONS[key].label}...</span>
   </div>`;
 
@@ -4465,11 +4497,11 @@ async function loadIntegrationPage(key, render) {
     setUpdatedNow();
   } catch (e) {
     page.innerHTML = `<div class="error-state">
-      <i class="fas fa-triangle-exclamation"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
       <p>${escHtml(e.message)}</p>
     </div>`;
   } finally {
-    if (icon) icon.classList.remove('spin');
+    if (iconEl) iconEl.classList.remove('spin');
   }
 }
 
@@ -4477,7 +4509,7 @@ async function loadIntegrationPage(key, render) {
 function integrationEmptyState(key, hasUrls, extra) {
   const meta = INTEGRATIONS[key];
   return `<div class="empty-state" style="padding:40px">
-    <i class="fas ${meta.icon}"></i>
+    ${icon(meta.icon, 16)}
     <p>Nenhuma instância ${meta.label} encontrada.</p>
     <p style="font-size:13px;color:var(--text-dim);max-width:520px;margin:8px auto 0">
       ${hasUrls
@@ -4485,7 +4517,7 @@ function integrationEmptyState(key, hasUrls, extra) {
         : extra}
     </p>
     <button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="showPage('config')">
-      <i class="fas fa-sliders"></i> Abrir Configuração
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg> Abrir Configuração
     </button>
   </div>`;
 }
@@ -4509,7 +4541,7 @@ function healthyInstancesCard(d, key, tip) {
       }]
     : [];
 
-  return cardStat(null, 'Instâncias Saudáveis', 'fa-circle-check',
+  return cardStat(null, 'Instâncias Saudáveis', 'circle-check',
     `${healthy}/${instances.length}`, allOk ? 'todas disponíveis' : 'alguma degradada',
     statusColor, tip,
     [
@@ -4527,7 +4559,7 @@ function instanceNameCell(inst, onclick) {
   const offline = inst.configured && !inst.reachable;
   const sub = [inst.version, inst.host].filter(Boolean).map(escHtml).join(' · ');
   const errorNote = offline
-    ? `<div class="kb-inst-error" title="${escHtml(inst.error || '')}"><i class="fas fa-triangle-exclamation"></i> inacessível</div>`
+    ? `<div class="kb-inst-error" title="${escHtml(inst.error || '')}"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg> inacessível</div>`
     : '';
   const noUrlNote = !inst.configured
     ? '<div class="kb-inst-note" title="Descoberta pelo self-monitoring. Cadastre a URL para ver o que só a API entrega.">só self-monitoring</div>'
@@ -4541,11 +4573,11 @@ function instanceNameCell(inst, onclick) {
 }
 
 // Card de largura total com uma tabela — o formato das tabelas das duas páginas.
-function tableCard(icon, title, tip, topic, head, rows) {
+function tableCard(ic, title, tip, topic, head, rows) {
   return `<div class="metric-card metric-card-static card-full">
     <div class="card-header">
       <div class="card-icon-title">
-        <div class="card-icon"><i class="fas ${icon}"></i></div>
+        <div class="card-icon">${icon(ic, 16)}</div>
         <div class="card-title">${title}</div>
       </div>
       ${tip ? tooltip(tip, topic) : ''}
@@ -4615,13 +4647,13 @@ function kibanaFleetCard(fleet) {
     'Exige a URL de uma instância cadastrada e o privilégio <code>fleet-agents-read</code>.';
 
   if (!fleet.available) {
-    return cardStat(null, 'Fleet — Agentes', 'fa-satellite-dish', '&mdash;',
+    return cardStat(null, 'Fleet — Agentes', 'radio', '&mdash;',
       fleet.error ? 'indisponível' : 'não configurado', 'muted',
       tip + (fleet.error ? `<br><br><strong>Motivo:</strong> ${escHtml(fleet.error)}` : ''),
       [], 'help-kibana-fleet');
   }
 
-  return cardStat(null, 'Fleet — Agentes', 'fa-satellite-dish', fmtNum(fleet.total || 0),
+  return cardStat(null, 'Fleet — Agentes', 'radio', fmtNum(fleet.total || 0),
     ...agentSummary(fleet), tip, agentFooterStats(fleet), 'help-kibana-fleet');
 }
 
@@ -4652,20 +4684,20 @@ function kibanaApmCard(apm) {
     'agentes APM das aplicações. Não analisa os dados de APM em si.';
 
   if (!apm.available) {
-    return cardStat(null, 'APM Server', 'fa-diagram-project', '&mdash;',
+    return cardStat(null, 'APM Server', 'workflow', '&mdash;',
       apm.error ? 'indisponível' : 'não configurado', 'muted',
       tip + (apm.error ? `<br><br><strong>Motivo:</strong> ${escHtml(apm.error)}` : ''),
       [], 'help-kibana-apm');
   }
   if (!apm.configured) {
-    return cardStat(null, 'APM Server', 'fa-diagram-project', '0',
+    return cardStat(null, 'APM Server', 'workflow', '0',
       'nenhuma integração APM', 'muted',
       tip + '<br><br>Nenhuma package policy do pacote <code>apm</code> foi encontrada neste Fleet.',
       [], 'help-kibana-apm');
   }
 
   const [, color] = agentSummary(apm);
-  return cardStat(null, 'APM Server', 'fa-diagram-project', fmtNum(apm.total || 0),
+  return cardStat(null, 'APM Server', 'workflow', fmtNum(apm.total || 0),
     'agente(s) com a integração APM', color, tip,
     agentFooterStats(apm), 'help-kibana-apm');
 }
@@ -4697,7 +4729,7 @@ function kibanaInstancesTable(d) {
       <td style="text-align:right">${svcNumCell('kibana', inst.metrics.event_loop_delay, ' ms')}</td>
     </tr>`).join('');
 
-  return tableCard('fa-gauge-high', 'Utilização por Instância', tip, 'help-kibana-utilization',
+  return tableCard('gauge', 'Utilização por Instância', tip, 'help-kibana-utilization',
     `<th>Instância</th><th>Status</th><th>CPU</th><th>Disco</th><th>RAM</th>
      <th>Heap</th><th>ELU</th><th style="text-align:right">Delay</th>`,
     rows);
@@ -4725,7 +4757,7 @@ function kibanaTaskManagerSection(d) {
       return `<tr>
         <td><div class="kb-inst-name">${escHtml(inst.name || inst.url)}</div></td>
         <td colspan="5" style="color:var(--text-dim)">
-          <i class="fas fa-circle-info"></i> indisponível${tm.error ? ` — ${escHtml(tm.error)}` : ''}
+          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg> indisponível${tm.error ? ` — ${escHtml(tm.error)}` : ''}
         </td>
       </tr>`;
     }
@@ -4744,7 +4776,7 @@ function kibanaTaskManagerSection(d) {
   }).join('');
 
   return section('Task Manager') +
-    tableCard('fa-list-check', 'Alerting, Actions e Reporting', tip, 'help-kibana-task-manager',
+    tableCard('list', 'Alerting, Actions e Reporting', tip, 'help-kibana-task-manager',
       `<th>Instância</th><th>Status</th><th>Load</th><th>Drift</th>
        <th>Capacidade</th><th style="text-align:right">Atrasadas</th>`,
       rows);
@@ -4766,7 +4798,7 @@ function kibanaFleetSection(d) {
   </tr>`).join('');
 
   return section('APM Server por Policy') +
-    tableCard('fa-diagram-project', 'Policies com integração APM',
+    tableCard('workflow', 'Policies com integração APM',
       'Cada <strong>agent policy</strong> que contém a integração <code>apm</code> e quantos agentes a executam. Útil para saber se o coletor de APM está de pé em todos os grupos esperados.',
       'help-kibana-apm',
       `<th>Policy</th><th>Versão do pacote</th>
@@ -4838,11 +4870,11 @@ function logstashThroughputCard(d) {
     'fica na tabela <strong>Plugins mais lentos</strong>.';
 
   if (ev.per_sec == null) {
-    return cardStat(null, 'Vazão de Eventos', 'fa-right-left', '&mdash;',
+    return cardStat(null, 'Vazão de Eventos', 'arrow-left-right', '&mdash;',
       'sem uptime para calcular', 'muted', tip, [], 'help-logstash-throughput');
   }
 
-  return cardStat(null, 'Vazão de Eventos', 'fa-right-left', fmtNum(ev.per_sec),
+  return cardStat(null, 'Vazão de Eventos', 'arrow-left-right', fmtNum(ev.per_sec),
     'eventos/s (média desde o start)', 'blue', tip,
     [
       { label: 'Entrada', val: fmtNum(ev.in || 0) },
@@ -4868,7 +4900,7 @@ function logstashQueueCard(d) {
     'Sem nenhuma fila persistente o card fica neutro — não há o que medir, não é zero.';
 
   if (!q.persisted) {
-    return cardStat(null, 'Fila Persistente', 'fa-layer-group', '&mdash;',
+    return cardStat(null, 'Fila Persistente', 'layers', '&mdash;',
       q.memory ? 'todas as filas em memória' : 'sem pipeline com fila', 'muted', tip,
       [
         ...(q.memory ? [{ label: 'Em memória', val: fmtNum(q.memory) }] : []),
@@ -4879,12 +4911,12 @@ function logstashQueueCard(d) {
 
   const pct = q.max_pct;
   const color = pct == null ? 'blue' : pctColor(pct);
-  return cardStat(null, 'Fila Persistente', 'fa-layer-group',
+  return cardStat(null, 'Fila Persistente', 'layers',
     pct == null ? '&mdash;' : `${pct}%`, 'ocupação da fila mais cheia', color, tip,
     [
       { label: 'Persistentes', val: fmtNum(q.persisted) },
       { label: 'Em memória', val: fmtNum(q.memory || 0) },
-      { label: 'Ocupado', val: `${formatBytes(q.bytes || 0)} / ${formatBytes(q.max_bytes || 0)}` },
+      { label: 'Ocupado', val: `${fmtBytes(q.bytes || 0)} / ${fmtBytes(q.max_bytes || 0)}` },
       { label: 'Eventos na fila', val: fmtNum(q.events || 0) },
     ],
     'help-logstash-queue');
@@ -4903,15 +4935,15 @@ function logstashDlqCard(d) {
     'A DLQ é desativada por padrão; sem ela, um evento rejeitado só aparece no log do Logstash.';
 
   if (!dlq.enabled) {
-    return cardStat(null, 'Dead Letter Queue', 'fa-inbox', '&mdash;',
+    return cardStat(null, 'Dead Letter Queue', 'inbox', '&mdash;',
       'sem eventos descartados', 'muted', tip, [], 'help-logstash-dlq');
   }
 
   const dropped = dlq.dropped || 0;
-  return cardStat(null, 'Dead Letter Queue', 'fa-inbox', fmtNum(dropped),
+  return cardStat(null, 'Dead Letter Queue', 'inbox', fmtNum(dropped),
     'eventos descartados', dropped > 0 ? 'red' : 'green', tip,
     [
-      { label: 'Tamanho', val: formatBytes(dlq.bytes || 0) },
+      { label: 'Tamanho', val: fmtBytes(dlq.bytes || 0) },
       ...(dlq.expired ? [{ label: 'Expirados', val: fmtNum(dlq.expired), color: 'red' }] : []),
       { label: 'Pipelines', val: fmtNum((dlq.pipelines || []).length) },
     ],
@@ -4928,7 +4960,7 @@ function logstashReloadCard(d) {
     'Causas típicas: erro de sintaxe no pipeline, plugin ausente, credencial inválida em um output. ' +
     'O motivo da última falha fica no tooltip da coluna <strong>Reloads</strong> da tabela de pipelines.';
 
-  return cardStat(null, 'Reloads com Falha', 'fa-rotate-left', fmtNum(failures),
+  return cardStat(null, 'Reloads com Falha', 'rotate-ccw', fmtNum(failures),
     failures > 0 ? 'configuração não aplicada' : 'nenhuma falha de recarga',
     failures > 0 ? 'red' : 'green', tip, [], 'help-logstash-reloads');
 }
@@ -4961,7 +4993,7 @@ function logstashInstancesTable(d) {
       <td style="text-align:right">${svcNumCell('logstash', inst.metrics.events_per_sec, '')}</td>
     </tr>`).join('');
 
-  return tableCard('fa-gauge-high', 'Utilização por Instância', tip, 'help-logstash-utilization',
+  return tableCard('gauge', 'Utilização por Instância', tip, 'help-logstash-utilization',
     `<th>Instância</th><th>Status</th><th>CPU</th><th>Heap</th><th>RAM</th>
      <th>Disco</th><th>FDs</th><th style="text-align:right">Eventos/s</th>`,
     rows);
@@ -5048,7 +5080,7 @@ function lsInstanceDetailHtml(inst) {
   const defaults = d.pipeline_defaults || {};
 
   const num = v => (v == null ? null : fmtNum(v));
-  const bytes = v => (v == null ? null : formatBytes(v));
+  const bytes = v => (v == null ? null : fmtBytes(v));
 
   // Nenhuma fonte respondeu por esta instância: uma tela inteira de traços
   // não diria nada além do que a nota diz. RAM e disco do host podem existir
@@ -5058,7 +5090,7 @@ function lsInstanceDetailHtml(inst) {
       ${lsIdentitySection(inst, d, info)}
       ${lsHostOnlySection(inst, m)}
       <div class="nd-section">
-        <div class="nd-note"><i class="fas fa-circle-info"></i><span>
+        <div class="nd-note"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg><span>
           <strong>Sem dados desta instância.</strong> A URL cadastrada não respondeu e não há
           amostra recente no self-monitoring do cluster. JVM, SO, processo e vazão voltam a
           aparecer assim que uma das duas fontes responder.</span></div>
@@ -5072,7 +5104,7 @@ function lsInstanceDetailHtml(inst) {
     ${lsCpuSection(m, proc, os)}
     ${lsMemorySection(inst, m, jvm, info)}
     ${lsDiskSection(inst, m)}
-    ${ndSection('fa-file', 'Processo', [
+    ${ndSection('file', 'Processo', [
       lsMetricRow('File descriptors', m.fd,
         `${num(inst.fd_open) || '?'} de ${num(inst.fd_max) || '?'}${
           proc.peak_fds != null ? ` · pico ${num(proc.peak_fds)}` : ''}`,
@@ -5095,7 +5127,7 @@ function lsIdentitySection(inst, d, info) {
   const source = LS_DETAIL_SOURCE[inst.detail_source] || '';
   const started = info.start_time_ms ? fmtMillisDate(info.start_time_ms) : null;
 
-  return ndSection('fa-diagram-project', 'Identificação', [
+  return ndSection('workflow', 'Identificação', [
     ndValRow('Status', `${serviceStatusBadge(inst.status)}${
       inst.health && inst.health.symptom
         ? ` <span class="nd-dim">${escHtml(inst.health.symptom)}</span>` : ''}`),
@@ -5117,7 +5149,7 @@ function lsIdentitySection(inst, d, info) {
 // RAM e disco do host quando é só isso que sobrou (instância sem nenhuma fonte
 // própria, mas com Elastic Agent no host).
 function lsHostOnlySection(inst, m) {
-  return ndSection('fa-desktop', 'Host (Elastic Agent)', [
+  return ndSection('monitor', 'Host (Elastic Agent)', [
     m.ram && m.ram.value != null
       ? lsMetricRow('RAM do host', m.ram, '', LS_NO_AGENT_HINT, { fixedBar: true }) : '',
     m.disk && m.disk.value != null
@@ -5135,7 +5167,7 @@ function lsOsSection(os, cgroup) {
   const throttlePct = cg.throttled_pct;
   const throttleColor = throttlePct == null ? '' : (throttlePct >= 10 ? 'red' : throttlePct >= 1 ? 'yellow' : 'green');
 
-  return ndSection('fa-desktop', 'Sistema Operacional', [
+  return ndSection('monitor', 'Sistema Operacional', [
     ndValRow('SO', escHtml(soName)),
     ndValRow('Arquitetura', escHtml(os.arch), true),
     ndValRow('Processadores disponíveis', os.processors != null
@@ -5172,7 +5204,7 @@ function lsCpuSection(m, proc, os) {
       (procs ? ` <span class="nd-dim">· ${fmtNum(procs)} vCPU${procs === 1 ? '' : 's'}</span>` : ''))
     : '';
 
-  return ndSection('fa-microchip', 'CPU', [
+  return ndSection('cpu', 'CPU', [
     lsMetricRow('CPU do processo', m.cpu, 'uso do processo Logstash, não do host',
       LS_NO_API_HINT, { fixedBar: true }),
     loadRow,
@@ -5193,12 +5225,12 @@ function lsMemorySection(inst, m, jvm, info) {
   const poolRows = pools.map(p => {
     const label = { young: 'Pool young (eden)', survivor: 'Pool survivor', old: 'Pool old (tenured)' }[p.name]
       || `Pool ${escHtml(p.name)}`;
-    const peak = p.peak_used != null ? ` · pico ${formatBytes(p.peak_used)}` : '';
+    const peak = p.peak_used != null ? ` · pico ${fmtBytes(p.peak_used)}` : '';
     // Sem máximo declarado (o padrão no G1) não há percentual: só o uso.
     return p.pct != null
-      ? ndPctRow(label, p.pct, `${formatBytes(p.used)} de ${formatBytes(p.max)}${peak}`,
+      ? ndPctRow(label, p.pct, `${fmtBytes(p.used)} de ${fmtBytes(p.max)}${peak}`,
         { fixedBar: true, color: pctColor(p.pct) })
-      : ndValRow(label, `${formatBytes(p.used || 0)}<span class="nd-dim">${peak} · sem máximo declarado</span>`);
+      : ndValRow(label, `${fmtBytes(p.used || 0)}<span class="nd-dim">${peak} · sem máximo declarado</span>`);
   });
 
   const gcRows = (gc.collectors || []).map(c => ndValRow(
@@ -5206,19 +5238,19 @@ function lsMemorySection(inst, m, jvm, info) {
     `${fmtNum(c.count)} coletas <span class="nd-dim">· ${fmtDuration(c.time_ms)} no total` +
     `${c.avg_ms != null ? ` · ${fmtMs(c.avg_ms)} por coleta` : ''}</span>`));
 
-  return ndSection('fa-memory', 'Memória e JVM', [
+  return ndSection('memory-stick', 'Memória e JVM', [
     lsMetricRow('RAM do host', m.ram, 'uso de memória da máquina', LS_NO_AGENT_HINT, { fixedBar: true }),
     lsMetricRow('Heap usada', m.heap,
-      `${formatBytes(inst.heap_used || 0)} de ${formatBytes(inst.heap_max || 0)}`,
+      `${fmtBytes(inst.heap_used || 0)} de ${fmtBytes(inst.heap_max || 0)}`,
       LS_NO_API_HINT, { fixedBar: true }),
     ...poolRows,
     ndValRow('Non-heap', jvm.non_heap_used != null
-      ? `${formatBytes(jvm.non_heap_used)}<span class="nd-dim">${
-        jvm.non_heap_committed ? ` de ${formatBytes(jvm.non_heap_committed)} reservados` : ''
+      ? `${fmtBytes(jvm.non_heap_used)}<span class="nd-dim">${
+        jvm.non_heap_committed ? ` de ${fmtBytes(jvm.non_heap_committed)} reservados` : ''
       } · metaspace e code cache, fora do -Xmx</span>` : null),
     heapInit != null || heapMax != null
       ? ndValRow('Heap configurada (-Xms / -Xmx)',
-        `${heapInit != null ? formatBytes(heapInit) : '—'} / ${heapMax != null ? formatBytes(heapMax) : '—'}`)
+        `${heapInit != null ? fmtBytes(heapInit) : '—'} / ${heapMax != null ? fmtBytes(heapMax) : '—'}`)
       : '',
     heapMismatch ? ndWarnRow('<code>-Xms</code> e <code>-Xmx</code> diferentes — o Logstash recomenda os ' +
       'dois iguais: assim a JVM não redimensiona a heap em runtime, o que causa pausa e esconde o ' +
@@ -5250,15 +5282,15 @@ function lsMemorySection(inst, m, jvm, info) {
 // deixar a seção sumir sem motivo aparente.
 function lsDiskSection(inst, m) {
   if (!m.disk || m.disk.value == null) {
-    return ndSection('fa-hard-drive', 'Disco do host', [
-      `<div class="nd-note"><i class="fas fa-circle-info"></i><span>
+    return ndSection('hard-drive', 'Disco do host', [
+      `<div class="nd-note"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg><span>
         <strong>Sem fonte para o disco.</strong> A API do Logstash não expõe uso de filesystem —
         ele vem da integração <code>system</code> do <strong>Elastic Agent</strong> no host desta
         instância. O espaço livre onde a fila persistente vive aparece no tooltip da coluna
         <strong>Fila</strong> da tabela de pipelines.</span></div>`,
     ]);
   }
-  return ndSection('fa-hard-drive', 'Disco do host', [
+  return ndSection('hard-drive', 'Disco do host', [
     lsMetricRow('Uso do disco', m.disk,
       lsMountLabel(inst.disk_mount), LS_NO_AGENT_HINT, { fixedBar: true }),
   ]);
@@ -5281,8 +5313,8 @@ function lsEventsSection(inst, ev, m, flow, defaults) {
   const concurrency = rate('worker_concurrency');
   const backpressure = rate('queue_backpressure');
 
-  return ndSection('fa-right-left', 'Eventos e vazão', [
-    `<div class="nd-note"><i class="fas fa-circle-info"></i><span>
+  return ndSection('arrow-left-right', 'Eventos e vazão', [
+    `<div class="nd-note"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg><span>
       Os contadores do Logstash são <strong>acumulados desde o start</strong> do processo. A média
       abaixo é <code>eventos de saída ÷ uptime</code>${rate('input_throughput') != null
         ? ' — as taxas <strong>atuais</strong> vêm da seção <code>flow</code>, que o próprio Logstash calcula sobre uma janela recente'
@@ -5313,7 +5345,7 @@ function lsEventsSection(inst, ev, m, flow, defaults) {
 function lsPipelineDefaultsSection(inst, defaults) {
   const workers = defaults.workers != null ? defaults.workers : inst.default_workers;
   const batch = defaults.batch_size != null ? defaults.batch_size : inst.default_batch_size;
-  return ndSection('fa-sliders', 'Configuração padrão do pipeline', [
+  return ndSection('sliders-horizontal', 'Configuração padrão do pipeline', [
     ndValRow('pipeline.workers', workers != null
       ? `${fmtNum(workers)} <span class="nd-dim">· threads que executam filtros e saídas</span>` : null),
     ndValRow('pipeline.batch.size', batch != null
@@ -5332,7 +5364,7 @@ function lsHealthSection(inst) {
   const health = inst.health;
   if (!health || !health.available) return '';
   const indicators = health.indicators || [];
-  return ndSection('fa-notes-medical', 'Health report', [
+  return ndSection('clipboard-check', 'Health report', [
     ndValRow('Avaliação do próprio Logstash', serviceStatusBadge(health.status)),
     health.symptom ? ndValRow('Sintoma', escHtml(health.symptom)) : '',
     ...indicators.map(i => ndWarnRow(
@@ -5358,7 +5390,7 @@ function lsPipelinesSummarySection(inst) {
       `${p.avg_event_ms != null ? fmtMs(p.avg_event_ms) : '—'}/evento ` +
       `<span class="nd-dim">· ${fmtNum(p.events_out)} eventos de saída · ${queue}</span>${dlq}`);
   });
-  return ndSection('fa-bezier-curve', `Pipelines (${pipes.length})`, rows);
+  return ndSection('workflow', `Pipelines (${pipes.length})`, rows);
 }
 
 // Pipelines, filas e DLQ só existem na API: sem URL cadastrada a seção explica
@@ -5404,7 +5436,7 @@ function logstashPipelinesSection(d) {
   </tr>`).join('');
 
   return section('Pipelines') +
-    tableCard('fa-bezier-curve', 'Pipelines, filas e DLQ', tip, 'help-logstash-pipelines',
+    tableCard('workflow', 'Pipelines, filas e DLQ', tip, 'help-logstash-pipelines',
       `<th>Pipeline</th><th>Workers</th><th style="text-align:right">Entrada</th>
        <th style="text-align:right">Saída</th><th style="text-align:right">ms/evento</th>
        <th>Fila</th><th style="text-align:right">DLQ</th>
@@ -5426,8 +5458,8 @@ function logstashQueueCell(p) {
     return `${label}${p.queue_events ? `<div class="kb-inst-sub">${fmtNum(p.queue_events)} eventos</div>` : ''}`;
   }
   const detail = [
-    p.queue_bytes != null ? `${formatBytes(p.queue_bytes)} de ${formatBytes(p.queue_max_bytes || 0)}` : '',
-    p.queue_free_bytes != null ? `${formatBytes(p.queue_free_bytes)} livres no disco` : '',
+    p.queue_bytes != null ? `${fmtBytes(p.queue_bytes)} de ${fmtBytes(p.queue_max_bytes || 0)}` : '',
+    p.queue_free_bytes != null ? `${fmtBytes(p.queue_free_bytes)} livres no disco` : '',
     p.queue_path ? `caminho: ${p.queue_path}` : '',
   ].filter(Boolean).join(' · ');
   return `<div title="${escHtml(detail)}">${label}
@@ -5444,7 +5476,7 @@ function logstashDlqCell(p) {
                  p.dlq_expired ? `${p.dlq_expired} expirados (perdidos)` : ''].filter(Boolean).join(' · ');
   return `<span title="${escHtml(title)}" style="${p.dlq_dropped > 0 ? 'color:var(--red);font-weight:700' : ''}">
     ${fmtNum(p.dlq_dropped || 0)}</span>
-    ${p.dlq_bytes ? `<div class="kb-inst-sub">${formatBytes(p.dlq_bytes)}</div>` : ''}`;
+    ${p.dlq_bytes ? `<div class="kb-inst-sub">${fmtBytes(p.dlq_bytes)}</div>` : ''}`;
 }
 
 function logstashReloadCell(p) {
@@ -5483,7 +5515,7 @@ function logstashPluginsSection(d) {
   </tr>`).join('');
 
   return section('Plugins mais lentos') +
-    tableCard('fa-stopwatch', 'Onde o tempo do pipeline é gasto', tip, 'help-logstash-plugins',
+    tableCard('clock', 'Onde o tempo do pipeline é gasto', tip, 'help-logstash-plugins',
       `<th>Plugin</th><th>Tipo</th><th>Pipeline</th>
        <th style="text-align:right">Eventos</th><th style="text-align:right">ms/evento</th>
        <th style="text-align:right">Tempo total</th><th style="text-align:right">% do pipeline</th>`,
@@ -5501,11 +5533,11 @@ async function renderConfig() {
   const keys = Object.keys(INTEGRATIONS);
 
   if (keys.some(k => !integrationConfig[k])) {
-    page.innerHTML = `<div class="loading-state"><i class="fas fa-circle-notch fa-spin"></i><span>Carregando configuração...</span></div>`;
+    page.innerHTML = `<div class="loading-state"><svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Carregando configuração...</span></div>`;
     try {
       await Promise.all(keys.filter(k => !integrationConfig[k]).map(fetchIntegrationConfig));
     } catch (e) {
-      page.innerHTML = `<div class="error-state"><i class="fas fa-triangle-exclamation"></i><p>${escHtml(e.message)}</p></div>`;
+      page.innerHTML = `<div class="error-state"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg><p>${escHtml(e.message)}</p></div>`;
       return;
     }
   }
@@ -5525,7 +5557,7 @@ async function renderConfig() {
   // O aviso de "conexão não salva" vale para as duas: fica uma vez, no topo.
   const notPersistable = keys.some(k => integrationConfig[k].persistable === false)
     ? `<div class="kb-warning">
-         <i class="fas fa-circle-info"></i>
+         <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
          <div>${escHtml(integrationConfig[keys[0]].reason || '')}</div>
        </div>`
     : '';
@@ -5540,7 +5572,7 @@ async function renderConfig() {
           Cancelar
         </button>
         <button class="btn btn-primary" id="configSaveBtn" onclick="saveIntegrationsConfig()">
-          <i class="fas fa-floppy-disk"></i> Salvar
+          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-save"/></svg> Salvar
         </button>
       </div>
     </div>
@@ -5562,10 +5594,10 @@ function integrationConfigHtml(key) {
             placeholder="${escHtml(meta.urlPlaceholder)}"
             oninput="cfgUrlChanged('${key}', ${idx}, this.value)">
           <button class="btn btn-ghost btn-sm" onclick="cfgTestUrl('${key}', ${idx})" title="Testar esta instância">
-            <i class="fas fa-vial"></i> Testar
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-plug"/></svg> Testar
           </button>
           <button class="btn-icon" onclick="cfgRemoveUrl('${key}', ${idx})" title="Remover">
-            <i class="fas fa-trash"></i>
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-trash-2"/></svg>
           </button>
         </div>
         <div class="kb-url-result" id="urlResult-${key}-${idx}"></div>
@@ -5576,7 +5608,7 @@ function integrationConfigHtml(key) {
       <header class="cfg-group-header">
         <div class="cfg-group-info">
           <div class="cfg-group-title">
-            <i class="fas ${meta.icon}"></i>
+            ${icon(meta.icon, 16)}
             <span>${meta.label}</span>
             ${tooltip(meta.switchTip, meta.helpTopic)}
           </div>
@@ -5593,7 +5625,7 @@ function integrationConfigHtml(key) {
       <div class="cfg-group-body" id="${key}Fields" ${draft.enabled ? '' : 'hidden'}>
         <section class="cfg-section">
           <div class="cfg-section-info">
-            <div class="cfg-section-title"><i class="fas fa-key"></i><span>Acesso</span></div>
+            <div class="cfg-section-title"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-key-round"/></svg><span>Acesso</span></div>
             <p class="cfg-section-desc">${meta.accessDesc}</p>
           </div>
           <div class="cfg-section-fields">
@@ -5608,7 +5640,7 @@ function integrationConfigHtml(key) {
                 <label>Senha</label>
                 ${locked
                   ? `<button type="button" class="btn btn-ghost btn-full" onclick="cfgEnablePasswordChange('${key}')">
-                       <i class="fas fa-key"></i> Alterar senha
+                       <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-key-round"/></svg> Alterar senha
                      </button>`
                   : `<input type="password" id="${key}Password" value="${escHtml(draft.password || '')}"
                        placeholder="••••••••" autocomplete="current-password"
@@ -5620,13 +5652,13 @@ function integrationConfigHtml(key) {
 
         <section class="cfg-section">
           <div class="cfg-section-info">
-            <div class="cfg-section-title"><i class="fas fa-server"></i><span>Instâncias</span></div>
+            <div class="cfg-section-title"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-server"/></svg><span>Instâncias</span></div>
             <p class="cfg-section-desc">${meta.instancesDesc}</p>
           </div>
           <div class="cfg-section-fields">
             <div class="cfg-instance-list">${urlRows}</div>
             <button class="btn btn-ghost btn-sm cfg-add-btn" onclick="cfgAddUrl('${key}')">
-              <i class="fas fa-plus"></i> Adicionar instância
+              <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-plus"/></svg> Adicionar instância
             </button>
           </div>
         </section>
@@ -5690,7 +5722,7 @@ async function cfgTestUrl(key, idx) {
     return;
   }
   out.className = 'kb-url-result';
-  out.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Testando...';
+  out.innerHTML = '<svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Testando...';
 
   try {
     const res = await fetch(`/api/${key}/test`, {
@@ -5706,14 +5738,14 @@ async function cfgTestUrl(key, idx) {
     const data = await res.json();
     if (data.success) {
       out.className = 'kb-url-result success';
-      out.innerHTML = `<i class="fas fa-circle-check"></i> ${escHtml(data.name || 'instância')} · v${escHtml(data.version || '?')} · ${escHtml(data.status || '')}`;
+      out.innerHTML = `<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-check"/></svg> ${escHtml(data.name || 'instância')} · v${escHtml(data.version || '?')} · ${escHtml(data.status || '')}`;
     } else {
       out.className = 'kb-url-result error';
-      out.innerHTML = `<i class="fas fa-circle-xmark"></i> ${escHtml(data.error || 'falhou')}`;
+      out.innerHTML = `<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-alert"/></svg> ${escHtml(data.error || 'falhou')}`;
     }
   } catch (e) {
     out.className = 'kb-url-result error';
-    out.innerHTML = `<i class="fas fa-circle-xmark"></i> ${escHtml(e.message)}`;
+    out.innerHTML = `<svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-alert"/></svg> ${escHtml(e.message)}`;
   }
 }
 
@@ -5723,7 +5755,7 @@ async function cfgTestUrl(key, idx) {
 async function saveIntegrationsConfig() {
   const btn = document.getElementById('configSaveBtn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+  btn.innerHTML = '<svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Salvando...';
 
   const errors = [];
   let saved = 0;
@@ -5774,28 +5806,28 @@ async function saveIntegrationsConfig() {
 const CLUSTER_TUNABLE_META = {
   'indices.recovery.max_bytes_per_sec': {
     label: 'Velocidade de recovery',
-    icon: 'fa-gauge-high',
+    icon: 'gauge',
     helpTopic: 'help-cluster-recovery-speed',
     desc: 'Limite de tráfego de recovery <strong>por nó</strong> — cópia de réplicas, realocação e restauração de snapshot. É o principal acelerador para o cluster voltar a GREEN.',
     tip: 'Limita, por nó, a banda usada para copiar shards. Aumentar acelera o recovery, mas disputa rede e disco com indexação e busca.',
   },
   'cluster.routing.allocation.cluster_concurrent_rebalance': {
     label: 'Rebalanceamentos simultâneos',
-    icon: 'fa-scale-balanced',
+    icon: 'scale',
     helpTopic: 'help-cluster-rebalance',
     desc: 'Quantos shards podem ser movidos <strong>para rebalanceamento</strong> ao mesmo tempo no cluster inteiro.',
     tip: 'Vale para o cluster todo e só para rebalanceamento — não limita movimentações por filtro de alocação.',
   },
   'cluster.routing.allocation.node_concurrent_recoveries': {
     label: 'Recoveries simultâneas por nó',
-    icon: 'fa-arrow-right-arrow-left',
+    icon: 'arrow-left-right',
     helpTopic: 'help-cluster-node-recoveries',
     desc: 'Quantas recoveries de shard cada nó pode receber e enviar ao mesmo tempo.',
     tip: 'Ajusta juntos os limites de entrada e saída por nó. Mais recoveries dividem a mesma banda de recovery do nó. A Elastic não recomenda mudar o padrão.',
   },
   'cluster.max_shards_per_node': {
     label: 'Limite de shards por nó',
-    icon: 'fa-layer-group',
+    icon: 'layers',
     helpTopic: 'help-cluster-max-shards',
     desc: 'Teto de shards abertos por nó de dados. Atingi-lo faz a <strong>criação de índices falhar</strong> — inclusive o rollover do ILM e o índice do dia seguinte.',
     tip: 'Multiplicado pelo número de nós de dados, dá o teto do cluster inteiro. Nós que servem apenas ao tier frozen ficam fora da conta: esse tier tem limite próprio (<code>cluster.max_shards_per_node.frozen</code>).',
@@ -5816,10 +5848,10 @@ let clusterShardBudget = null;
 
 async function loadCluster() {
   const page = document.getElementById('page-cluster');
-  const icon = document.getElementById('refreshIcon');
-  if (icon) icon.classList.add('spin');
+  const iconEl = document.getElementById('refreshIcon');
+  if (iconEl) iconEl.classList.add('spin');
   page.innerHTML = `<div class="loading-state">
-    <i class="fas fa-circle-notch fa-spin"></i>
+    <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
     <span>Carregando configurações do cluster...</span>
   </div>`;
 
@@ -5836,11 +5868,11 @@ async function loadCluster() {
     clusterSettings = null;
     clusterShardBudget = null;
     page.innerHTML = `<div class="error-state">
-      <i class="fas fa-triangle-exclamation"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
       <p>Configurações do cluster indisponíveis: ${escHtml(e.message)}</p>
     </div>`;
   } finally {
-    if (icon) icon.classList.remove('spin');
+    if (iconEl) iconEl.classList.remove('spin');
   }
 }
 
@@ -5924,7 +5956,7 @@ function clusterOvershardingHtml(item) {
   const share = Math.round((b.oversharded_shards / b.open_shards) * 100);
   if (share < OVERSHARD_WARN_SHARE_PCT) return '';
   return `<div class="cluster-tunable-warn">
-      <i class="fas fa-triangle-exclamation"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
       <span><strong>${share}%</strong> dos shards abertos (${fmtNum(b.oversharded_shards)}) estão em
         ${fmtNum(b.oversharded_indices)} índice(s) com oversharding — vários shards primários com média abaixo de 1 GB.
         Reduzi-los libera espaço no teto; subir o limite adia o problema. O <strong>Inventário</strong> lista quais são.</span>
@@ -5946,7 +5978,7 @@ function renderCluster() {
   if (!page || !clusterSettings) return;
   page.innerHTML = `<div class="config-page">
     <div class="kb-warning">
-      <i class="fas fa-circle-info"></i>
+      <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
       <div>As alterações desta página valem <strong>na hora, para todo o cluster</strong>, e são gravadas como <strong>persistent</strong> — continuam valendo após restart até alguém restaurar o padrão.</div>
     </div>
     ${clusterSettings.map(clusterTunableHtml).join('')}
@@ -5954,11 +5986,11 @@ function renderCluster() {
 }
 
 function clusterTunableHtml(item, idx) {
-  const meta = CLUSTER_TUNABLE_META[item.key] || { label: item.key, icon: 'fa-gear', desc: '', tip: '' };
+  const meta = CLUSTER_TUNABLE_META[item.key] || { label: item.key, icon: 'sliders-horizontal', desc: '', tip: '' };
   const current = clusterValueText(item, item.value, item.raw);
   const transientWarn = item.transient_raw !== null
     ? `<div class="cluster-tunable-warn">
-         <i class="fas fa-triangle-exclamation"></i>
+         <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
          <span>Há um valor <strong>transient</strong> (<code>${escHtml(item.transient_raw)}</code>) nesta chave. Ele tem precedência e se perde num restart completo do cluster; aplicar ou restaurar o padrão o remove.</span>
        </div>`
     : '';
@@ -5970,7 +6002,7 @@ function clusterTunableHtml(item, idx) {
   return `<section class="cfg-section">
       <div class="cfg-section-info">
         <div class="cfg-section-title">
-          <i class="fas ${meta.icon}"></i>
+          ${icon(meta.icon, 16)}
           <span>${meta.label}</span>
           ${tooltip(`<code>${escHtml(item.key)}</code><br><br>${meta.tip}`, meta.helpTopic)}
         </div>
@@ -5989,11 +6021,11 @@ function clusterTunableHtml(item, idx) {
             ? `<div class="input-with-suffix">${input}<span class="input-suffix" title="Megabytes por segundo">MB</span></div>`
             : `<div class="input-with-suffix">${input}</div>`}
           <button class="btn btn-primary btn-sm" id="clusterApply-${idx}" onclick="applyClusterTunable(${idx})" disabled>
-            <i class="fas fa-check"></i> Aplicar
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg> Aplicar
           </button>
           <button class="btn btn-ghost btn-sm" id="clusterRestore-${idx}" onclick="restoreClusterTunable(${idx})"
             ${item.origin === 'default' ? 'disabled title="O valor já é o padrão"' : ''}>
-            <i class="fas fa-rotate-left"></i> Restaurar padrão
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw"/></svg> Restaurar padrão
           </button>
         </div>
         <div class="error-msg cluster-tunable-msg" id="clusterMsg-${idx}"></div>

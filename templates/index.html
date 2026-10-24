@@ -7,7 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="/static/css/tokens.css">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -79,7 +78,7 @@
   <div class="connect-card">
     <div class="connect-header">
       <div class="connect-logo">
-        <i class="fas fa-database"></i>
+        <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-database"/></svg>
         <span>Elastic Helper</span>
         <span class="brand-badge">Beta</span>
       </div>
@@ -92,7 +91,7 @@
         <div class="conn-saved-header">
           <span>Conexões salvas</span>
           <button type="button" class="btn btn-ghost btn-sm" id="newConnBtn" onclick="startNewConnection()">
-            <i class="fas fa-plus"></i> Nova
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-plus"/></svg> Nova
           </button>
         </div>
         <div class="conn-list" id="connList"></div>
@@ -105,7 +104,7 @@
         <span class="edit-header-title">Editando conexão</span>
         <button class="btn-icon edit-delete-btn" id="deleteEditBtn" title="Excluir conexão"
           onclick="deleteCurrentConnection()">
-          <i class="fas fa-trash"></i>
+          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-trash-2"/></svg>
         </button>
       </div>
       <div class="form-group">
@@ -131,7 +130,7 @@
       <div class="form-group">
         <label>Senha <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>
         <button type="button" class="btn btn-ghost btn-full" id="changePasswordBtn" style="display:none" onclick="enablePasswordChange()">
-          <i class="fas fa-key"></i> Alterar senha
+          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-key-round"/></svg> Alterar senha
         </button>
         <input type="password" id="esPassword" placeholder="••••••••" autocomplete="current-password"
           onkeydown="if(event.key==='Enter') connect()">
@@ -149,14 +148,14 @@
       <div id="editActions" style="display:none">
         <div class="btn-row">
           <button class="btn btn-primary" id="saveEditBtn" onclick="saveEdit()">
-            <i class="fas fa-floppy-disk"></i> Salvar
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-save"/></svg> Salvar
           </button>
           <button class="btn btn-ghost" id="testEditBtn" onclick="testConnection()">
-            <i class="fas fa-vial"></i> Testar Conexão
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-plug"/></svg> Testar Conexão
           </button>
         </div>
         <button class="btn btn-ghost btn-full btn-row-below" id="cancelEditBtn" onclick="startNewConnection()">
-          <i class="fas fa-xmark"></i> Cancelar
+          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-x"/></svg> Cancelar
         </button>
       </div>
 
@@ -164,14 +163,14 @@
       <div id="defaultActions">
         <div class="btn-row">
           <button class="btn btn-primary" id="connectBtn" onclick="connect()">
-            <i class="fas fa-plug"></i> Conectar
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-plug"/></svg> Conectar
           </button>
           <button class="btn btn-ghost" id="testBtn" onclick="testConnection()">
-            <i class="fas fa-vial"></i> Testar Conexão
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-plug"/></svg> Testar Conexão
           </button>
         </div>
         <button class="btn btn-ghost btn-full btn-row-below" id="saveToggleBtn" onclick="saveConnection()">
-          <i class="fas fa-floppy-disk"></i> Salvar
+          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-save"/></svg> Salvar
         </button>
       </div>
       </div><!-- /.connect-form -->
@@ -184,8 +183,8 @@
   <div class="alias-card">
     <div class="alias-header">
       <h2 class="alias-title">Alias / Nome da conexão</h2>
-      <button class="btn-icon" onclick="closeAliasModal()" title="Fechar (Esc)">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeAliasModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
     <div class="alias-body">
@@ -195,7 +194,7 @@
       <div class="alias-actions">
         <button class="btn btn-ghost" onclick="closeAliasModal()">Cancelar</button>
         <button class="btn btn-primary" id="aliasModalConfirm" onclick="confirmAlias()">
-          <i class="fas fa-floppy-disk"></i>
+          <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-save"/></svg>
           Salvar
         </button>
       </div>
@@ -208,8 +207,8 @@
   <div class="alias-card">
     <div class="alias-header">
       <h2 class="alias-title" id="confirmTitle">Confirmar</h2>
-      <button class="btn-icon" onclick="closeConfirmModal()" title="Fechar (Esc)">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeConfirmModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
     <div class="alias-body">
@@ -228,7 +227,7 @@
   <!-- ─────────────── SIDEBAR ─────────────── -->
   <aside class="eh-sidebar sidebar" id="sidebar">
     <div class="eh-brand">
-      <span class="eh-brand__mark" aria-hidden="true"><svg class="eh-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-layers"/></svg></span>
+      <span class="eh-brand__mark" aria-hidden="true"><svg class="eh-icon eh-icon--bold" width="17" height="17"><use href="#i-layers"/></svg></span>
       <span class="eh-brand__name">Elastic Helper</span>
       <span class="eh-brand__beta">Beta</span>
     </div>
@@ -239,26 +238,26 @@
       <div class="eh-sidebar__group">
         <div class="eh-overline eh-sidebar__grouplabel">Monitoramento</div>
         <a class="eh-nav" id="nav-overview" href="#overview" onclick="showPage('overview');return false;" title="Sinais Vitais">
-          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-heart-pulse"/></svg>
+          <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-heart-pulse"/></svg>
           <span class="eh-nav__label">Sinais Vitais</span>
         </a>
         <a class="eh-nav" id="nav-capacity" href="#capacity" onclick="showPage('capacity');return false;" title="Inventário">
-          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-package"/></svg>
+          <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-package"/></svg>
           <span class="eh-nav__label">Inventário</span>
         </a>
         <a class="eh-nav" id="nav-insights" href="#insights" onclick="showPage('insights');return false;" title="Diagnóstico">
-          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-lightbulb"/></svg>
+          <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-lightbulb"/></svg>
           <span class="eh-nav__label">Diagnóstico</span>
           <span class="eh-badge eh-badge--count eh-badge--warning" id="insightsBadge" hidden></span>
         </a>
         <!-- Integrações: só aparecem com a respectiva ativação na Configuração
              (applyIntegrationNav); a ordem aqui é a ordem exibida na sidebar -->
         <a class="eh-nav" id="nav-kibana" href="#kibana" onclick="showPage('kibana');return false;" title="Kibana" style="display:none">
-          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chart-line"/></svg>
+          <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-chart-line"/></svg>
           <span class="eh-nav__label">Kibana</span>
         </a>
         <a class="eh-nav" id="nav-logstash" href="#logstash" onclick="showPage('logstash');return false;" title="Logstash" style="display:none">
-          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-workflow"/></svg>
+          <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-workflow"/></svg>
           <span class="eh-nav__label">Logstash</span>
         </a>
       </div>
@@ -267,7 +266,7 @@
       <div class="eh-sidebar__group">
         <div class="eh-overline eh-sidebar__grouplabel">Administração</div>
         <a class="eh-nav" id="nav-cluster" href="#cluster" onclick="showPage('cluster');return false;" title="Cluster">
-          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-server"/></svg>
+          <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-server"/></svg>
           <span class="eh-nav__label">Cluster</span>
         </a>
       </div>
@@ -275,11 +274,11 @@
       <div class="eh-sidebar__group">
         <div class="eh-overline eh-sidebar__grouplabel">Suporte</div>
         <a class="eh-nav" id="nav-config" href="#config" onclick="showPage('config');return false;" title="Configuração">
-          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>
+          <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>
           <span class="eh-nav__label">Configuração</span>
         </a>
         <a class="eh-nav" id="nav-help" href="#help" onclick="showPage('help');return false;" title="Ajuda">
-          <svg class="eh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-circle-help"/></svg>
+          <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-circle-help"/></svg>
           <span class="eh-nav__label">Ajuda</span>
         </a>
       </div>
@@ -288,11 +287,11 @@
     <div class="eh-sidebar__spacer"></div>
     <div class="eh-sidebar__foot">
       <button type="button" class="eh-btn eh-btn--ghost eh-btn--nav sidebar-collapse" onclick="toggleSidebar()" title="Recolher/expandir" aria-label="Recolher menu">
-        <svg class="eh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-panel-left-close"/></svg>
+        <svg class="eh-icon" width="16" height="16" aria-hidden="true"><use href="#i-panel-left-close"/></svg>
         <span class="eh-nav__label">Recolher menu</span>
       </button>
       <button type="button" class="eh-btn eh-btn--ghost eh-btn--nav" onclick="disconnect()" aria-label="Desconectar">
-        <svg class="eh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-power"/></svg>
+        <svg class="eh-icon" width="16" height="16" aria-hidden="true"><use href="#i-power"/></svg>
         <span class="eh-nav__label">Desconectar</span>
       </button>
     </div>
@@ -309,7 +308,7 @@
       <div class="eh-topbar__right" id="topbarActions">
         <span class="eh-topbar__updated" id="lastUpdated"></span>
         <button type="button" class="eh-iconbtn eh-iconbtn--sm eh-iconbtn--outline" onclick="refreshCurrentPage()" title="Atualizar (R)" aria-label="Atualizar tudo">
-          <svg class="eh-icon" id="refreshIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
+          <svg class="eh-icon" id="refreshIcon" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
         </button>
       </div>
     </header>
@@ -324,7 +323,7 @@
       <section class="page page-overview" id="page-overview">
         <div class="metrics-grid" id="metricsGrid">
           <div class="loading-state">
-            <i class="fas fa-circle-notch fa-spin"></i>
+            <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
             <span>Carregando métricas...</span>
           </div>
         </div>
@@ -335,17 +334,17 @@
           <span class="tasks-section-hint">&gt; 5s</span>
           <div class="tooltip-wrap" style="font-weight:400;text-transform:none;letter-spacing:0">
             <div class="tooltip-btn tooltip-btn-link" onclick="goToHelp('help-running-tasks')" title="Abrir a ajuda detalhada desta seção">?</div>
-            <div class="tooltip-box" style="left:0;right:auto">Tarefas do cluster com tempo de execução acima de <strong>5s</strong> (ignora ações internas de baixo nível). Útil para flagrar operações travadas, reindexações longas ou consultas pesadas. Cada tarefa pode ser inspecionada e, quando cancelável, cancelada.<div class="tooltip-help-hint"><i class="fas fa-circle-question"></i> Clique no <strong>?</strong> para abrir a ajuda detalhada</div></div>
+            <div class="tooltip-box" style="left:0;right:auto">Tarefas do cluster com tempo de execução acima de <strong>5s</strong> (ignora ações internas de baixo nível). Útil para flagrar operações travadas, reindexações longas ou consultas pesadas. Cada tarefa pode ser inspecionada e, quando cancelável, cancelada.<div class="tooltip-help-hint"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-circle-help"/></svg> Clique no <strong>?</strong> para abrir a ajuda detalhada</div></div>
           </div>
           <span class="grid-section-line"></span>
           <span class="tasks-badge" id="tasksCount"></span>
           <button class="btn-icon" onclick="loadTasks()" title="Atualizar tarefas">
-            <i class="fas fa-rotate-right" id="tasksRefreshIcon"></i>
+            <svg class="eh-icon" width="14" height="14" id="tasksRefreshIcon" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
           </button>
         </div>
         <div id="tasksBody">
           <div class="loading-state tasks-loading">
-            <i class="fas fa-circle-notch fa-spin"></i>
+            <svg class="eh-icon spin" width="16" height="16" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
             <span>Carregando tarefas...</span>
           </div>
         </div>
@@ -386,7 +385,7 @@
             <p class="help-lead">Referência dos cards e métricas dos <strong>Sinais Vitais</strong> e do <strong>Inventário</strong>: o que cada card mostra, o significado de cada dado e o que ele pode indicar. Use o índice ao lado ou o "?" de cada card para chegar direto ao tópico.</p>
 
             <div class="help-search">
-              <i class="fas fa-magnifying-glass"></i>
+              <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-search"/></svg>
               <input type="text" id="helpSearch" placeholder="Buscar nos termos e métricas… (ex: shard, ILM, circuit breaker)" oninput="filterHelp(this.value)">
             </div>
 
@@ -394,7 +393,7 @@
             <div id="helpGroups"></div>
 
             <div class="help-no-results" id="helpNoResults" hidden>
-              <i class="fas fa-magnifying-glass"></i>
+              <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-search"/></svg>
               Nenhum termo encontrado para a busca.
             </div>
           </div>
@@ -420,35 +419,38 @@
 
 <!-- ═══════════════════ DETAIL MODAL ═══════════════════════ -->
 <div class="modal-overlay detail-overlay" id="detailModal" style="display:none" onclick="closeDetail(event)">
-  <div class="detail-card" onclick="event.stopPropagation()">
+  <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle" onclick="event.stopPropagation()">
 
     <div class="detail-header">
       <div>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div class="eh-dialog__titlerow">
           <h2 class="detail-title" id="detailTitle"></h2>
           <span id="detailTitleTip"></span>
         </div>
         <p class="detail-subtitle" id="detailSubtitle"></p>
       </div>
-      <button class="btn-icon" onclick="closeDetailModal()" title="Fechar (Esc)" style="flex-shrink:0">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeDetailModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
 
     <div class="detail-breadcrumb" id="detailBreadcrumb" style="display:none">
       <button class="btn-back" onclick="goBackDetail()">
-        <i class="fas fa-arrow-left"></i> Voltar
+        <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg> Voltar
       </button>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current" id="breadcrumbCurrent"></span>
     </div>
 
     <div class="detail-search" id="detailSearchBar">
-      <i class="fas fa-magnifying-glass"></i>
-      <input type="text" id="detailSearch" placeholder="Filtrar por qualquer campo..." oninput="filterTable()">
+      <span class="search-field">
+        <svg class="eh-icon" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg>
+        <label for="detailSearch" class="eh-sr">Filtrar a lista</label>
+        <input type="text" id="detailSearch" placeholder="Filtrar por qualquer campo..." oninput="filterTable()">
+      </span>
       <span class="detail-count" id="detailCount"></span>
-      <button class="btn btn-ghost btn-sm" id="detailExportBtn" style="display:none" onclick="exportList()">
-        <i class="fas fa-file-export"></i> Exportar lista
+      <button type="button" class="btn btn-ghost" id="detailExportBtn" style="display:none" onclick="exportList()">
+        <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-download"/></svg> Exportar lista
       </button>
     </div>
 
@@ -459,19 +461,19 @@
 
 <!-- ═══════════════════ TASK JSON MODAL ════════════════════ -->
 <div class="modal-overlay detail-overlay" id="taskJsonModal" style="display:none" onclick="if(event.target===this)closeTaskJsonModal()">
-  <div class="task-json-card" onclick="event.stopPropagation()">
+  <div class="task-json-card" role="dialog" aria-modal="true" aria-labelledby="taskJsonTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
       <div>
-        <h2 class="detail-title">Detalhes da Tarefa</h2>
+        <h2 class="detail-title" id="taskJsonTitle">Detalhes da Tarefa</h2>
         <div class="task-json-id-row">
           <p class="detail-subtitle" id="taskJsonSubtitle"></p>
-          <button class="btn-copy-id" id="taskJsonCopyBtn" onclick="copyTaskId()" title="Copiar ID">
-            <i class="fas fa-copy"></i>
+          <button type="button" class="eh-iconbtn eh-iconbtn--xs eh-iconbtn--ghost btn-copy-id" id="taskJsonCopyBtn" onclick="copyTaskId()" title="Copiar ID" aria-label="Copiar ID da tarefa">
+            <svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-file"/></svg>
           </button>
         </div>
       </div>
-      <button class="btn-icon" onclick="closeTaskJsonModal()" title="Fechar (Esc)" style="flex-shrink:0">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeTaskJsonModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
     <pre class="task-json-body" id="taskJsonBody"></pre>
@@ -480,14 +482,14 @@
 
 <!-- ═══════════════════ GENERIC JSON MODAL ═════════════════ -->
 <div class="modal-overlay detail-overlay" id="jsonModal" style="display:none" onclick="if(event.target===this)closeJsonModal()">
-  <div class="task-json-card" onclick="event.stopPropagation()">
+  <div class="task-json-card" role="dialog" aria-modal="true" aria-labelledby="jsonModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
       <div>
         <h2 class="detail-title" id="jsonModalTitle"></h2>
         <p class="detail-subtitle" id="jsonModalSubtitle"></p>
       </div>
-      <button class="btn-icon" onclick="closeJsonModal()" title="Fechar (Esc)" style="flex-shrink:0">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeJsonModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
     <pre class="task-json-body" id="jsonModalBody"></pre>
@@ -496,14 +498,14 @@
 
 <!-- ═══════════════════ DISK BY NODE MODAL ═════════════════ -->
 <div class="modal-overlay detail-overlay" id="diskModal" style="display:none" onclick="if(event.target===this)closeDiskModal()">
-  <div class="detail-card" onclick="event.stopPropagation()">
+  <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="diskModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
       <div>
-        <h2 class="detail-title">Uso de disco por nó</h2>
+        <h2 class="detail-title" id="diskModalTitle">Uso de disco por nó</h2>
         <p class="detail-subtitle">Nós com uso de disco ≥ 70% (ordenados do maior para o menor)</p>
       </div>
-      <button class="btn-icon" onclick="closeDiskModal()" title="Fechar (Esc)" style="flex-shrink:0">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeDiskModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
     <div class="detail-body" id="diskModalBody"></div>
@@ -512,14 +514,14 @@
 
 <!-- ════════════════ SNAPSHOTS EM EXECUÇÃO MODAL ═══════════ -->
 <div class="modal-overlay detail-overlay" id="snapshotModal" style="display:none" onclick="if(event.target===this)closeSnapshotModal()">
-  <div class="detail-card" onclick="event.stopPropagation()">
+  <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="snapshotModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
       <div>
-        <h2 class="detail-title">Snapshots em Execução</h2>
+        <h2 class="detail-title" id="snapshotModalTitle">Snapshots em Execução</h2>
         <p class="detail-subtitle">Criação de snapshot em andamento por repositório</p>
       </div>
-      <button class="btn-icon" onclick="closeSnapshotModal()" title="Fechar (Esc)" style="flex-shrink:0">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeSnapshotModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
     <div class="detail-body" id="snapshotModalBody"></div>
@@ -528,14 +530,14 @@
 
 <!-- ════════════════ DETALHE DE NÓ MODAL ══════════════════ -->
 <div class="modal-overlay detail-overlay" id="nodeModal" style="display:none" onclick="if(event.target===this)closeNodeModal()">
-  <div class="detail-card" onclick="event.stopPropagation()">
+  <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="nodeModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
       <div>
         <h2 class="detail-title" id="nodeModalTitle">Nó</h2>
         <p class="detail-subtitle" id="nodeModalSubtitle"></p>
       </div>
-      <button class="btn-icon" onclick="closeNodeModal()" title="Fechar (Esc)" style="flex-shrink:0">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeNodeModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
     <div class="detail-body" id="nodeModalBody"></div>
@@ -545,14 +547,14 @@
 <!-- Detalhe de uma instância de Logstash (JVM, SO, GC, processo, vazão).
      Renderiza do payload já carregado pela página — não faz requisição. -->
 <div class="modal-overlay detail-overlay" id="lsInstanceModal" style="display:none" onclick="if(event.target===this)closeLsInstanceModal()">
-  <div class="detail-card" onclick="event.stopPropagation()">
+  <div class="detail-card" role="dialog" aria-modal="true" aria-labelledby="lsInstanceModalTitle" onclick="event.stopPropagation()">
     <div class="detail-header">
       <div>
         <h2 class="detail-title" id="lsInstanceModalTitle">Instância</h2>
         <p class="detail-subtitle" id="lsInstanceModalSubtitle"></p>
       </div>
-      <button class="btn-icon" onclick="closeLsInstanceModal()" title="Fechar (Esc)" style="flex-shrink:0">
-        <i class="fas fa-xmark" style="font-size:17px"></i>
+      <button type="button" class="eh-iconbtn eh-iconbtn--md eh-iconbtn--outline" onclick="closeLsInstanceModal()" title="Fechar (Esc)" aria-label="Fechar">
+        <svg class="eh-icon" width="18" height="18" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
     <div class="detail-body" id="lsInstanceModalBody"></div>
