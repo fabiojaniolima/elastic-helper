@@ -1603,17 +1603,17 @@ function renderCapacity(d = dashboardData) {
   if (!grid || !d) return;
 
   grid.innerHTML = [
-    section('Volume e Capacidade', 'volume'),
-    `<div id="section-cards-volume" class="section-volume-cards">${sectionCardsVolume(d)}</div>`,
+    `<section class="page-section">${section('Volume e Capacidade', 'volume')}
+      <div id="section-cards-volume" class="card-grid">${sectionCardsVolume(d)}</div></section>`,
 
-    section('Disco por Tier', 'tierdisk'),
-    `<div id="section-cards-tierdisk" class="section-volume-cards">${sectionCardsTierDisk(d)}</div>`,
+    `<section class="page-section">${section('Disco por Tier', 'tierdisk')}
+      <div id="section-cards-tierdisk">${sectionCardsTierDisk(d)}</div></section>`,
 
-    section('Configuração de Índices', 'indices'),
-    `<div id="section-cards-indices" style="display:contents">${sectionCardsIndices(d)}</div>`,
+    `<section class="page-section">${section('Configuração de Índices', 'indices')}
+      <div id="section-cards-indices" class="card-grid">${sectionCardsIndices(d)}</div></section>`,
 
-    section('Topologia do Cluster', 'topology'),
-    `<div id="section-cards-topology" class="section-volume-cards">${sectionCardsTopology(d)}</div>`,
+    `<section class="page-section">${section('Topologia do Cluster', 'topology')}
+      <div id="section-cards-topology">${sectionCardsTopology(d)}</div></section>`,
   ].join('');
 }
 
@@ -1772,73 +1772,71 @@ function tierNodeCounts(nodes) {
 
 function cardNodes(total, h, dedicatedMasters, nodes) {
   const tip = 'Monitore a estabilidade do número de nós. Uma diminuição inesperada indica falha. O número de data nodes impacta a distribuição de shards.';
-  const footerStat = (label, val) => `<div class="footer-stat"><span class="footer-stat-label">${label}</span><span class="footer-stat-val">${fmtNum(val)}</span></div>`;
-  const masterStat = dedicatedMasters > 0 ? footerStat('Master', dedicatedMasters) : '';
   const tiers = tierNodeCounts(nodes || []);
-  const tierStats = TIER_LABEL_ORDER
-    .filter(t => tiers[t] > 0)
-    .map(t => footerStat(t, tiers[t]))
-    .join('');
-  return `<div class="metric-card status-blue" onclick="openDetail('nodes','Nós do Cluster','Detalhes de CPU, Heap e Disco por nó')">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-server"/></svg></div>
-        <div class="card-title">Total de Nós</div>
-      </div>
-      ${tooltip(tip, 'help-total-nodes')}
-    </div>
-    <div class="card-value-wrap">
-      <div class="card-value">${total}</div>
-      <div class="card-label">nós no cluster</div>
-    </div>
-    <div class="card-footer">
-      ${footerStat('Data Nodes', h.number_of_data_nodes)}
-      ${masterStat}
-      ${tierStats}
-    </div>
-  </div>`;
+  const breakdown = [
+    { label: 'Data Nodes', val: fmtNum(h.number_of_data_nodes) },
+    ...(dedicatedMasters > 0 ? [{ label: 'Master', val: fmtNum(dedicatedMasters) }] : []),
+    ...TIER_LABEL_ORDER.filter(t => tiers[t] > 0).map(t => ({ label: t, val: fmtNum(tiers[t]) })),
+  ];
+  return statCard({
+    ic: 'server', label: 'Total de Nós', value: fmtNum(total), caption: 'nós no cluster',
+    breakdown, tip, topic: 'help-total-nodes',
+    onclick: `openDetail('nodes','Nós do Cluster','Detalhes de CPU, Heap e Disco por nó')`,
+  });
 }
 
 function cardCount(metric, title, ic, value, unit, valColor, cardStatus, tipText, footerStats, detailTitle, topic) {
-  const iconBg = `--card-icon-bg:var(--${valColor}-bg);--card-icon-color:var(--${valColor})`;
   const dt = detailTitle || title;
-  return `<div class="metric-card status-${cardStatus}" onclick="openDetail('${metric}','${dt}','')">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon" style="${iconBg}">${icon(ic, 16)}</div>
-        <div class="card-title">${title}</div>
-      </div>
-      ${tooltip(tipText, topic)}
-    </div>
-    <div class="card-value-wrap">
-      <div class="card-value value-${valColor}">${fmtNum(value)}</div>
-      <div class="card-label">${unit}</div>
-    </div>
-    ${footerStats.length ? `<div class="card-footer">${footerStats.map(s => `<div class="footer-stat"><span class="footer-stat-label">${s.label}</span><span class="footer-stat-val" ${s.color ? `style="color:var(--${s.color})"` : ''}>${s.val}</span></div>`).join('')}</div>` : ''}
-  </div>`;
+  return metricCard({
+    ic, label: title, value: fmtNum(value), unitLabel: unit, tone: cardStatus,
+    footer: footerStats.length ? footerStats.map(s => `${s.label} ${s.val}`).join(' · ') : null,
+    onclick: `openDetail('${metric}','${dt}','')`,
+    tip: tipText, topic,
+  });
 }
 
 // Card de valor genérico (aceita HTML já formatado no valor, ex.: formatBytes).
 function cardStat(metric, title, ic, valueHtml, unit, color, tip, footerStats, topic) {
-  const iconBg = `--card-icon-bg:var(--${color}-bg);--card-icon-color:var(--${color})`;
-  const click = metric
-    ? ` onclick="${metric.includes('(') ? metric : `openDetail('${metric}','${title}','')`}"`
-    : '';
-  const staticCls = metric ? '' : ' metric-card-static';
-  return `<div class="metric-card status-${color}${staticCls}"${click}>
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon" style="${iconBg}">${icon(ic, 16)}</div>
-        <div class="card-title">${title}</div>
-      </div>
-      ${tip ? tooltip(tip, topic) : ''}
+  const onclick = metric
+    ? (metric.includes('(') ? metric : `openDetail('${metric}','${title}','')`)
+    : null;
+  return statCard({
+    ic, label: title, value: valueHtml, caption: unit, tone: color,
+    breakdown: (footerStats || []).map(s => ({ label: s.label, val: s.val, color: s.color })),
+    onclick, tip, topic,
+  });
+}
+
+// StatCard do design system: número grande (com a unidade separada quando o valor
+// vem como "105,24 GB"), legenda e detalhamento em pares. `tone` é a cor de regra
+// de sempre: amarelo/vermelho colorem o número; verde, azul e neutro não.
+function statCard({ ic, label, value, caption, tone, breakdown, onclick, tip, topic }) {
+  const t = tone === 'red' ? 'danger' : tone === 'yellow' ? 'warning' : tone === 'muted' ? 'none' : 'normal';
+  const m = typeof value === 'string' && value.match(/^([\d.,]+) (B|KB|MB|GB|TB)$/);
+  const valueHtml = m
+    ? `<span class="eh-metric__value is-${t}">${m[1]}</span><span class="eh-stat__unit">${m[2]}</span>`
+    : `<span class="eh-metric__value is-${t}">${value}</span>`;
+  const title = onclick
+    ? `<a href="#" class="eh-card__link" onclick="${onclick};return false;">${label}</a>`
+    : `<span class="eh-card__label">${label}</span>`;
+  const pairs = (breakdown || []).filter(Boolean);
+  return `<article class="eh-card eh-stat${onclick ? ' is-clickable' : ''}">
+    <div class="eh-card__head">
+      ${ic ? `<span class="eh-card__icon">${icon(ic, 16)}</span>` : ''}
+      ${title}
+      ${tip ? `<span class="eh-card__above">${tooltip(tip, topic)}</span>` : ''}
     </div>
-    <div class="card-value-wrap">
-      <div class="card-value value-${color}">${valueHtml}</div>
-      <div class="card-label">${unit}</div>
+    <div class="eh-stat__body">
+      <div class="eh-stat__valuerow">${valueHtml}</div>
+      ${caption ? `<span class="eh-stat__caption">${caption}</span>` : ''}
     </div>
-    ${footerStats && footerStats.length ? `<div class="card-footer" style="flex-wrap:wrap;gap:10px 18px">${footerStats.map(s => `<div class="footer-stat"><span class="footer-stat-label">${s.label}</span><span class="footer-stat-val" ${s.color ? `style="color:var(--${s.color})"` : ''}>${s.val}</span></div>`).join('')}</div>` : ''}
-  </div>`;
+    ${pairs.length ? `<div class="eh-stat__breakdown">
+      ${pairs.map(p => `<div class="eh-stat__pair">
+        <span class="eh-stat__pairlabel">${p.label}</span>
+        <span class="eh-mono eh-stat__pairvalue${p.color ? ' lvl-' + levelClass(p.color) : ''}">${p.val}</span>
+      </div>`).join('')}
+    </div>` : ''}
+  </article>`;
 }
 
 // Capacidade de disco agregada por tier (bytes): total, usado e livre, somando
@@ -1870,12 +1868,12 @@ function tierDiskRow(tier, agg) {
   const freePct = 100 - pct;
   const color = pct >= 85 ? 'red' : pct >= 70 ? 'yellow' : 'green';
   return `<div class="tier-disk-item">
-    <div class="tier-disk-row">
-      <div class="tier-disk-name">${tier}</div>
-      <div class="tier-disk-track"><div class="tier-disk-fill" style="width:${pct}%;background:var(--${color})"></div></div>
-      <div class="tier-disk-pct text-${color}">${pct}%</div>
-    </div>
-    <div class="tier-disk-bytes">${fmtBytes(used)} usado · ${fmtBytes(total)} total · ${fmtBytes(free)} livre (${freePct}%)</div>
+    <span class="tier-disk-name">${tier}</span>
+    <span class="eh-meter eh-meter--lg" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Uso de disco do tier ${tier}"><span class="eh-meter__fill is-${levelClass(color)}" style="width:${pct > 0 && pct < 1.5 ? 1.5 : pct}%"></span></span>
+    <span class="tier-disk-pct lvl-${levelClass(color)}">${pct}%</span>
+    <span></span>
+    <span class="tier-disk-bytes"><span class="eh-mono tier-disk-strong">${fmtBytes(used)}</span> usado · <span class="eh-mono">${fmtBytes(total)}</span> total · <span class="eh-mono">${fmtBytes(free)}</span> livre (${freePct}%)</span>
+    <span></span>
   </div>`;
 }
 
@@ -1888,17 +1886,11 @@ function sectionCardsTierDisk(d) {
     '<strong>FROZEN não entra:</strong> ' + FROZEN_DISK_NOTE;
   const body = order.length
     ? `<div class="tier-disk-list">${order.map(t => tierDiskRow(t, tiers[t])).join('')}</div>`
-    : `<div class="empty-state" style="padding:16px"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg><p>Sem dados de disco por tier — nenhum data node com role de tier (<code>data_hot/warm/cold</code>) reportou capacidade. Nós <strong>frozen</strong> não entram: o disco deles é cache de searchable snapshots.</p></div>`;
-  return `<div class="metric-card metric-card-static card-full">
-    <div class="card-header">
-      <div class="card-icon-title">
-        <div class="card-icon"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-hard-drive"/></svg></div>
-        <div class="card-title">Capacidade por tier</div>
-      </div>
-      ${tooltip(tip, 'help-tier-disk')}
-    </div>
+    : `<div class="empty-state">${icon('info', 20)}<p>Sem dados de disco por tier — nenhum data node com role de tier (<code>data_hot/warm/cold</code>) reportou capacidade. Nós <strong>frozen</strong> não entram: o disco deles é cache de searchable snapshots.</p></div>`;
+  return `<section class="eh-panel">
+    ${panelHead('hard-drive', 'Capacidade por tier', tooltip(tip, 'help-tier-disk'))}
     ${body}
-  </div>`;
+  </section>`;
 }
 
 // ─── Seção: Topologia do Cluster ──────────────────────────
@@ -1908,7 +1900,7 @@ function sectionCardsTierDisk(d) {
 
 const TOPOLOGY_TIER_ORDER = ['data_hot', 'data_warm', 'data_cold', 'data_frozen'];
 const TOPOLOGY_TIER_LABEL = { data_hot: 'HOT', data_warm: 'WARM', data_cold: 'COLD', data_frozen: 'FROZEN' };
-const TOPOLOGY_TIER_ICON  = { MASTER: 'crown', HOT: 'hard-drive', WARM: 'hard-drive', COLD: 'hard-drive', FROZEN: 'hard-drive', OUTROS: 'server' };
+const TOPOLOGY_TIER_ICON  = { MASTER: 'crown', HOT: 'database', WARM: 'database', COLD: 'database', FROZEN: 'database', OUTROS: 'server' };
 
 // Agrupa nós por camada; retorna array ordenado { label, nodes, sortKey, isMaster, isOthers }.
 function groupNodesByLayer(nodes) {
@@ -1940,40 +1932,41 @@ function topologyNodeCard(n, electedName) {
   // A caixinha é pequena demais para a explicação: ela vai no title (a modal do
   // nó, que abre no clique, traz o texto completo).
   const titleAttr = rolesTitle(n.roles, isMaster) + (frozen ? ` — ${FROZEN_DISK_NOTE_TEXT}` : '');
-  const star = isMaster ? '<span class="topology-master-star" title="Master eleito">★</span>' : '';
+  const star = isMaster ? `<span class="eh-role is-elected topology-master-star" title="Master eleito">${icon('star', 10, 'eh-icon--star')}</span>` : '';
   const nameEsc = escHtml(n.name || '').replace(/'/g, '&#39;');
   const metricRow = (label, val) => {
     const pct = parseFloat(val) || 0;
     const c = pctColor(pct);
-    return `<div class="topo-metric-row">
-      <span class="topo-metric-label">${label}</span>
-      <div class="progress-bar topo-metric-bar"><div class="progress-fill progress-${c}" style="width:${Math.min(pct,100)}%"></div></div>
-      <span class="topo-metric-val text-${c}">${pct}%</span>
+    return `<div class="eh-nodecard__metric">
+      <span class="eh-nodecard__label">${label}</span>
+      <span class="eh-meter"><span class="eh-meter__fill is-${levelClass(c)}" style="width:${pct > 0 && pct < 1.5 ? 1.5 : Math.min(pct, 100)}%"></span></span>
+      <span class="eh-mono eh-nodecard__value lvl-${levelClass(c)}">${fmtPct(pct)}</span>
     </div>`;
   };
-  return `<div class="topology-node-card" title="${titleAttr}" onclick="openNodeModal('${nameEsc}')">
-    <div class="topology-node-name">${escHtml(n.name) || '-'}${star}</div>
-    ${n.ip ? `<div class="topology-node-ip">${escHtml(n.ip)}</div>` : ''}
-    <div class="topo-metrics">
+  return `<article class="eh-nodecard topology-node-card" title="${titleAttr}" role="button" tabindex="0" onclick="openNodeModal('${nameEsc}')" onkeydown="if(event.key==='Enter')openNodeModal('${nameEsc}')">
+    <div class="eh-nodecard__head">
+      <div class="eh-nodecard__row"><span class="eh-mono eh-nodecard__name">${escHtml(n.name) || '-'}</span>${star}</div>
+      ${n.ip ? `<span class="eh-mono eh-nodecard__ip">${escHtml(n.ip)}</span>` : ''}
+    </div>
+    <div class="eh-nodecard__metrics">
       ${metricRow('CPU', n.cpu)}
       ${metricRow('Heap', n.heap_percent)}
       ${frozen
-        ? `<div class="topo-metric-row">
-             <span class="topo-metric-label">Disco</span>
+        ? `<div class="eh-nodecard__metric">
+             <span class="eh-nodecard__label">Disco</span>
              <span class="topo-metric-na">— cache frozen</span>
            </div>`
         : metricRow('Disco', n.disk_used_percent)}
     </div>
-  </div>`;
+  </article>`;
 }
 
 // Conector com seta e badge de rótulo entre duas camadas do fluxo.
 function topologyConnector(label) {
-  return `<div class="topology-connector">
-    <div class="topology-connector-stem"></div>
-    <div class="topology-connector-badge"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-arrow-down"/></svg>${label}</div>
-    <div class="topology-connector-stem"></div>
-    <div class="topology-connector-arrow"></div>
+  return `<div class="topology-connector" aria-hidden="true">
+    <span class="topology-connector-stem"></span>
+    <span class="topology-connector-badge">${icon('arrow-down', 12)}${label}</span>
+    <span class="topology-connector-stem"></span>
   </div>`;
 }
 
@@ -1983,7 +1976,7 @@ function topologyLayerBlock(layer, electedName) {
   const ic = TOPOLOGY_TIER_ICON[firstLabel] || 'server';
   return `<div class="topology-layer${layer.isMasterLayer ? ' topology-layer-master' : ''}${layer.isOthers ? ' topology-layer-others' : ''}">
     <div class="topology-layer-label">
-      ${icon(ic, 16)}
+      ${icon(ic, 14)}
       <span>${layer.label}</span>
     </div>
     <div class="topology-nodes">
@@ -2006,18 +1999,12 @@ function sectionCardsTopology(d) {
     'O <strong>master eleito</strong> (★) aparece no seu tier; masters <strong>dedicados</strong> ficam na camada MASTER. ' +
     'A barrinha de cada nó mostra o <strong>uso de disco</strong> (amarelo ≥ 70%, vermelho ≥ 85%).';
 
-  const header = `<div class="card-header">
-    <div class="card-icon-title">
-      <div class="card-icon"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-workflow"/></svg></div>
-      <div class="card-title">Topologia do Cluster</div>
-    </div>
-    ${tooltip(tip, 'help-cluster-topology')}
-  </div>`;
+  const header = panelHead('workflow', 'Topologia do Cluster', tooltip(tip, 'help-cluster-topology'));
 
   if (!allLayers.length) {
-    return `<div class="metric-card metric-card-static card-full">${header}
-      <div class="empty-state" style="padding:16px"><svg class="eh-icon" width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg><p>Sem dados de nós disponíveis.</p></div>
-    </div>`;
+    return `<section class="eh-panel">${header}
+      <div class="empty-state">${icon('info', 20)}<p>Sem dados de nós disponíveis.</p></div>
+    </section>`;
   }
 
   // Monta o fluxo com conectores entre camadas
@@ -2033,9 +2020,9 @@ function sectionCardsTopology(d) {
     ? `<div class="topology-others-divider"><span>Outros nós</span></div>${topologyLayerBlock(othersLayer, electedName)}`
     : '';
 
-  return `<div class="metric-card metric-card-static card-full">${header}
+  return `<section class="eh-panel">${header}
     <div class="topology-flow">${flowHtml}${othersHtml}</div>
-  </div>`;
+  </section>`;
 }
 
 function sectionCardsVolume(d) {
@@ -2047,11 +2034,11 @@ function sectionCardsVolume(d) {
       'No rodapé, o total de <strong>documentos indexados</strong>: a soma de <code>docs.count</code>, ' +
       'que não conta os documentos marcados para exclusão ainda não expurgados por merge.',
       [{ label: 'Documentos', val: fmtNum(d.total_docs || 0), color: null }], 'help-data-volume'),
-    cardCount('all_indices', 'Total de Índices', 'layers', d.total_indices,
-      'índices', 'blue', 'blue',
+    // StatCard (como no novo layout), mas clicável: abre a mesma lista de antes.
+    cardStat("openDetail('all_indices','Todos os Índices','')", 'Total de Índices', 'layers', fmtNum(d.total_indices),
+      'índices', 'blue',
       'Contagem total de índices do cluster, incluindo índices de sistema (prefixo <code>.</code>). Uma contagem elevada pode impactar o desempenho — avalie o uso de data streams para séries temporais. Clique para listar todos os índices.',
-      [],
-      'Todos os Índices', 'help-total-indices'),
+      [], 'help-total-indices'),
     cardSnapshotRunning(d),
   ].join('');
 }

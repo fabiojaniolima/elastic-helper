@@ -1402,210 +1402,45 @@ input[type="checkbox"] {
 }
 .disk-note i { color: var(--blue); font-size: 11px; }
 
-/* ─── Disco por Tier (barras horizontais) ─── */
-.tier-disk-list { display: flex; flex-direction: column; gap: 22px; margin-top: 6px; }
-.tier-disk-item { display: flex; flex-direction: column; gap: 8px; }
-.tier-disk-row { display: flex; align-items: center; gap: 16px; }
-/* Largura fixa = a do maior nome (FROZEN), alinhado à direita: assim o texto
-   encosta sempre a um mesmo gap (16px) da barra e todas as barras se alinham. */
-.tier-disk-name {
-  width: 60px;
-  flex-shrink: 0;
-  text-align: right;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: var(--text);
-}
-.tier-disk-track {
-  flex: 1;
-  height: 30px;
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.tier-disk-fill { height: 100%; transition: width 0.3s ease; }
-.tier-disk-pct {
-  width: 52px;
-  flex-shrink: 0;
-  text-align: right;
-  font-size: 15px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.tier-disk-bytes { text-align: center; font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* ═══════════════════ INVENTÁRIO ═══════════════════ */
+/* StatCard clicável: mesmo comportamento de hover/foco do MetricCard */
+.eh-stat.is-clickable:hover { border-color: var(--border-strong); }
+.eh-stat.is-clickable:focus-within { box-shadow: var(--focus-card); }
+.eh-stat__pairvalue.lvl-normal { color: var(--text-primary); }
+.eh-stat__breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-@media (max-width: 560px) {
-  .tier-disk-pct { width: 44px; }
-}
+/* Capacidade de disco por tier: uma linha por tier, Meter lg */
+.tier-disk-list { display: flex; flex-direction: column; }
+.tier-disk-item { display: grid; grid-template-columns: 96px minmax(0, 1fr) 72px; column-gap: var(--space-24); row-gap: var(--space-10); align-items: center; padding: var(--space-20) var(--space-24); border-top: 1px solid var(--border-subtle); }
+.tier-disk-name { font-size: var(--subsection-title-size); font-weight: 600; }
+.tier-disk-pct { font-family: var(--font-mono); font-size: var(--metric-md-size); font-weight: var(--metric-md-weight); text-align: right; }
+.tier-disk-pct.lvl-normal { color: var(--text-primary); }
+.tier-disk-bytes { font-size: var(--caption-sm-size); color: var(--text-muted); }
+.tier-disk-bytes .eh-mono { color: var(--text-secondary); }
+.tier-disk-bytes .tier-disk-strong { color: var(--text-primary); }
+/* Barra usada também pelos blocos nd-* das modais de detalhe */
+.tier-disk-track { height: var(--size-meter-md); border-radius: 3px; background: var(--bg-track); overflow: hidden; }
+.tier-disk-fill { height: 100%; border-radius: inherit; transition: width .3s ease; }
 
-/* ═══ Seção: Topologia do Cluster ═══ */
-
-/* Container geral do diagrama de fluxo */
-/* ── TOPOLOGIA: paleta própria para maior contraste ──────────────────────────
-   As cores abaixo são locais e independentes do tema geral.
-   Hierarquia: flow (fundo escuro) → layer (camada) → card (nó, mais claro). */
-.topology-flow {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  margin-top: 6px;
-  background: #090d12;
-  border-radius: 10px;
-  padding: 14px;
-}
-
-/* Bloco de uma camada (tier / MASTER / OUTROS) */
-.topology-layer {
-  border: 1px solid #3d4c5e;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #101722;
-}
-
-/* Cabeçalho da camada: ícone + rótulo */
-.topology-layer-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  background: #18253a;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: #8fa8c8;
-  border-bottom: 1px solid #3d4c5e;
-}
-
-/* ── Conectores entre camadas ── */
-.topology-connector {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  padding: 10px 0;
-}
-
-.topology-connector-stem {
-  width: 2px;
-  height: 12px;
-  background: #3d4c5e;
-}
-
-.topology-connector-arrow {
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 7px solid #3d4c5e;
-}
-
-.topology-connector-badge {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  background: #18253a;
-  border: 1px solid #3d4c5e;
-  border-radius: 20px;
-  font-size: 10px;
-  color: #6a88a8;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  white-space: nowrap;
-}
-
-/* Separador antes da camada OUTROS */
-.topology-others-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 18px 0 10px;
-  color: #4a6080;
-  font-size: 10.5px;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-}
-
-.topology-others-divider::before,
-.topology-others-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: #3d4c5e;
-}
-
-/* Grid de cards dentro de cada camada */
-.topology-nodes {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background: #0d1520;
-}
-
-/* Card individual de nó — clicável */
-.topology-node-card {
-  background: #1e2d42;
-  border: 1px solid #3d4c5e;
-  border-radius: 8px;
-  padding: 10px 12px;
-  width: 200px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  cursor: pointer;
-  transition: border-color var(--transition), background var(--transition);
-}
-
-.topology-node-card:hover {
-  border-color: #58a6ff;
-  background: #253650;
-}
-
-.topology-node-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #dce9f5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.topology-master-star {
-  color: var(--yellow);
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.topology-node-ip {
-  font-size: 11.5px;
-  color: #6a88a8;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font-mono);
-}
-
-.topo-metrics { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-.topo-metric-row { display: flex; align-items: center; gap: 5px; }
-.topo-metric-label { font-size: 10px; color: #5a7898; width: 30px; flex-shrink: 0; }
-.topo-metric-bar { flex: 1; min-width: 0; height: 3px; background: #0d1520 !important; }
-.topo-metric-val { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; width: 30px; text-align: right; flex-shrink: 0; }
+/* Topologia do cluster: camadas embutidas (bg-inset) com NodeCards */
+.topology-flow { display: flex; flex-direction: column; padding: 0 var(--space-20) var(--space-20); }
+.topology-layer { display: flex; flex-direction: column; background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-note); min-width: 0; }
+.topology-layer-label { display: flex; align-items: center; gap: var(--space-8); padding: var(--space-12) var(--space-16); border-bottom: 1px solid var(--border-subtle); font-size: 11.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-secondary); }
+.topology-layer-label .eh-icon { color: var(--accent); }
+.topology-nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-12); padding: var(--space-16); }
+.topology-connector { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 56px; }
+.topology-connector-stem { width: 1px; height: 12px; background: var(--border-control); }
+.topology-connector-badge { display: flex; align-items: center; gap: var(--space-6); font-size: 11.5px; font-weight: 500; letter-spacing: 0.04em; color: var(--text-secondary); background: var(--bg-card); border: 1px solid var(--border-control); border-radius: var(--radius-pill); padding: 3px var(--space-10); white-space: nowrap; }
+.topology-others-divider { display: flex; align-items: center; gap: var(--space-12); margin: var(--space-20) 0 var(--space-12); font-size: var(--overline-size); font-weight: var(--overline-weight); letter-spacing: var(--overline-tracking); text-transform: uppercase; color: var(--text-muted); }
+.topology-others-divider::before, .topology-others-divider::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
+.topology-node-card { cursor: pointer; transition: border-color .15s ease; }
+.topology-node-card:hover { border-color: var(--border-strong); }
+.topology-node-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.eh-nodecard__name { overflow-wrap: anywhere; }
+.eh-nodecard__value.lvl-normal { color: var(--text-primary); }
 /* Métrica que não se aplica ao nó (disco de instância frozen): ocupa a faixa da
-   barra + valor para o card manter a mesma altura dos demais na grade. */
-.topo-metric-na { font-size: 10px; color: #5a7898; flex: 1; min-width: 0; text-align: right; }
-
-@media (max-width: 560px) {
-  .topology-node-card { width: 100%; }
-}
+   barra e do valor, preservando a altura do card */
+.topo-metric-na { grid-column: 2 / -1; font-size: var(--meta-size); color: var(--text-muted); text-align: right; }
 
 /* ═══ Modal de Detalhe de Nó ═══ */
 .nd-body {
