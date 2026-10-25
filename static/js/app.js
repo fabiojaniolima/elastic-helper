@@ -766,9 +766,12 @@ const HELP_CONTENT = [
         summary: 'Quantidade de nós que compõem o cluster agora, detalhada por função. Monitorar a <strong>estabilidade desse número</strong> é essencial: uma queda inesperada indica que um nó saiu (falha, rede ou manutenção), o que dispara realocação de shards e pode degradar o desempenho. Clique para ver CPU, Heap e Disco por nó.',
         data: [
           { label: 'Total de nós', desc: 'Soma de todos os nós conectados ao cluster (data, master, ingest, ML (Machine Learning), etc.).' },
-          { label: 'Data nodes', desc: 'Nós que armazenam dados (shards). Determinam a capacidade de armazenamento e a distribuição de carga. Poucos data nodes para muitos shards concentram carga e risco.' },
-          { label: 'Master', desc: 'Nós master dedicados (exibido apenas quando existem). Cuidam do cluster state; em produção, o recomendado são 3 masters dedicados para garantir quórum e evitar split-brain.' },
-          { label: 'HOT / WARM / COLD / FROZEN', desc: 'Quantos data nodes pertencem a cada tier de dados. Cada tier só é exibido quando há nós nele, e um nó só é contado quando tem <strong>exatamente um</strong> desses roles de tier — nós que acumulam mais de um tier (ex.: <code>data_hot</code> + <code>data_warm</code>) não entram em nenhuma contagem. Quando o nó também é master (comum em ambientes menores), o rótulo vira <strong>MASTER/HOT</strong>, <strong>MASTER/WARM</strong>, etc. Roles complementares (ingest, <code>data_content</code>, etc.) não afetam a contagem.' },
+          { label: 'de dados (legenda)', desc: 'Quantos nós armazenam dados (shards), em qualquer tier — o <code>number_of_data_nodes</code> do cluster health. Determinam a capacidade de armazenamento e a distribuição de carga; poucos data nodes para muitos shards concentram carga e risco. Fica na legenda, e não no detalhamento, porque se sobrepõe aos tiers: é um subtotal, não um tipo de nó.' },
+          { label: 'Detalhamento por tipo', desc: 'Divide os nós em tipos, e cada nó entra em <strong>exatamente um</strong> — as contagens somam o total. Só aparecem os tipos presentes no cluster.' },
+          { label: 'MASTER', desc: 'Masters dedicados: role <code>master</code> sem nenhuma role de dados. Cuidam do cluster state; em produção, o recomendado são 3 masters dedicados para garantir quórum e evitar split-brain.' },
+          { label: 'HOT / WARM / COLD / FROZEN', desc: 'Nós com <strong>exatamente um</strong> role de tier (<code>data_hot</code>, <code>data_warm</code>…). Quando o nó também é master (comum em ambientes menores), o rótulo vira <strong>MASTER / HOT</strong>, <strong>MASTER / WARM</strong>, etc. Roles complementares (ingest, <code>data_content</code>, etc.) não mudam o tipo.' },
+          { label: 'DATA', desc: 'Nós com a role genérica <code>data</code> e nenhuma role de tier — o caso de clusters sem data tiers configurados. Com master junto, vira <strong>MASTER / DATA</strong>.' },
+          { label: 'Outros', desc: 'O que não se encaixa acima: nós com mais de um tier (ex.: <code>data_hot</code> + <code>data_warm</code>), só <code>data_content</code>, ML dedicado, só coordenação (sem roles) ou outras roles avulsas (ingest, transform…). Passe o mouse sobre o par para ver quantos são de cada motivo.' },
         ],
       },
       {
@@ -1760,36 +1763,62 @@ function healthSummary(h, totalShards, version, license) {
   </section>`;
 }
 
-// Conta nós por tier de dados (HOT/WARM/COLD/FROZEN), mas só quando o nó tem
-// EXATAMENTE um desses roles de tier — nós que acumulam mais de um tier (ex.:
-// data_hot + data_warm) não entram em nenhuma contagem. Roles complementares
-// (ingest, data_content, etc.) não interferem. Quando o nó também é master, o
-// tier é rotulado como "MASTER / HOT" (master conviver com um único tier é comum
-// em ambientes menores). A chave de cada contagem é o próprio rótulo exibido.
+// Divide os nós por tipo para o detalhamento do card "Total de nós" — cada nó cai
+// em exatamente um grupo, então as contagens somam o total:
+//   - MASTER: master dedicado (master sem nenhuma role data*);
+//   - HOT/WARM/COLD/FROZEN: nó com EXATAMENTE uma role de tier; se também é master,
+//     vira "MASTER / HOT" (comum em ambientes menores);
+//   - DATA: role genérica `data` sem role de tier (cluster sem tiers configurados),
+//     com a mesma variação "MASTER / DATA";
+//   - Outros: o resto — mais de um tier, só data_content, ML dedicado, só
+//     coordenação (sem roles) ou outras roles avulsas (ingest, transform…).
+// Roles complementares (ingest, data_content, etc.) não mudam o grupo de um nó que
+// já tem tier ou `data`. A chave de cada contagem é o próprio rótulo exibido; os
+// motivos de "Outros" vão para o title do par.
 const TIER_ROLES = { data_hot: 'HOT', data_warm: 'WARM', data_cold: 'COLD', data_frozen: 'FROZEN' };
-const TIER_LABEL_ORDER = ['HOT', 'MASTER / HOT', 'WARM', 'MASTER / WARM', 'COLD', 'MASTER / COLD', 'FROZEN', 'MASTER / FROZEN'];
-function tierNodeCounts(nodes) {
+const NODE_TYPE_ORDER = ['MASTER', 'HOT', 'MASTER / HOT', 'WARM', 'MASTER / WARM', 'COLD', 'MASTER / COLD',
+  'FROZEN', 'MASTER / FROZEN', 'DATA', 'MASTER / DATA'];
+function nodeTypeCounts(nodes) {
   const counts = {};
+  const others = {};
   for (const n of nodes) {
     const roles = Array.isArray(n.roles) ? n.roles : [];
+    const master = roles.includes('master') ? 'MASTER / ' : '';
     const tiers = roles.filter(r => TIER_ROLES[r]);
-    if (tiers.length !== 1) continue;
-    const label = (roles.includes('master') ? 'MASTER / ' : '') + TIER_ROLES[tiers[0]];
-    counts[label] = (counts[label] || 0) + 1;
+    let label = null;
+    let reason = null;
+    if (tiers.length === 1) label = master + TIER_ROLES[tiers[0]];
+    else if (tiers.length > 1) reason = 'mais de um tier';
+    else if (roles.includes('data')) label = master + 'DATA';
+    else if (roles.includes('data_content')) reason = 'só data_content';
+    else if (master) label = 'MASTER';
+    else if (isDedicatedMl(roles)) reason = 'ML dedicado';
+    else if (!roles.length) reason = 'só coordenação';
+    else reason = 'outras roles';
+    if (label) counts[label] = (counts[label] || 0) + 1;
+    else others[reason] = (others[reason] || 0) + 1;
   }
-  return counts;
+  return { counts, others };
 }
 
-function cardNodes(total, h, dedicatedMasters, nodes) {
+function cardNodes(total, h, nodes) {
   const tip = 'Monitore a estabilidade do número de nós. Uma diminuição inesperada indica falha. O número de data nodes impacta a distribuição de shards.';
-  const tiers = tierNodeCounts(nodes || []);
+  // Sem roles em nenhum nó, a consulta de roles falhou (todo cluster tem ao menos
+  // um master): o detalhamento jogaria tudo em "Outros", então fica omitido.
+  const hasRoles = nodes.some(n => Array.isArray(n.roles) && n.roles.length);
+  const { counts, others } = hasRoles ? nodeTypeCounts(nodes) : { counts: {}, others: {} };
+  const othersTotal = Object.values(others).reduce((a, b) => a + b, 0);
   const breakdown = [
-    { label: 'Data nodes', val: fmtNum(h.number_of_data_nodes) },
-    ...(dedicatedMasters > 0 ? [{ label: 'Master', val: fmtNum(dedicatedMasters) }] : []),
-    ...TIER_LABEL_ORDER.filter(t => tiers[t] > 0).map(t => ({ label: t, val: fmtNum(tiers[t]) })),
+    ...NODE_TYPE_ORDER.filter(t => counts[t] > 0).map(t => ({ label: t, val: fmtNum(counts[t]) })),
+    ...(othersTotal > 0 ? [{
+      label: 'Outros', val: fmtNum(othersTotal),
+      title: Object.entries(others).map(([r, c]) => `${fmtNum(c)} ${r}`).join(' · '),
+    }] : []),
   ];
+  const dataNodes = h.number_of_data_nodes;
+  const caption = 'nós no cluster' + (dataNodes != null ? ` · ${fmtNum(dataNodes)} de dados` : '');
   return statCard({
-    ic: 'server', label: 'Total de nós', value: fmtNum(total), caption: 'nós no cluster',
+    ic: 'server', label: 'Total de nós', value: fmtNum(total), caption,
     breakdown, tip, topic: 'help-total-nodes',
     onclick: `openDetail('nodes','Nós do cluster','Detalhes de CPU, Heap e Disco por nó')`,
   });
@@ -1841,7 +1870,7 @@ function statCard({ ic, label, value, caption, tone, breakdown, onclick, tip, to
       ${caption ? `<span class="eh-stat__caption">${caption}</span>` : ''}
     </div>
     ${pairs.length ? `<div class="eh-stat__breakdown">
-      ${pairs.map(p => `<div class="eh-stat__pair">
+      ${pairs.map(p => `<div class="eh-stat__pair"${p.title ? ` title="${escHtml(p.title)}"` : ''}>
         <span class="eh-stat__pairlabel">${p.label}</span>
         <span class="eh-mono eh-stat__pairvalue${p.color ? ' lvl-' + levelClass(p.color) : ''}">${p.val}</span>
       </div>`).join('')}
@@ -2038,7 +2067,7 @@ function sectionCardsTopology(d) {
 function sectionCardsVolume(d) {
   const h = d.cluster_health || {};
   return [
-    cardNodes(d.total_nodes, h, d.dedicated_master_nodes || 0, d.nodes_summary || []),
+    cardNodes(d.total_nodes, h, d.nodes_summary || []),
     cardStat(null, 'Volume de dados', 'database', fmtBytes(d.total_store_bytes || 0), 'em disco (store, com réplicas)', 'blue',
       'Soma do tamanho em disco de todos os índices (primários + réplicas, incluindo índices de sistema). ' +
       'No rodapé, o total de <strong>documentos indexados</strong>: a soma de <code>docs.count</code>, ' +
